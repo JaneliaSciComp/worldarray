@@ -132,18 +132,21 @@ vol.padding, vol.method   # the defaults `read` uses; settable
 
 vol.read_index(begin, end, padding=None, mask=False, retries=None, select=None, transform=None)
                                     # select pins axes for this read only; begin/end cover the rest
-vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None, transform=None)
+vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None,
+         transform=None, post_transform=None, select=None)   # select pins non-spatial axes for this read
 vol.index_box(box) -> (begin, end)  # the voxels a world box selects on this grid, for snapping a box first
 vol.chunks_covering(begin, end)     # chunk indices a voxel box touches
 vol.reopen(context=None, **overrides) -> WorldArray   # the same array on another context (a worker changing its concurrency)
 
 pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None)
 pyr.names; pyr.levels; pyr.by_name("s1"); pyr.select(voxel_size, mode="floor")
+pyr.metas() ; pyr.level_meta("s1")   # ArrayMeta per level from the documents alone: shape, dtype, chunks (a sharded
+                    #   array's inner chunk), fill and placement, with no tensorstore opened
 pyr.placements()    # (name, spatial voxel size, spatial translation) per level from the group's own document
 pyr.voxel_sizes() ; pyr.translations()   #   where it lists the levels (OME-NGFF, COSEM N5, precomputed), so
                     #   choosing or placing a level opens nothing; else by opening each level
 
-wa.metadata(path, level=None, units=None) -> ArrayMeta
+wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False: from the documents alone
 wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
                                                    #   attributes), .multiscales (OME 0.5's `ome` unwrapped)
 wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore   # reads no world metadata, so an

@@ -189,11 +189,70 @@ def read_meta(
     ``conflicts``: what a per-array ``voxel_size`` that disagrees with the OME scale does,
     ``"error"`` (cellmap-analyze's choice, catches stale attributes) or ``"warn"`` (a server
     that would rather show the image)."""
+    return _assemble(
+        node,
+        tuple(int(s) for s in store.shape),
+        store.dtype.numpy_dtype,
+        tuple(int(c) for c in store.chunk_layout.read_chunk.shape),
+        _fill_value(store),
+        scale_index=scale_index,
+        conflicts=conflicts,
+    )
+
+
+def read_meta_light(
+    node: Node, *, scale_index: int | None = None, conflicts: str = "error"
+) -> ArrayMeta:
+    """``read_meta`` from the array's documents alone, with no tensorstore opened: shape,
+    dtype, chunks and fill value from ``.zarray``, ``zarr.json`` (the inner chunk of a
+    sharded array), ``attributes.json`` or ``info``. For listing a pyramid's levels cheaply;
+    a precomputed single channel is dropped as ``open_array`` drops it."""
+    shape, dtype, chunk_shape, fill = _dims_from_docs(node, scale_index)
+    return _assemble(
+        node, shape, dtype, chunk_shape, fill, scale_index=scale_index, conflicts=conflicts
+    )
+
+
+def _dims_from_docs(node: Node, scale_index: int | None):
+    if node.format == "zarr2":
+        d = node.docs[".zarray"]
+        return tuple(d["shape"]), np.dtype(d["dtype"]), tuple(d["chunks"]), d.get("fill_value")
+    if node.format == "zarr3":
+        d = node.docs["zarr.json"]
+        chunks = tuple(d["chunk_grid"]["configuration"]["chunk_shape"])
+        for codec in d.get("codecs", []) or []:
+            if codec.get("name") == "sharding_indexed":
+                chunks = tuple(codec["configuration"]["chunk_shape"])
+        return tuple(d["shape"]), np.dtype(d["data_type"]), chunks, d.get("fill_value")
+    if node.format == "n5":
+        d = node.docs["attributes.json"]
+        return (
+            tuple(d["dimensions"])[::-1],
+            np.dtype(d["dataType"]),
+            tuple(d["blockSize"])[::-1],
+            None,
+        )
+    info = node.docs["info"]
+    scale = info["scales"][scale_index or 0]
+    size, chunk = tuple(scale["size"])[::-1], tuple(scale["chunk_sizes"][0])[::-1]
+    channels = int(info.get("num_channels", 1))
+    if channels > 1:
+        return (channels, *size), np.dtype(info["data_type"]), (channels, *chunk), None
+    return size, np.dtype(info["data_type"]), chunk, None
+
+
+def _assemble(
+    node: Node,
+    shape: tuple[int, ...],
+    dtype,
+    chunk_shape: tuple[int, ...],
+    fill_value,
+    *,
+    scale_index: int | None,
+    conflicts: str,
+) -> ArrayMeta:
     if conflicts not in ("error", "warn"):
         raise ValueError("conflicts is 'error' or 'warn'")
-    shape = tuple(int(s) for s in store.shape)
-    dtype = store.dtype.numpy_dtype
-    chunk_shape = tuple(int(c) for c in store.chunk_layout.read_chunk.shape)
     ndim = len(shape)
     up = parent(node.path)
 
@@ -229,7 +288,7 @@ def read_meta(
         attrs=attrs,
         group_attrs=group_attrs,
         placed_by=found.placed_by if found.voxel_size is not None else None,
-        fill_value=_fill_value(store),
+        fill_value=fill_value,
     )
 
 

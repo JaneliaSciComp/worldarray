@@ -585,3 +585,91 @@ def test_pyramid_placements_come_from_the_document(pyramid, tmp_path):
         [{"data": pattern((4, 4, 4), "uint8"), "resolution": [4, 4, 4], "voxel_offset": [1, 2, 3]}],
     )
     assert wa.open_pyramid(str(pre)).placements() == [("s0", (4.0, 4.0, 4.0), (14.0, 10.0, 6.0))]
+
+
+def test_level_metas_from_documents_match_the_opened_ones(pyramid, tmp_path):
+    group, _ = pyramid
+    pyr = wa.open_pyramid(group)
+    for light, opened in zip(pyr.metas(), pyr.levels):
+        full = opened.meta
+        assert (
+            light.shape,
+            light.dtype,
+            light.chunk_shape,
+            light.voxel_size,
+            light.translation,
+            light.placed_by,
+        ) == (
+            full.shape,
+            full.dtype,
+            full.chunk_shape,
+            full.voxel_size,
+            full.translation,
+            full.placed_by,
+        )
+    assert wa.metadata(group, level="s1", open=False).voxel_size == (8.0, 8.0, 8.0)
+    assert wa.metadata(
+        group, level="s1", open=False, units="micrometer"
+    ).voxel_size == pytest.approx((0.008,) * 3)
+    import tensorstore as ts
+
+    z = tmp_path / "sharded.zarr"
+    spec = {
+        "driver": "zarr3",
+        "kvstore": {"driver": "file", "path": str(z) + "/"},
+        "metadata": {
+            "shape": [32, 32, 32],
+            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [16, 16, 16]}},
+            "data_type": "uint8",
+            "codecs": [
+                {
+                    "name": "sharding_indexed",
+                    "configuration": {
+                        "chunk_shape": [8, 8, 8],
+                        "codecs": [{"name": "bytes"}],
+                        "index_codecs": [{"name": "bytes"}, {"name": "crc32c"}],
+                    },
+                }
+            ],
+        },
+    }
+    ts.open(spec, create=True, delete_existing=True).result().write(
+        pattern((32, 32, 32), "uint8")
+    ).result()
+    assert (
+        wa.metadata(str(z), open=False).chunk_shape == (8, 8, 8) == wa.open(str(z)).meta.chunk_shape
+    )
+    n5 = tmp_path / "m.n5"
+    write_n5_group(n5)
+    write_n5(n5 / "s0", pattern((4, 6, 8)), attrs={"resolution": [8, 4, 2]}, chunks=(2, 3, 4))
+    light, full = wa.metadata(str(n5 / "s0"), open=False), wa.metadata(str(n5 / "s0"))
+    assert (light.shape, light.chunk_shape, light.dtype, light.translation) == (
+        full.shape,
+        full.chunk_shape,
+        full.dtype,
+        full.translation,
+    )
+    pre = tmp_path / "pre"
+    write_precomputed(
+        pre,
+        [{"data": pattern((4, 6, 8), "uint8"), "resolution": [4, 4, 4], "voxel_offset": [1, 2, 3]}],
+    )
+    light, full = wa.open_pyramid(str(pre)).metas()[0], wa.open(str(pre / "s0")).meta
+    assert (light.shape, light.chunk_shape, light.dtype, light.translation) == (
+        full.shape,
+        full.chunk_shape,
+        full.dtype,
+        full.translation,
+    )
+
+
+def test_read_can_pin_axes_per_read(tmp_path):
+    data = pattern((3, 2, 4, 5, 6))
+    group = tmp_path / "tc.zarr"
+    write_zarr3_group(group)
+    write_zarr3(group / "s0", data, dimension_names=list("tczyx"))
+    vol = wa.open(str(group / "s0"), units=None)
+    out = vol.read(((0, 0, 0), (4, 5, 6)), select={"t": 2, "c": 1})
+    np.testing.assert_array_equal(out, data[2, 1])
+    out, inside = vol.read(((0, 0, 0), (4, 5, 8)), select={"t": 0, "c": 0}, mask=True, padding=0)
+    assert out.shape == inside.shape == (4, 5, 8) and not inside[..., 6:].any()

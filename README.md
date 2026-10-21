@@ -112,8 +112,8 @@ wa.open(path, *, level=None, voxel_size=None, level_mode="floor", on_mismatch="e
         padding=0, method="nearest", select=None, units="nanometer", context=None, retries=None,
         metadata_conflicts="error", base_voxel_size=None, base_units=None, anchor=None,
         transform=None, strict_units=True) -> WorldArray
-wa.open_pyramid(path, ...) -> Pyramid          # .names .levels .by_name() .select() .placements() from the group document
-wa.metadata(path, level=None, units=None) -> ArrayMeta
+wa.open_pyramid(path, ...) -> Pyramid          # .names .levels .by_name() .select() .placements() .metas(): no opens needed
+wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False: from documents alone
 wa.detect(path, missing_ok=False) -> Node      # format, array or group, raw attrs
 wa.open_tensorstore(path, level=None, context=None)
 wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
@@ -123,7 +123,7 @@ wa.Box ; wa.units.TABLE
 
 `WorldArray`: `ts`, `meta`, `grid`, `shape`, `dtype`, `axes`, `voxel_size`, `translation`,
 `corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `resampled`;
-`read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, strict=)`,
+`read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, post_transform=, select=, strict=)`,
 `read_index(begin, end, padding=, mask=, select=, transform=)`, `index_box(box)`,
 `chunks_covering(begin, end)`, `list_chunks()`, `reopen(context=)`.
 

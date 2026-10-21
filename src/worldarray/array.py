@@ -27,7 +27,7 @@ from . import units as U
 from .context import shared_context
 from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, same_voxel_size, select_level
-from .metadata import ArrayMeta, light_levels, read_meta
+from .metadata import ArrayMeta, light_levels, read_meta, read_meta_light
 from .retry import Retry, read_with_retries
 from .store import Node, detect, is_remote, open_array, precomputed_scale_index
 
@@ -586,8 +586,10 @@ class WorldArray:
         anchor: Sequence[float] | None = None,
         transform: Transform | None = None,
         post_transform: Transform | None = None,
+        select: dict[str, int] | None = None,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
-        """The data in a world box, half-open per axis, in ``units``.
+        """The data in a world box, half-open per axis, in ``units``. ``select`` pins
+        non-spatial axes for this read only, as it does at open, and drops them from the result.
 
         ``post_transform`` is applied after resampling (after the cast back to the stored
         dtype) and before padding, for a normalisation that wants the resampled block.
@@ -648,6 +650,19 @@ class WorldArray:
         end = list(self._grid.shape)
         for a, lo_a, hi_a in zip(axes, lo, hi):
             begin[a], end[a] = lo_a, hi_a
+        drop: tuple[int, ...] = ()
+        if select:
+            names = self._grid.axes
+            pinned = []
+            for name, index in select.items():
+                if name not in names:
+                    raise ValueError(
+                        f"{self.path}: no axis named {name!r} to select; axes are {names}"
+                    )
+                a = names.index(name)
+                begin[a], end[a] = int(index), int(index) + 1
+                pinned.append(a)
+            drop = tuple(sorted(pinned))
 
         if target is None:
             want_mask = mask or post_transform is not None
@@ -655,13 +670,13 @@ class WorldArray:
                 begin, end, padding=padding, mask=want_mask, retries=retries, transform=transform
             )
             if post_transform is None:
-                return out
+                return _squeeze(out, drop)
             data, inside = out
             data = np.asarray(post_transform(data))
             if padding != "edge":
                 data = data.copy()
                 data[~inside] = padding
-            return (data, inside) if mask else data
+            return _squeeze((data, inside) if mask else data, drop)
 
         def read_index(b, e, pad):
             return self.read_index(b, e, padding=pad, retries=retries, transform=transform)
@@ -686,7 +701,15 @@ class WorldArray:
             if padding != "edge" and not inside.all():
                 data = data.copy()
                 data[~inside] = padding
-        return (data, inside) if mask else data
+        return _squeeze((data, inside) if mask else data, drop)
+
+
+def _squeeze(out, drop: tuple[int, ...]):
+    if not drop:
+        return out
+    if isinstance(out, tuple):
+        return np.squeeze(out[0], axis=drop), np.squeeze(out[1], axis=drop)
+    return np.squeeze(out, axis=drop)
 
 
 class Pyramid:
@@ -774,6 +797,20 @@ class Pyramid:
             self._light = light
         return self._light
 
+    def level_meta(self, level: str | int) -> ArrayMeta:
+        """One level's ``ArrayMeta`` in native units from its documents alone, with no
+        tensorstore opened (shape, dtype, chunks and placement; a sharded array's inner
+        chunk)."""
+        ref = self._ref(level)
+        conflicts = self._kwargs.get("metadata_conflicts", "error")
+        if ref.scale_index is not None:
+            return read_meta_light(self._node, scale_index=ref.scale_index, conflicts=conflicts)
+        return read_meta_light(detect(ref.path), conflicts=conflicts)
+
+    def metas(self) -> list[ArrayMeta]:
+        """``level_meta`` for every level, in order."""
+        return [self.level_meta(ref.name) for ref in self._refs]
+
     def voxel_sizes(self) -> list[tuple[str, tuple[float, ...]]]:
         """``(name, spatial voxel size)`` per level; see ``placements``."""
         return [(name, vs) for name, vs, _ in self.placements()]
@@ -808,11 +845,41 @@ def open_pyramid(path: str, **kwargs) -> Pyramid:
     return Pyramid(path, **kwargs)
 
 
-def metadata(path: str, *, level: str | int | None = None, units: Units = None) -> ArrayMeta:
+def metadata(
+    path: str, *, level: str | int | None = None, units: Units = None, open: bool = True
+) -> ArrayMeta:
     """The ``ArrayMeta`` of an array (or of ``level`` under a group), in native units unless
-    ``units`` says otherwise."""
-    vol = WorldArray(path, level=level, units=units)
-    return vol.meta if units is None else vol.grid
+    ``units`` says otherwise. ``open=False`` reads it from the documents alone, with no
+    tensorstore opened."""
+    if open:
+        vol = WorldArray(path, level=level, units=units)
+        return vol.meta if units is None else vol.grid
+    node = detect(path)
+    if level == "first":
+        level = 0
+    if node.format == "precomputed" and (level is not None or node.scale_key is not None):
+        wanted = node.scale_key if level is None else level
+        meta = read_meta_light(node, scale_index=precomputed_scale_index(node.docs["info"], wanted))
+    elif node.kind == "group":
+        if level is None:
+            raise ValueError(
+                f"{path} is a group; pass level= one of {[r.name for r in discover(node)]}"
+            )
+        refs = discover(node)
+        ref = (
+            refs[level]
+            if isinstance(level, int)
+            else next((r for r in refs if r.name == level), None)
+        )
+        if ref is None:
+            raise ValueError(f"{path}: no level {level!r}; levels: {[r.name for r in refs]}")
+        meta = read_meta_light(detect(ref.path))
+    else:
+        meta = read_meta_light(node)
+    if units is None:
+        return meta
+    space, time = _unit_targets(units)
+    return meta.in_units(space=space, time=time)
 
 
 def open_tensorstore(
