@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+*.zarr/
+*.n5/
+.DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json
+site/

@@ -1,0 +1,67 @@
+[project]
+name = "worldarray"
+version = "0.1.0a0"
+description = "Chunked arrays in world coordinates, through tensorstore."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "David Ackerman (@davidackerman)" }]
+requires-python = ">=3.10"
+keywords = ["zarr", "n5", "neuroglancer", "precomputed", "ome-ngff", "tensorstore", "imaging"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Typing :: Typed",
+]
+# The whole dependency tree: tensorstore does the I/O, numpy holds the result. No zarr-python,
+# no dask, no funlib (docs/spec.md, section 1).
+dependencies = [
+    "numpy>=1.26",
+    "tensorstore>=0.1.60",
+]
+
+[project.urls]
+Homepage = "https://janeliascicomp.github.io/worldarray/"
+Documentation = "https://janeliascicomp.github.io/worldarray/"
+Source = "https://github.com/JaneliaSciComp/worldarray"
+Issues = "https://github.com/JaneliaSciComp/worldarray/issues"
+Changelog = "https://github.com/JaneliaSciComp/worldarray/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/worldarray"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008", "B905", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:worldarray"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["worldarray", "conftest"]

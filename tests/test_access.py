@@ -1,0 +1,109 @@
+"""Access fallbacks and detection, offline (spec, Conventions 5)."""
+
+from __future__ import annotations
+
+import pytest
+
+import worldarray as wa
+from conftest import pattern, write_zarr2, write_zarr2_group
+from worldarray import store
+
+
+@pytest.fixture(autouse=True)
+def _forget_admissions(monkeypatch):
+    monkeypatch.setattr(store, "_admitted", {})
+
+
+def test_refusal_moves_on_and_the_way_in_is_remembered():
+    specs = [
+        {"driver": "s3", "bucket": "b", "aws_credentials": {"type": "anonymous"}},
+        {"driver": "s3", "bucket": "b"},
+    ]
+    calls = []
+
+    def attempt(spec):
+        calls.append(spec.get("aws_credentials", {}).get("type", "default"))
+        if "aws_credentials" in spec:
+            raise RuntimeError("PERMISSION_DENIED: Access denied")
+        return "ok"
+
+    assert store.with_access(specs, attempt) == "ok"
+    assert calls == ["anonymous", "default"]
+    assert store.with_access(specs, attempt) == "ok"
+    assert calls[-1] == "default" and len(calls) == 3  # remembered: default tried first, once
+
+
+def test_other_errors_raise_at_once():
+    specs = [
+        {"driver": "s3", "bucket": "b", "aws_credentials": {"type": "anonymous"}},
+        {"driver": "s3", "bucket": "b"},
+    ]
+
+    def attempt(spec):
+        raise RuntimeError("NOT_FOUND: no such key")
+
+    with pytest.raises(RuntimeError, match="NOT_FOUND"):
+        store.with_access(specs, attempt)
+
+
+def test_a_refused_probe_key_counts_as_missing_when_another_key_was_read(monkeypatch):
+    present = {"zarr.json": b'{"node_type": "array"}'}
+
+    def fake_read_key(spec, key):
+        if spec.get("aws_credentials", {}).get("type") != "anonymous":
+            raise AssertionError("fell back to credentials for a key that is merely missing")
+        if key in present:
+            return present[key]
+        raise RuntimeError("PERMISSION_DENIED: listing is off, so a missing key is a 403")
+
+    monkeypatch.setattr(store, "_read_key", fake_read_key)
+    loc = store.Location("s3://bucket/vol.zarr/s0")
+    found = loc.read_many(store.PROBE_KEYS)
+    assert found["zarr.json"] == present["zarr.json"]
+    assert all(found[k] is None for k in store.PROBE_KEYS if k != "zarr.json")
+
+
+def test_all_probe_keys_refused_falls_back(monkeypatch):
+    def fake_read_key(spec, key):
+        if spec.get("aws_credentials", {}).get("type") == "anonymous":
+            raise RuntimeError("PERMISSION_DENIED")
+        return b"{}" if key == ".zarray" else None
+
+    monkeypatch.setattr(store, "_read_key", fake_read_key)
+    found = store.Location("s3://bucket/vol.zarr/s0").read_many(store.PROBE_KEYS)
+    assert found[".zarray"] == b"{}" and found["zarr.json"] is None
+
+
+def test_detection_ignores_the_suffix_and_finds_precomputed_scale_keys(tmp_path):
+    misnamed = tmp_path / "actually_zarr.n5"
+    write_zarr2_group(misnamed)
+    write_zarr2(misnamed / "s0", pattern((2, 2, 2)))
+    assert store.detect(str(misnamed / "s0")).format == "zarr2"
+    assert store.detect(str(misnamed)).kind == "group"
+    with pytest.raises(FileNotFoundError, match="none of"):
+        store.detect(str(tmp_path / "nothing_here"))
+    assert store.normalize_path("precomputed://gs://bucket/vol/") == "gs://bucket/vol"
+    assert store.kvstore_specs("s3://bucket/vol")[0]["aws_credentials"] == {"type": "anonymous"}
+    assert [s["driver"] for s in store.kvstore_specs("gs://bucket/vol")] == ["gcs", "http"]
+
+
+def test_cleaned_zarray_drops_unknown_compressor_members():
+    zarray = {"compressor": {"id": "zstd", "level": 3, "checksum": False}, "shape": [1]}
+    assert store.cleaned_zarray(zarray)["compressor"] == {"id": "zstd", "level": 3}
+    assert store.cleaned_zarray({"compressor": None})["compressor"] is None
+
+
+def test_contexts_and_retry_timeouts():
+    assert wa.shared_context(0) is wa.shared_context(0)
+    assert wa.capped_context() is not wa.capped_context()
+    assert wa.capped_context_spec(concurrency=2)["s3_request_concurrency"] == {"limit": 2}
+    r = wa.Retry()
+    assert (
+        r.timeout_for(1 << 20, remote=True) == 5.0
+        and r.timeout_for(1600 << 20, remote=True) == 100.0
+    )
+    assert (
+        r.timeout_for(1 << 30, remote=False) == 5.0
+        and r.timeout_for(16 << 30, remote=False) == 30.0
+    )
+    assert wa.Retry(timeout=7).timeout_for(10**12, remote=True) == 7.0
