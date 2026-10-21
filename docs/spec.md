@@ -453,10 +453,22 @@ because chunkmirage was not on PyPI.
 
 ## 7. Open questions
 
-1. **Published mesh sets.** Under this spec mesh-n-bone's placement changes on funlib-attr,
-   precomputed, COSEM-`translate` and BigDataViewer N5 input (towards where Neuroglancer
-   draws them). Must any published mesh set built from such input stay byte-compatible?
+1. **Published mesh sets.** Measured on 2026-10-21 by meshing one cube (4 nm voxels, voxel
+   0's corner at the origin, label at voxels 8 to 23, so world 32 to 96 nm) stored five
+   ways and run through mesh-n-bone's own `Meshify` with its integration-test settings:
+   OME `translation` 2 and cellmap-analyze-style (`translation` 2 beside `offset` 2) meshed
+   at exactly 32 to 96; pure funlib (`resolution` + `offset` 0, no OME), prepare_ds-style
+   (`translation` 2 beside funlib `offset` 0) and precomputed (`voxel_offset` 0) meshed at
+   30 to 94, half a voxel low against where Neuroglancer draws those voxels. The mesher
+   itself is right (zmesh puts the surface on voxel faces around sample `i`); the error is
+   that mesh-n-bone reads a funlib `offset` and a precomputed `voxel_offset`, both corners,
+   as if they were the centre, and reads the array's `offset` before the parent's OME
+   translation. Under this spec those three inputs move by half a voxel to match
+   Neuroglancer. Must any published mesh set built from such input stay byte-compatible?
    mesh-n-bone's session knows of none and wants the change without a compatibility flag.
+   The check script is `check_placement.py` in this session's scratchpad; it belongs in
+   mesh-n-bone's tests with a tolerance below half a voxel (its coordinate test uses one
+   whole voxel and cannot see this).
 2. **CineMap's convention.** Its reads follow the centre rule and match Neuroglancer; its
    `extent_nm()` treats the translation as a corner and does not. Which does CineMap follow?
 3. **Listing-off S3 buckets.** The probing rule in Conventions 5 is written from
