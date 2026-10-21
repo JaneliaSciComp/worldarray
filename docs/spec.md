@@ -112,6 +112,7 @@ vol = wa.open(
     base_units=None,       #   size and translation scale with it, for stores whose metadata is in voxels or unitless
     anchor=None,           # where a target voxel corner lies when resampling; the source corner by default
     transform=None,        # a callable applied to stored values before resampling and padding (a norm chain)
+                         #   read(..., post_transform=) runs one after resampling instead, still before padding
     strict_units=True,     # False: an unknown unit ("pixel") is taken as the target unit, with a warning
 )
 
@@ -138,8 +139,9 @@ vol.reopen(context=None, **overrides) -> WorldArray   # the same array on anothe
 
 pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None)
 pyr.names; pyr.levels; pyr.by_name("s1"); pyr.select(voxel_size, mode="floor")
-pyr.voxel_sizes()   # (name, spatial voxel size) per level from the group's own document where it lists the
-                    #   levels' scales (OME-NGFF, COSEM N5, precomputed), so choosing a level opens nothing
+pyr.placements()    # (name, spatial voxel size, spatial translation) per level from the group's own document
+pyr.voxel_sizes() ; pyr.translations()   #   where it lists the levels (OME-NGFF, COSEM N5, precomputed), so
+                    #   choosing or placing a level opens nothing; else by opening each level
 
 wa.metadata(path, level=None, units=None) -> ArrayMeta
 wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
@@ -149,7 +151,10 @@ wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore  
 wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
 wa.units.TABLE      # the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
-wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1) ; wa.capped_context_spec(...)
+wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.capped_context_spec(...)
+                    # network=False caps decoding and local file I/O only, leaving tensorstore's request pools alone
+wa.list_chunk_keys(path, separator=".", ndim=None)   # chunk indices present under a path, from its keys alone: no
+                    #   metadata document needed, so a directory of chunk files with no .zarray lists too
 ```
 
 `ArrayMeta` is a frozen dataclass with one entry per axis, in the array's C order, and
@@ -313,7 +318,13 @@ this document and that one differ, fix one of them.
    in this order: `zarr.json`, `.zarray`, `.zgroup`, `info`, `attributes.json`; when none is
    found, the parent is probed for `info` and the last path segment is taken as a
    precomputed scale key (mesh-n-bone's case), then `s0` is probed so a group with no
-   document of its own (an N5 directory holding `s0, s1, ...`) is still a group. A `precomputed://` prefix is accepted and
+   document of its own (an N5 directory holding `s0, s1, ...`) is still a group. The
+   filesystem root, a URL's host root and a bucket root are never probed, and an ancestor
+   that answers anything but a document (a server root's 301) ends the search for a
+   multiscales entry quietly. Off Google Cloud, `GCE_METADATA_ROOT` is pointed at a name that
+   fails at once before the first `gs://` open, because tensorstore's probe of the GCE
+   metadata server otherwise stalls every open for seconds (`store.GUARD_GCE_METADATA`
+   turns this off). A `precomputed://` prefix is accepted and
    dropped. The `.n5` or `.zarr` suffix is never used to decide the format. A zarr v2
    compressor carrying members tensorstore rejects (the `checksum` newer numcodecs writes
    for zstd) is opened without them. Access: a path with no scheme is a local file; `s3://`
@@ -375,9 +386,11 @@ this document and that one differ, fix one of them.
    the list; an array path with `level` warns and ignores it. When no level has the
    requested `voxel_size`, `on_mismatch` decides: `"error"` raises with the list;
    `"resample"` reads the level `level_mode` picks and resamples (Behaviour 4); `"relabel"`
-   reads that level voxel for voxel and reports `voxel_size` as the requested size with the
-   **corner kept** (translation moves by half the difference), so a box of `m` requested
-   voxels returns `m` stored voxels of the level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
+   reads that level voxel for voxel and reports `voxel_size` as the requested size with
+   **voxel `i` staying voxel `i`**: every world quantity, the translation and the corner
+   included, scales by the ratio of the sizes (cellmap-flow's rule, which chunkmirage's
+   server relies on), so a box of `m` requested voxels returns `m` stored voxels of the
+   level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
    more). `relabel` and `nearest` are different things and both exist: one is a grid
    policy, the other a resampling kernel. `level` also takes a position, `0` or `"first"`
    for the first listed level. The pyramid an array belongs to is found through
@@ -414,7 +427,10 @@ this document and that one differ, fix one of them.
    resample target, `shape` reports the target voxels covering the data on each spatial
    axis. A `transform` (a normalisation chain) is applied to the stored values before
    resampling and before padding, so padding is never transformed and the output takes the
-   transform's dtype.
+   transform's dtype; `post_transform` runs after resampling and the cast back to the
+   stored dtype, still before padding, for a normalisation that wants the resampled block.
+   A box entirely inside the array is returned without a copy. Block means over blocks
+   that tile the read are one `reduceat` pass.
 
 5. **No dtype heuristic.** The package never decides that an array holds labels. `method`
    defaults to `"nearest"`, which invents no values and is correct for labels and acceptable

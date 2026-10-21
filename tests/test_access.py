@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 import worldarray as wa
@@ -144,3 +145,50 @@ def test_paths_near_the_filesystem_root_do_not_break_the_kvstore():
     assert store.kvstore_specs("/tmp") == [{"driver": "file", "path": "/tmp/"}]
     assert wa.detect("/", missing_ok=True) is None  # probes the root's keys without raising
     assert store.parent("/tmp") == "/" and store.parent("/") is None
+
+
+def test_roots_are_never_probed_and_bad_ancestors_do_not_break_an_open(tmp_path, monkeypatch):
+    assert (
+        store.is_root("/")
+        and store.is_root("http://host")
+        and store.is_root("s3://bucket")
+        and store.is_root(None)
+    )
+    assert not store.is_root("/tmp") and not store.is_root("http://host/a")
+    import importlib
+
+    md = importlib.import_module(
+        "worldarray.metadata"
+    )  # wa.metadata() the function shadows the module name
+
+    calls = []
+    real = md._group_attrs_at
+
+    def flaky(path, fmt):
+        calls.append(path)
+        if path.endswith("boom"):
+            raise RuntimeError("UNKNOWN: [HTTP code 301]")
+        return real(path, fmt)
+
+    monkeypatch.setattr(md, "_group_attrs_at", flaky)
+    group = tmp_path / "boom" / "plain.zarr"
+    write_zarr2(group / "s0", pattern((2, 2, 2)))  # no parent document at all
+    assert (
+        wa.open(str(group / "s0"), units=None).meta.placed_by is None
+    )  # the 301 ancestor ends the walk quietly
+
+
+def test_list_chunk_keys_needs_no_metadata(cube, tmp_path):
+    path, _ = cube
+    assert wa.list_chunk_keys(path) == sorted(np.ndindex(2, 2, 2))
+    bare = tmp_path / "bare_chunks"
+    bare.mkdir()
+    for key in ("0.0.0", "0.1.0", "notes.txt"):
+        (bare / key).write_bytes(b"x")
+    assert wa.list_chunk_keys(str(bare), ndim=3) == [(0, 0, 0), (0, 1, 0)]
+
+
+def test_capped_context_can_leave_the_network_alone():
+    spec = wa.capped_context_spec(concurrency=2, network=False)
+    assert "s3_request_concurrency" not in spec and spec["file_io_concurrency"] == {"limit": 2}
+    assert "s3_request_concurrency" in wa.capped_context_spec()

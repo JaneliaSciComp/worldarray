@@ -15,7 +15,7 @@ from .geometry import Box, index_range
 from .levels import select_level
 from .metadata import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
-from .store import Node, detect
+from .store import Node, detect, list_chunk_keys
 
 __version__ = "0.1.0a0"
 
@@ -27,6 +27,7 @@ __all__ = [
     "default_axes",
     "detect",
     "index_range",
+    "list_chunk_keys",
     "Pyramid",
     "Retry",
     "WorldArray",

@@ -23,7 +23,7 @@ import numpy as np
 import tensorstore as ts
 
 from . import units as U
-from .store import Location, Node, basename, multiscales_of, parent
+from .store import Location, Node, basename, is_root, multiscales_of, parent
 
 logger = logging.getLogger(__name__)
 
@@ -320,11 +320,15 @@ def _ome_hit(node: Node, group_attrs: dict, max_depth: int = 4) -> tuple[dict, d
     ancestor, rel = parent(node.path), name
     for _ in range(max_depth - 1):
         up = parent(ancestor) if ancestor is not None else None
-        if up is None or up == "/":  # never probe the filesystem root or a bucket root's parent
+        if is_root(up):  # never probe the filesystem root, a URL's host root or a bucket root
             break
         rel = f"{basename(ancestor)}/{rel}"
         ancestor = up
-        multiscales = multiscales_of(_group_attrs_at(ancestor, node.format))
+        try:  # an ancestor that answers anything but a document (a 301 from a server root) is no group
+            multiscales = multiscales_of(_group_attrs_at(ancestor, node.format))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("%s: stopped looking for multiscales at %s (%s)", node.path, ancestor, e)
+            break
         hit = _dataset_for(multiscales, rel)
         if hit is not None:
             return hit
@@ -610,18 +614,28 @@ def _precomputed(info: dict, scale_index: int, ndim: int) -> _Resolved:
 def light_voxel_sizes(
     group: Node, names: list[str], space: str | None
 ) -> list[tuple[str, tuple[float, ...]]] | None:
+    levels = light_levels(group, names, space)
+    return None if levels is None else [(name, vs) for name, vs, _ in levels]
+
+
+def light_levels(
+    group: Node, names: list[str], space: str | None
+) -> list[tuple[str, tuple[float, ...], tuple[float, ...]]] | None:
     """``(name, spatial voxel size)`` for every level of a group, from the group's own
     document, in ``space`` units (native when None): OME-NGFF datasets, COSEM N5
     ``multiscales[].datasets[].transform`` and precomputed ``scales``. None when the
     document does not say (then the levels have to be opened), or when a unit cannot be
-    converted."""
+    converted. ``light_levels`` adds each level's spatial translation (the centre of its
+    voxel 0, in the same units), so a pyramid can be placed without opening any level."""
     try:
         if group.format == "precomputed":
             f = U.factor("nm", space) if space else 1.0
             out = []
             for i, scale in enumerate(group.docs["info"]["scales"]):
                 res = [float(v) * f for v in scale["resolution"]][::-1]
-                out.append((str(scale.get("key", i)), tuple(res)))
+                vo = [float(v) for v in scale.get("voxel_offset", [0, 0, 0])][::-1]
+                tr = [(o + 0.5) * r for o, r in zip(vo, res)]
+                out.append((str(scale.get("key", i)), tuple(res), tuple(tr)))
             return out
         multiscales = group.multiscales
         if not multiscales:
@@ -655,11 +669,12 @@ def light_voxel_sizes(
             assert found.voxel_size is not None
             axes = found.axes or default_axes(ndim)
             units = found.units or ("",) * ndim
-            sizes = []
+            sizes, trs = [], []
             for i in spatial_axes(axes):
                 f = U.factor(units[i], space, missing_as=U.NANOMETER) if space else 1.0
                 sizes.append(found.voxel_size[i] * f)
-            out.append((name, tuple(sizes)))
+                trs.append((found.translation[i] if found.translation is not None else 0.0) * f)
+            out.append((name, tuple(sizes), tuple(trs)))
         return out
     except (ValueError, KeyError, TypeError):
         return None

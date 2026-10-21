@@ -129,6 +129,18 @@ def apply_axis(block: np.ndarray, axis: int, plan: AxisPlan) -> np.ndarray:
         hi_v = np.take(block, upper, axis=axis).astype(np.float64)
         return lo_v * (1 - w) + hi_v * w
     if plan.kind == "mean":
+        start = np.clip(plan.start - plan.lo, 0, block.shape[axis])
+        stop = np.clip(plan.stop - plan.lo, 0, block.shape[axis])
+        if (
+            start.size
+            and np.all(stop[:-1] == start[1:])
+            and np.all(stop > start)
+            and start[0] == 0
+            and stop[-1] == block.shape[axis]
+        ):  # the blocks tile the read: one pass, no cumulative sum
+            sums = np.add.reduceat(block, start, axis=axis, dtype=np.float64)
+            count = (stop - start).reshape([-1 if a == axis else 1 for a in range(block.ndim)])
+            return sums / count
         cs = np.cumsum(block.astype(np.float64), axis=axis)
         zero = np.zeros_like(np.take(cs, [0], axis=axis))
         cs = np.concatenate([zero, cs], axis=axis)

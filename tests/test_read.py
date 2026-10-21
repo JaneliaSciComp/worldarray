@@ -535,3 +535,53 @@ def test_an_unlisted_array_under_a_pyramid_does_not_walk_further(tmp_path, caplo
     assert any("list no dataset" in r.message for r in caplog.records)
     node = wa.detect(str(outer))
     assert node.ome_attrs["multiscales"] == node.multiscales
+
+
+def test_relabel_rescales_everything_by_the_ratio(tmp_path):
+    group = tmp_path / "rl.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (4, 4, 4), (10, 10, 10))]))  # corner 8
+    write_zarr2(group / "s0", pattern((4, 4, 4)))
+    vol = wa.open(str(group / "s0"), voxel_size=(8, 8, 8), on_mismatch="relabel")
+    assert (
+        vol.voxel_size == (8.0, 8.0, 8.0)
+        and vol.translation == (20.0, 20.0, 20.0)
+        and vol.corner == (16.0, 16.0, 16.0)
+    )
+
+
+def test_post_transform_runs_after_resampling_and_before_padding(tmp_path):
+    data = np.broadcast_to(np.arange(8, dtype="uint8")[:, None, None], (8, 4, 4)).copy()
+    group = tmp_path / "pt.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (4, 4, 4), (2, 2, 2))]))
+    write_zarr2(group / "s0", data)
+    vol = wa.open(str(group / "s0"), method="linear")
+    out = vol.read(
+        ((0, 0, 0), (48, 16, 16)),
+        voxel_size=(8, 8, 8),
+        padding=0,
+        post_transform=lambda a: a.astype("float32") / 255,
+    )
+    assert out.dtype == np.float32
+    assert list(np.round(out[:4, 0, 0] * 255)) == [0, 2, 4, 6] or list(
+        np.round(out[:4, 0, 0] * 255)
+    ) == [1, 3, 5, 7]
+    assert (out[4:] == 0).all()  # padding untouched by the transform
+    plain = vol.read(((0, 0, 0), (16, 16, 16)), post_transform=lambda a: a + 100, padding=0)
+    assert plain.min() >= 100
+
+
+def test_pyramid_placements_come_from_the_document(pyramid, tmp_path):
+    group, _ = pyramid
+    pyr = wa.open_pyramid(group)
+    assert pyr.translations() == [
+        ("s0", (2.0, 2.0, 2.0)),
+        ("s1", (4.0, 4.0, 4.0)),
+        ("s2", (8.0, 8.0, 8.0)),
+    ]
+    assert pyr._levels == {}
+    pre = tmp_path / "pre"
+    write_precomputed(
+        pre,
+        [{"data": pattern((4, 4, 4), "uint8"), "resolution": [4, 4, 4], "voxel_offset": [1, 2, 3]}],
+    )
+    assert wa.open_pyramid(str(pre)).placements() == [("s0", (4.0, 4.0, 4.0), (14.0, 10.0, 6.0))]

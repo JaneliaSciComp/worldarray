@@ -30,18 +30,24 @@ def shared_context(cache_bytes: int = 0) -> ts.Context:
         return ctx
 
 
-def capped_context_spec(cache_bytes: int = 0, concurrency: int = 1) -> dict:
-    """The spec dict behind ``capped_context``, for callers building their own opens."""
+def capped_context_spec(cache_bytes: int = 0, concurrency: int = 1, network: bool = True) -> dict:
+    """The spec dict behind ``capped_context``, for callers building their own opens.
+    ``network=False`` caps only decoding and local file I/O, leaving tensorstore's request
+    pools alone (cellmap-analyze's choice for remote reads)."""
     limit = {"limit": int(concurrency)}
-    return {
+    spec = {
         "data_copy_concurrency": limit,
         "file_io_concurrency": limit,
-        "gcs_request_concurrency": limit,
-        "s3_request_concurrency": limit,
-        "http_request_concurrency": limit,
         "cache_pool": {"total_bytes_limit": int(cache_bytes)},
     }
+    if network:
+        spec.update(
+            gcs_request_concurrency=limit,
+            s3_request_concurrency=limit,
+            http_request_concurrency=limit,
+        )
+    return spec
 
 
-def capped_context(cache_bytes: int = 0, concurrency: int = 1) -> ts.Context:
-    return ts.Context(capped_context_spec(cache_bytes, concurrency))
+def capped_context(cache_bytes: int = 0, concurrency: int = 1, network: bool = True) -> ts.Context:
+    return ts.Context(capped_context_spec(cache_bytes, concurrency, network))

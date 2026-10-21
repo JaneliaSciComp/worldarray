@@ -15,7 +15,7 @@ from typing import Literal
 import numpy as np
 
 from .metadata import ArrayMeta
-from .store import Location, Node, basename, detect, join, parent
+from .store import Location, Node, basename, detect, is_root, join, parent
 
 Mode = Literal["floor", "finer", "exact", "nearest", "resample"]
 
@@ -56,9 +56,12 @@ def discover(node: Node) -> list[LevelRef]:
     if node.kind == "array":
         ancestor, rel = parent(node.path), basename(node.path)
         for _ in range(4):  # a dataset path may have more than one component ("seg/s0")
-            if ancestor is None or ancestor == "/":
+            if is_root(ancestor):
                 break
-            group = detect(ancestor, missing_ok=True)
+            try:
+                group = detect(ancestor, missing_ok=True)
+            except Exception:  # noqa: BLE001  (a server root answering 301, say)
+                break
             if (
                 group is not None
                 and group.kind == "group"

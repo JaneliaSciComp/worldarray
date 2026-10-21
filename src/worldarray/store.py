@@ -62,6 +62,20 @@ def parent(path: str) -> str | None:
     return head + rest.rsplit("/", 1)[0]
 
 
+def is_root(path: str | None) -> bool:
+    """The filesystem root, a URL's host or bucket root, or nothing: never probed for documents."""
+    if path is None:
+        return True
+    path = normalize_path(path)
+    if path == "/":
+        return True
+    m = _SCHEME.match(path)
+    return bool(m) and "/" not in path[len(m.group(0)) :].strip("/")
+
+
+GUARD_GCE_METADATA = True  # see kvstore_specs
+
+
 def basename(path: str) -> str:
     return normalize_path(path).rsplit("/", 1)[-1]
 
@@ -95,6 +109,10 @@ def kvstore_specs(root: str) -> list[dict]:
             extra["aws_region"] = region
         return [{**spec, **extra, "aws_credentials": {"type": t}} for t in ("anonymous", "default")]
     if spec["driver"] == "gcs":
+        if GUARD_GCE_METADATA:
+            # off Google Cloud, tensorstore's probe of the GCE metadata server for credentials
+            # stalls every gs:// open for seconds; point it at a name that fails at once
+            os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
         public = (os.environ.get("TENSORSTORE_GCS_HTTP_URL") or GCS_PUBLIC_URL).rstrip("/")
         return [
             spec,
@@ -390,3 +408,20 @@ def open_array(
         if squeeze_channel and store.shape[0] == 1:
             store = store[0]
     return store
+
+
+def list_chunk_keys(
+    root: str, separator: str = ".", ndim: int | None = None
+) -> list[tuple[int, ...]]:
+    """The chunk indices present under ``root`` by listing its keys and parsing those that are
+    ``separator``-joined integers (``0.1.2``, ``0/1/2``), with no metadata document needed:
+    a directory of chunk files with no ``.zarray`` lists the same as one with it. ``ndim``
+    keeps only keys with that many parts. Any kvstore, URLs included."""
+    specs = kvstore_specs(root)
+    kv = with_access(specs, lambda spec: ts.KvStore.open(metadata_spec(spec)).result())
+    keys = [k.decode() if isinstance(k, bytes) else str(k) for k in kv.list().result()]
+    pattern = re.compile(r"^\d+(?:" + re.escape(separator) + r"\d+)*$")
+    found = {tuple(int(p) for p in k.split(separator)) for k in keys if pattern.match(k)}
+    if ndim is not None:
+        found = {f for f in found if len(f) == ndim}
+    return sorted(found)

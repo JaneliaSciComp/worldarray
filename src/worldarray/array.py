@@ -27,7 +27,7 @@ from . import units as U
 from .context import shared_context
 from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, same_voxel_size, select_level
-from .metadata import ArrayMeta, light_voxel_sizes, read_meta
+from .metadata import ArrayMeta, light_levels, read_meta
 from .retry import Retry, read_with_retries
 from .store import Node, detect, is_remote, open_array, precomputed_scale_index
 
@@ -133,12 +133,13 @@ class WorldArray:
                     pass  # the chosen level, at its own voxel size
                 else:
                     # relabel: read the level voxel for voxel and call its voxels the requested
-                    # size; the corner stays, so the translation moves by half the difference
+                    # size; voxel i stays voxel i, so every world quantity scales by the ratio
+                    # (the corner moves with it: cellmap-flow's rule, which chunkmirage_server uses)
                     vs, tr = list(self._grid.voxel_size), list(self._grid.translation)
-                    corner = self._grid.corner
                     for k, axis in enumerate(self._grid.spatial):
+                        ratio = requested[k] / vs[axis]
                         vs[axis] = requested[k]
-                        tr[axis] = corner[axis] + requested[k] / 2
+                        tr[axis] *= ratio
                     self._grid = replace(self._grid, voxel_size=tuple(vs), translation=tuple(tr))
 
     # --- construction helpers -------------------------------------------------
@@ -486,6 +487,10 @@ class WorldArray:
             else:
                 block = self._read_block(read_lo, read_hi, retries, transform)
                 out = np.pad(block, list(zip(before, after)), mode="edge")
+        elif overlap and bool(np.all(clip_lo == begin)) and bool(np.all(clip_hi == end)):
+            out = self._read_block(
+                begin.tolist(), end.tolist(), retries, transform
+            )  # no padding: no copy
         else:
             block = (
                 self._read_block(clip_lo.tolist(), clip_hi.tolist(), retries, transform)
@@ -581,8 +586,12 @@ class WorldArray:
         strict: bool = False,
         anchor: Sequence[float] | None = None,
         transform: Transform | None = None,
+        post_transform: Transform | None = None,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """The data in a world box, half-open per axis, in ``units``.
+
+        ``post_transform`` is applied after resampling (after the cast back to the stored
+        dtype) and before padding, for a normalisation that wants the resampled block.
 
         The box covers the spatial axes (other axes are read whole, or as ``select`` pinned
         them) or every axis. A voxel is read iff its centre lies in the box. ``voxel_size``
@@ -642,14 +651,23 @@ class WorldArray:
             begin[a], end[a] = lo_a, hi_a
 
         if target is None:
-            return self.read_index(
-                begin, end, padding=padding, mask=mask, retries=retries, transform=transform
+            want_mask = mask or post_transform is not None
+            out = self.read_index(
+                begin, end, padding=padding, mask=want_mask, retries=retries, transform=transform
             )
+            if post_transform is None:
+                return out
+            data, inside = out
+            data = np.asarray(post_transform(data))
+            if padding != "edge":
+                data = data.copy()
+                data[~inside] = padding
+            return (data, inside) if mask else data
 
         def read_index(b, e, pad):
             return self.read_index(b, e, padding=pad, retries=retries, transform=transform)
 
-        return _resample.resample(
+        out = _resample.resample(
             read_index,
             self._grid.shape,
             self._grid.dtype,
@@ -660,9 +678,16 @@ class WorldArray:
             end,
             method,
             padding,
-            mask,
+            True,
             origins,
         )
+        data, inside = out
+        if post_transform is not None:
+            data = np.asarray(post_transform(data))
+            if padding != "edge" and not inside.all():
+                data = data.copy()
+                data[~inside] = padding
+        return (data, inside) if mask else data
 
 
 class Pyramid:
@@ -693,7 +718,7 @@ class Pyramid:
                 f"{path}: no levels found (no multiscales datasets, no s0, no precomputed scales)"
             )
         self._levels: dict[str, WorldArray] = {}
-        self._light: list[tuple[str, tuple[float, ...]]] | None = None
+        self._light: list[tuple[str, tuple[float, ...], tuple[float, ...]]] | None = None
 
     @property
     def names(self) -> list[str]:
@@ -733,19 +758,30 @@ class Pyramid:
     def by_name(self, level: str | int) -> WorldArray:
         return self._open(self._ref(level))
 
-    def voxel_sizes(self) -> list[tuple[str, tuple[float, ...]]]:
-        """``(name, spatial voxel size in the requested units)`` per level, from the group's
-        metadata when it lists the levels' scales, else by opening each level."""
+    def placements(self) -> list[tuple[str, tuple[float, ...], tuple[float, ...]]]:
+        """``(name, spatial voxel size, spatial translation)`` per level in the requested
+        units, from the group's own document when it lists the levels' scales (OME-NGFF,
+        COSEM N5, precomputed), else by opening each level."""
         if self._light is None:
             space, _ = _unit_targets(self.units)
             group = self._node if self._node.kind == "group" else None
             if group is None and self._refs and self._refs[0].path != self._node.path:
                 group = detect(self._refs[0].path.rsplit("/", 1)[0], missing_ok=True)
-            light = light_voxel_sizes(group, self.names, space) if group is not None else None
+            light = light_levels(group, self.names, space) if group is not None else None
             if light is None:
-                light = [(lvl.level_name, lvl.source_voxel_size) for lvl in self.levels]
+                light = [
+                    (lvl.level_name, lvl.source_voxel_size, lvl.translation) for lvl in self.levels
+                ]
             self._light = light
         return self._light
+
+    def voxel_sizes(self) -> list[tuple[str, tuple[float, ...]]]:
+        """``(name, spatial voxel size)`` per level; see ``placements``."""
+        return [(name, vs) for name, vs, _ in self.placements()]
+
+    def translations(self) -> list[tuple[str, tuple[float, ...]]]:
+        """``(name, spatial translation)`` per level; see ``placements``."""
+        return [(name, tr) for name, _, tr in self.placements()]
 
     def _select_ref(self, voxel_size, mode: Mode = "floor") -> LevelRef:
         name, _ = select_level(self.voxel_sizes(), voxel_size, mode)

@@ -69,8 +69,9 @@ pyr.select((16, 16, 16), mode="floor")  # the level to read at 16 nm
 - **Places** every array by one written rule per format (below), reads axes and units as
   stored, converts only where asked (nanometres by default on spatial axes), and keeps
   voxel sizes as floats, never rounded.
-- **Chooses a level** by voxel size from the pyramid's own metadata, with four policies for
-  a size no level has: error, resample, relabel, or keep the level.
+- **Chooses a level** by voxel size from the pyramid's own metadata, without opening the
+  levels, with four policies for a size no level has: error, resample, relabel (voxel `i`
+  stays voxel `i`, the grid rescaled), or keep the level.
 - **Reads** voxel boxes or world boxes as C-contiguous numpy in native byte order, padded
   with any value or the edge voxel, with an optional mask of what was data, a per-read
   `transform` applied before padding, and resampling by nearest neighbour or linear
@@ -111,11 +112,12 @@ wa.open(path, *, level=None, voxel_size=None, level_mode="floor", on_mismatch="e
         padding=0, method="nearest", select=None, units="nanometer", context=None, retries=None,
         metadata_conflicts="error", base_voxel_size=None, base_units=None, anchor=None,
         transform=None, strict_units=True) -> WorldArray
-wa.open_pyramid(path, ...) -> Pyramid          # .names .levels .by_name() .select() .voxel_sizes()
+wa.open_pyramid(path, ...) -> Pyramid          # .names .levels .by_name() .select() .placements() from the group document
 wa.metadata(path, level=None, units=None) -> ArrayMeta
 wa.detect(path, missing_ok=False) -> Node      # format, array or group, raw attrs
 wa.open_tensorstore(path, level=None, context=None)
-wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1) ; wa.Retry(...)
+wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
+wa.list_chunk_keys(path, separator=".")        # chunk indices from keys alone, no metadata needed
 wa.Box ; wa.units.TABLE
 ```
 
