@@ -380,9 +380,9 @@ this document and that one differ, fix one of them.
 3. **Level selection** (`select_level`, `Pyramid.select`, `open(voxel_size=)`) follows
    cellmap-flow's four modes plus one: `floor` (the level at that voxel size, else the
    **coarsest** level that is no coarser than the target on any axis, else the first),
-   `finer` (as `floor`, but an error instead of the fallback to the first level, which is
-   cellmap-analyze's rule), `exact` (that
-   level or `ValueError` listing the levels), `nearest` (closest on a log scale summed over
+   `finer` (as `floor`, but an error instead of the fallback to the first level, for
+   callers that would rather fail than read coarser data than asked), `exact` (that level or
+   `ValueError` listing the levels), `nearest` (closest on a log scale summed over
    axes, finer on a tie), `resample` (the level to resample from). Voxel sizes compare as
    floats with `rtol 1e-6`, so 10.48 is not 10. A group path without `level` or
    `voxel_size` raises with the level list; a level name that does not exist raises with
