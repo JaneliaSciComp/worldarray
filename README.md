@@ -74,7 +74,7 @@ pyr.select((16, 16, 16), mode="floor")  # the level to read at 16 nm
   stays voxel `i`, the grid rescaled), or keep the level.
 - **Reads** voxel boxes or world boxes as C-contiguous numpy in native byte order, padded
   with any value or the edge voxel, with an optional mask of what was data, a per-read
-  `transform` applied before padding, and resampling by nearest neighbour or linear
+  `transform` applied before padding (or `post_transform` after resampling), and resampling by nearest neighbour or linear
   interpolation anchored where you say. Adjoining block reads agree with one read across
   both.
 - **Behaves on a cluster**: one shared tensorstore context per process or a capped one per
