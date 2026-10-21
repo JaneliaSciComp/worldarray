@@ -159,7 +159,13 @@ A **box** for `read` is any of: a `(begin, end)` pair of float tuples in `units`
 per axis, over the spatial axes, or over every axis when it has one entry per axis (a time
 window and a spatial box at once); anything with `.begin` and `.end`, or `.offset` and
 `.shape` (so a funlib `Roi` works, duck-typed, without the package importing funlib); or
-`wa.Box`.
+`wa.Box`. `Box` carries funlib's Roi vocabulary on floats, half-open: `shape`, `centre`,
+`empty`, `intersect`, `union`, `contains` (a point or a box), `grow(before, after=None)`,
+`shift`, `snap(voxel_size, translation, mode="grow" | "shrink" | "closest")` to a grid's
+voxel corners, `to_index` (the centre rule) and `Box.from_index`; `vol.box` is the array's
+own extent on the spatial axes, `[corner, corner + shape * voxel_size)`, what funlib calls
+the array's roi. So `vol.read(vol.box.intersect(roi).snap(vol.voxel_size, vol.translation))`
+is the migration of a clipped, snapped Roi read, without funlib.
 
 There is no `offset` attribute anywhere in this API, because that word means the corner in
 funlib and the centre in OME; `translation` and `corner` are the two names for the two
@@ -333,8 +339,10 @@ this document and that one differ, fix one of them.
    centre rule; `read(..., strict=True)` raises instead for callers who want to be told.
 
 3. **Level selection** (`select_level`, `Pyramid.select`, `open(voxel_size=)`) follows
-   cellmap-flow's four modes: `floor` (the level at that voxel size, else the **coarsest**
-   level that is no coarser than the target on any axis, else the first), `exact` (that
+   cellmap-flow's four modes plus one: `floor` (the level at that voxel size, else the
+   **coarsest** level that is no coarser than the target on any axis, else the first),
+   `finer` (as `floor`, but an error instead of the fallback to the first level, which is
+   cellmap-analyze's rule), `exact` (that
    level or `ValueError` listing the levels), `nearest` (closest on a log scale summed over
    axes, finer on a tie), `resample` (the level to resample from). Voxel sizes compare as
    floats with `rtol 1e-6`, so 10.48 is not 10. A group path without `level` or

@@ -275,6 +275,19 @@ class WorldArray:
         return tuple(c[i] for i in self._grid.spatial)
 
     @property
+    def box(self) -> Box:
+        """The array's extent on the spatial axes as a world box, ``[corner, corner + shape *
+        voxel_size)``: what funlib calls the array's roi. ``Box.from_index`` gives the same
+        over every axis."""
+        sp = self._grid.spatial
+        return Box.from_index(
+            (0,) * len(sp),
+            tuple(self._grid.shape[i] for i in sp),
+            tuple(self._grid.voxel_size[i] for i in sp),
+            tuple(self._grid.translation[i] for i in sp),
+        )
+
+    @property
     def levels(self) -> list[tuple[str, tuple[float, ...]]]:
         """``(name, spatial voxel size)`` of every level of the pyramid this array belongs to."""
         if self._pyramid is None:

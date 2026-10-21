@@ -80,7 +80,9 @@ wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 `read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None)`,
 `index_box(box)`, `chunks_covering(begin, end)` and `reopen(context=None, **overrides)`. A **box** is a `(begin, end)` pair of float tuples over the spatial
 axes (or over every axis), anything with `.begin`/`.end` or `.offset`/`.shape` (a funlib
-`Roi`, duck-typed), or a `wa.Box`. There is no `offset` attribute: that word means the
+`Roi`, duck-typed), or a `wa.Box`. `Box` has funlib's Roi vocabulary on floats: `intersect`, `union`, `contains`,
+`grow`, `shift`, `snap(voxel_size, translation)` to a grid, `to_index`, `Box.from_index`; and
+`vol.box` is the array's own extent. There is no `offset` attribute: that word means the
 corner in funlib and the centre in OME, so the two things have two names, `corner` and
 `translation`.
 

@@ -45,6 +45,92 @@ class Box:
     def ndim(self) -> int:
         return len(self.begin)
 
+    @property
+    def centre(self) -> tuple[float, ...]:
+        return tuple((b + e) / 2 for b, e in zip(self.begin, self.end))
+
+    @property
+    def empty(self) -> bool:
+        return any(e <= b for b, e in zip(self.begin, self.end))
+
+    def intersect(self, other) -> Box:
+        """The overlap of two boxes; a box of zero extent where there is none."""
+        other = Box.coerce(other)
+        begin = tuple(max(a, b) for a, b in zip(self.begin, other.begin))
+        end = tuple(max(bg, min(a, b)) for bg, a, b in zip(begin, self.end, other.end))
+        return Box(begin, end)
+
+    def union(self, other) -> Box:
+        """The smallest box holding both."""
+        other = Box.coerce(other)
+        return Box(
+            tuple(min(a, b) for a, b in zip(self.begin, other.begin)),
+            tuple(max(a, b) for a, b in zip(self.end, other.end)),
+        )
+
+    def contains(self, other) -> bool:
+        """Whether a point (one coordinate per axis) lies in the box, or another box lies
+        within it. Half-open, so a point on the far edge is outside."""
+        if isinstance(other, Box) or hasattr(other, "begin") or hasattr(other, "offset"):
+            o = Box.coerce(other)
+            return all(
+                b <= ob and oe <= e for b, e, ob, oe in zip(self.begin, self.end, o.begin, o.end)
+            )
+        return all(b <= p < e for b, e, p in zip(self.begin, self.end, other))
+
+    def grow(self, before, after=None) -> Box:
+        """Extended by ``before`` on the low side and ``after`` (default ``before``) on the
+        high side, a scalar or one value per axis; negative values shrink."""
+        before = self._per_axis(before)
+        after = self._per_axis(before if after is None else after)
+        return Box(
+            tuple(b - x for b, x in zip(self.begin, before)),
+            tuple(e + x for e, x in zip(self.end, after)),
+        )
+
+    def shift(self, by) -> Box:
+        by = self._per_axis(by)
+        return Box(
+            tuple(b + x for b, x in zip(self.begin, by)), tuple(e + x for e, x in zip(self.end, by))
+        )
+
+    def snap(self, voxel_size, translation, mode: str = "grow") -> Box:
+        """Aligned to the voxel corners of a grid whose voxel 0 is centred at
+        ``translation``: ``grow`` rounds outward, ``shrink`` inward, ``closest`` to the
+        nearest corner. After ``grow`` the box reads exactly the voxels it touches."""
+        vs = np.asarray(voxel_size, dtype=float)
+        corner0 = np.asarray(translation, dtype=float) - vs / 2
+        qb = snap_integral((np.asarray(self.begin) - corner0) / vs)
+        qe = snap_integral((np.asarray(self.end) - corner0) / vs)
+        if mode == "grow":
+            qb, qe = np.floor(qb), np.ceil(qe)
+        elif mode == "shrink":
+            qb, qe = np.ceil(qb), np.floor(qe)
+        elif mode == "closest":
+            qb, qe = np.round(qb), np.round(qe)
+        else:
+            raise ValueError("mode is 'grow', 'shrink' or 'closest'")
+        return Box(tuple(corner0 + qb * vs), tuple(corner0 + np.maximum(qe, qb) * vs))
+
+    def to_index(self, voxel_size, translation) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """The voxels whose centres lie in the box (the centre rule)."""
+        return index_range(self.begin, self.end, voxel_size, translation)
+
+    @classmethod
+    def from_index(cls, begin, end, voxel_size, translation) -> Box:
+        """The world box exactly covering voxels ``[begin, end)`` of a grid."""
+        vs = np.asarray(voxel_size, dtype=float)
+        corner0 = np.asarray(translation, dtype=float) - vs / 2
+        return cls(tuple(corner0 + np.asarray(begin) * vs), tuple(corner0 + np.asarray(end) * vs))
+
+    def _per_axis(self, value) -> tuple[float, ...]:
+        if np.ndim(value) == 0:
+            return (float(value),) * self.ndim
+        value = tuple(float(v) for v in value)
+        if len(value) != self.ndim:
+            raise ValueError(f"expected {self.ndim} values, got {value}")
+        return value
+
     @classmethod
     def coerce(cls, box: Any) -> Box:
         """A ``Box`` from a ``(begin, end)`` pair, anything with ``.begin``/``.end`` or
