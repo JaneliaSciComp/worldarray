@@ -673,3 +673,29 @@ def test_read_can_pin_axes_per_read(tmp_path):
     np.testing.assert_array_equal(out, data[2, 1])
     out, inside = vol.read(((0, 0, 0), (4, 5, 8)), select={"t": 0, "c": 0}, mask=True, padding=0)
     assert out.shape == inside.shape == (4, 5, 8) and not inside[..., 6:].any()
+
+
+def test_callables_see_the_array_without_pinned_axes_and_empty_groups_say_so(tmp_path):
+    data = pattern((2, 3, 4, 5))
+    group = tmp_path / "c.zarr"
+    write_zarr3_group(group)
+    write_zarr3(group / "s0", data, dimension_names=list("czyx"))
+    vol = wa.open(str(group / "s0"), units=None)
+    seen = []
+    out = vol.read(
+        ((0, 0, 0), (3, 4, 5)), select={"c": 1}, transform=lambda a: seen.append(a.shape) or a + 1
+    )
+    assert seen == [(3, 4, 5)] and out.shape == (3, 4, 5)
+    np.testing.assert_array_equal(out, data[1] + 1)
+    out = vol.read(
+        ((0, 0, 0), (3, 4, 10)),
+        select={"c": 0},
+        voxel_size=(2, 2, 2),
+        padding=0,
+        post_transform=lambda a: seen.append(a.shape) or a,
+    )
+    assert seen[-1] == out.shape and out.ndim == 3
+    empty = tmp_path / "empty.zarr"
+    write_zarr2_group(empty)
+    with pytest.raises(ValueError, match="no levels found"):
+        wa.metadata(str(empty), level="first", open=False)

@@ -663,6 +663,15 @@ class WorldArray:
                 begin[a], end[a] = int(index), int(index) + 1
                 pinned.append(a)
             drop = tuple(sorted(pinned))
+            if drop:  # the callables see the array as the caller will, without the pinned axes
+
+                def _without_pinned(fn):
+                    return lambda a: np.expand_dims(np.asarray(fn(np.squeeze(a, axis=drop))), drop)
+
+                transform = _without_pinned(transform) if transform is not None else None
+                post_transform = (
+                    _without_pinned(post_transform) if post_transform is not None else None
+                )
 
         if target is None:
             want_mask = mask or post_transform is not None
@@ -861,11 +870,13 @@ def metadata(
         wanted = node.scale_key if level is None else level
         meta = read_meta_light(node, scale_index=precomputed_scale_index(node.docs["info"], wanted))
     elif node.kind == "group":
-        if level is None:
-            raise ValueError(
-                f"{path} is a group; pass level= one of {[r.name for r in discover(node)]}"
-            )
         refs = discover(node)
+        if not refs:
+            raise ValueError(
+                f"{path}: no levels found (no multiscales datasets, no s0, no precomputed scales)"
+            )
+        if level is None:
+            raise ValueError(f"{path} is a group; pass level= one of {[r.name for r in refs]}")
         ref = (
             refs[level]
             if isinstance(level, int)

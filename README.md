@@ -132,6 +132,17 @@ spatial axes or every axis; any object with `.begin`/`.end` or `.offset`/`.shape
 works. There is no `offset` attribute, because that word means the corner in some dialects
 and the centre in others: `translation` and `corner` are the two names for the two things.
 
+## Origins
+
+The vocabulary, an array that knows its `voxel_size`, where it sits and its axis names, and
+is read by a box in world units, follows funlib.persistence's `Array`, which many of the
+tools this serves were built on. The placement rules were consolidated from the readers
+those tools had each written, in cellmap-flow, cellmap-analyze, mesh-n-bone and
+chunkmirage, whose conventions document and conformance tests seeded this one; their
+authors' sessions trialled every change here on their own data. The voxel-centre
+convention is OME-NGFF's and ITK's, and is what Neuroglancer draws. tensorstore does the
+work underneath.
+
 ## Development
 
 ```bash
