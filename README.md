@@ -8,8 +8,7 @@ pip install worldarray
 
 ## Why
 
-Volumetric data at Janelia lives in zarr v2, zarr v3, N5 and Neuroglancer precomputed
-stores, on local disks, S3, GCS and HTTP. Each format records *where the array sits*,
+Volumetric data lives in zarr v2, zarr v3, N5 and Neuroglancer precomputed stores, on local disks, S3, GCS and HTTP. Each format records *where the array sits*,
 its voxel size, origin, units and axes, in its own dialect, and the dialects disagree on
 the one thing that matters most: whether a stored origin means the centre of the first
 voxel or its corner. Get that wrong and every object is half a voxel out of place, which
@@ -20,8 +19,7 @@ rule for each, picking a pyramid level for a wanted resolution, and reading a re
 given in physical units as a plain numpy block, padded where the region leaves the data,
 resampled when no level matches, fast enough for a model server or a thousand cluster
 workers, with retries for flaky object stores and thread caps for shared hosts. No one
-package did all of that, so every tool here wrote its own reader, and the readers drifted
-apart. worldarray is that reader, written once, with the rules stated and tested.
+package did all of that, so every tool wrote its own reader, and the readers drifted apart. worldarray is that reader, written once, with the rules stated and tested.
 
 Its dependencies are `tensorstore` and `numpy`. It is read-only in this version. The
 [specification](https://janeliascicomp.github.io/worldarray/spec/) is the contract it is
