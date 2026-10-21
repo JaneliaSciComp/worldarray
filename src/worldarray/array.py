@@ -449,60 +449,59 @@ class WorldArray:
             return self._read_index_selected(begin, end, select, padding, mask, retries, transform)
         padding = self.padding if padding is None else padding
         transform = self.transform if transform is None else transform
-        begin = np.asarray(begin, dtype=np.int64)
-        end = np.asarray(end, dtype=np.int64)
-        shape = np.asarray(self._grid.shape, dtype=np.int64)
-        if begin.shape != shape.shape or end.shape != shape.shape:
-            raise ValueError(
-                f"begin/end must have {len(shape)} entries, got {begin.tolist()} / {end.tolist()}"
-            )
-        if np.any(end < begin):
-            raise ValueError(f"end {end.tolist()} is before begin {begin.tolist()}")
-        out_shape = tuple(int(v) for v in end - begin)
-        clip_lo = np.maximum(begin, 0)
-        clip_hi = np.minimum(end, shape)
-        overlap = bool(np.all(clip_hi > clip_lo)) and all(out_shape)
-        inner = tuple(slice(int(a - b), int(c - b)) for a, c, b in zip(clip_lo, clip_hi, begin))
-        inside = np.zeros(out_shape, dtype=bool)
-        if overlap:
-            inside[inner] = True
+        shape = self._grid.shape
+        ndim = len(shape)
+        if len(begin) != ndim or len(end) != ndim:
+            raise ValueError(f"begin/end must have {ndim} entries, got {list(begin)} / {list(end)}")
+        begin = tuple(int(b) for b in begin)
+        end = tuple(int(e) for e in end)
+        if any(e < b for b, e in zip(begin, end)):
+            raise ValueError(f"end {list(end)} is before begin {list(begin)}")
+        out_shape = tuple(e - b for b, e in zip(begin, end))
+        clip_lo = tuple(max(b, 0) for b in begin)
+        clip_hi = tuple(min(e, n) for e, n in zip(end, shape))
 
+        # the hot path: a box inside the array needs no mask, no fill and no copy
+        if clip_lo == begin and clip_hi == end and all(out_shape):
+            out = self._read_block(begin, end, retries, transform)
+            return (out, np.ones(out_shape, dtype=bool)) if mask else out
+
+        overlap = all(h > lo for lo, h in zip(clip_lo, clip_hi)) and all(out_shape)
+        inner = tuple(slice(a - b, c - b) for a, c, b in zip(clip_lo, clip_hi, begin))
         if padding == "edge":
             # read the overlap, or the nearest one-voxel slab on an axis with none, then repeat the border
             read_lo, read_hi, before, after = [], [], [], []
             for b, e, a, c, n in zip(begin, end, clip_lo, clip_hi, shape):
                 if c > a:
-                    read_lo.append(int(a))
-                    read_hi.append(int(c))
-                    before.append(int(a - b))
-                    after.append(int(e - c))
+                    read_lo.append(a)
+                    read_hi.append(c)
+                    before.append(a - b)
+                    after.append(e - c)
                 else:
-                    edge = 0 if e <= 0 else int(n - 1)
+                    edge = 0 if e <= 0 else n - 1
                     read_lo.append(edge)
                     read_hi.append(edge + 1)
-                    before.append(int(e - b) - 1)
+                    before.append(e - b - 1)
                     after.append(0)
-            if any(s == 0 for s in out_shape):
+            if not all(out_shape):
                 out = np.empty(out_shape, dtype=self._grid.dtype)
             else:
                 block = self._read_block(read_lo, read_hi, retries, transform)
                 out = np.pad(block, list(zip(before, after)), mode="edge")
-        elif overlap and bool(np.all(clip_lo == begin)) and bool(np.all(clip_hi == end)):
-            out = self._read_block(
-                begin.tolist(), end.tolist(), retries, transform
-            )  # no padding: no copy
         else:
-            block = (
-                self._read_block(clip_lo.tolist(), clip_hi.tolist(), retries, transform)
-                if overlap
-                else None
-            )
+            block = self._read_block(clip_lo, clip_hi, retries, transform) if overlap else None
             dtype = block.dtype if block is not None else self._grid.dtype
             out = np.full(out_shape, padding, dtype=dtype)
             if block is not None:
                 out[inner] = block
-        out = np.ascontiguousarray(out)
-        return (out, inside) if mask else out
+        if not out.flags.c_contiguous:
+            out = np.ascontiguousarray(out)
+        if mask:
+            inside = np.zeros(out_shape, dtype=bool)
+            if overlap:
+                inside[inner] = True
+            return out, inside
+        return out
 
     def _read_block(
         self,

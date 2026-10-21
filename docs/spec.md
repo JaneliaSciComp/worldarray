@@ -429,8 +429,12 @@ this document and that one differ, fix one of them.
    resampling and before padding, so padding is never transformed and the output takes the
    transform's dtype; `post_transform` runs after resampling and the cast back to the
    stored dtype, still before padding, for a normalisation that wants the resampled block.
-   A box entirely inside the array is returned without a copy. Block means over blocks
-   that tile the read are one `reduceat` pass.
+   A box entirely inside the array is returned as tensorstore's own block, without a copy,
+   a mask or a fill, under every padding mode; the mask is built only when asked for.
+   Measured on a 4 MiB block with the page cache warm, `read_index` and `read` cost 0.1 to
+   0.2 ms over a raw tensorstore read, about half of what the reader they replace cost
+   (Tests: the benchmark script in the trial notes, not part of the suite). Block means over
+   blocks that tile the read are one `reduceat` pass.
 
 5. **No dtype heuristic.** The package never decides that an array holds labels. `method`
    defaults to `"nearest"`, which invents no values and is correct for labels and acceptable
