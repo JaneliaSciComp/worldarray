@@ -38,9 +38,9 @@ def test_nearest_takes_the_source_voxel_holding_the_target_centre(tmp_path):
         4,
         5,
         6,
-        8,
         0,
-    ]  # the last centre, 37.5 nm, is past the data: fill
+        0,
+    ]  # centres 32.5 and 37.5 nm are past the data: fill
 
 
 def test_anchor_reads_onto_another_grid(tmp_path):
@@ -118,4 +118,4 @@ def test_resample_target_set_at_open(tmp_path):
         and vol.translation == (4.0, 4.0, 4.0)
         and vol.corner == (0.0, 0.0, 0.0)
     )
-    np.testing.assert_array_equal(vol.read(((0, 0, 0), (32, 16, 16)))[:, 0, 0], [0, 2, 4, 6])
+    np.testing.assert_array_equal(vol.read(((0, 0, 0), (32, 16, 16)))[:, 0, 0], [1, 3, 5, 7])

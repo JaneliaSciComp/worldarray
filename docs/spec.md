@@ -90,13 +90,15 @@ import worldarray as wa
 
 vol = wa.open(
     path,                # an array, a level under a multiscale group, or a group
-    level=None,          # a level name ("s1") under a group; ignored, with a warning, for an array path
+    level=None,          # a level name ("s1"), a position (0 = the first listed, "first"), or None;
+                         #   ignored, with a warning, for an array path
     voxel_size=None,     # the size to read at, in `units`: picks the level (level_mode); see on_mismatch
-    level_mode="floor",  # "floor" | "exact" | "nearest" | "resample" (Behaviour 3)
+    level_mode="floor",  # "floor" | "finer" | "exact" | "nearest" | "resample" (Behaviour 3)
     on_mismatch="error", # when no level has `voxel_size`: "error" (list the levels) | "resample" (read the
                          #   level `level_mode` picks and resample it, Behaviour 4) | "relabel" (read it voxel
                          #   for voxel and call its voxels `voxel_size`; no resampling, the grid is relabelled;
-                         #   cellmap-flow's default, which its finetune reads rely on)
+                         #   cellmap-flow's default, which its finetune reads rely on) | "keep" (the level
+                         #   `level_mode` picks, at its own voxel size: cellmap-analyze's target_voxel_size)
     padding=0,           # any value the dtype holds (0, NaN, a uint64 sentinel) | "edge": what fills the
                          #   part of a box outside the data
     method="nearest",    # "nearest" | "linear": the resampling kernel; no dtype heuristic (Behaviour 5)
@@ -105,6 +107,10 @@ vol = wa.open(
                          #   ({"space": "micrometer", "time": "second"}); None keeps the store's own units
     context=None,        # a tensorstore.Context; default shared_context(0)
     retries=None,        # a Retry; default Retry()
+    metadata_conflicts="error",  # a per-array voxel_size disagreeing with the OME scale: "error" | "warn"
+    base_voxel_size=None,  # declare level 0's true voxel size (in base_units): every level's spatial voxel
+    base_units=None,       #   size and translation scale with it, for stores whose metadata is in voxels or unitless
+    anchor=None,           # where a target voxel corner lies when resampling; the source corner by default
 )
 
 vol.ts             # tensorstore.TensorStore: C-order axes, origin 0, selected axes dropped
@@ -117,8 +123,10 @@ vol.corner         # tuple[float] in `units`: translation - voxel_size / 2 (what
 vol.retries        # settable after construction (cellmap-analyze scales the timeout per handle)
 vol.padding, vol.method   # the defaults `read` uses; settable
 
-vol.read_index(begin, end, padding=None, mask=False, retries=None) -> ndarray | (ndarray, mask)
-vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False) -> ndarray | (ndarray, mask)
+vol.read_index(begin, end, padding=None, mask=False, retries=None, select=None) -> ndarray | (ndarray, mask)
+                                    # select pins axes for this read only; begin/end cover the rest
+vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None)
+vol.index_box(box) -> (begin, end)  # the voxels a world box selects on this grid, for snapping a box first
 vol.chunks_covering(begin, end)     # chunk indices a voxel box touches
 vol.reopen(context=None, **overrides) -> WorldArray   # the same array on another context (a worker changing its concurrency)
 
@@ -126,7 +134,11 @@ pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None)
 pyr.names; pyr.levels; pyr.by_name("s1"); pyr.select(voxel_size, mode="floor")
 
 wa.metadata(path, level=None, units=None) -> ArrayMeta
-wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore
+wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
+                                                   #   attributes), .multiscales (OME 0.5's `ome` unwrapped)
+wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore   # reads no world metadata, so an
+                                                   #   array with odd placement attributes (a coordinate array) still opens
+wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1) ; wa.capped_context_spec(...)
 ```
@@ -137,7 +149,9 @@ deliberately the same field names as chunkmirage's `ArrayInfo`: `shape`, `dtype`
 when the store names none), `axes_named`, `units` (as stored, any string; `""` when none),
 `voxel_size` (one index step, in `units`; 1.0 on unitless axes), `translation` (the centre
 of voxel 0, in `units`; 0.0 where the store gives none), `format`, `path` (normalised),
-`parent`, `attrs` and `group_attrs` (raw). Derived: `ndim`, `spatial` (indices of the axes
+`parent`, `attrs` and `group_attrs` (raw), and `placed_by`: which rule gave `voxel_size` and
+`translation`, one of `ome`, `cosem`, `funlib`, `n5`, `precomputed`, `dimension_units`, or
+None when nothing placed the array (then voxel size is 1 and translation 0). Derived: `ndim`, `spatial` (indices of the axes
 named z, y or x when any are; else the last three), `corner`, `in_units(space=, time=)`,
 `in_nm()`, `drop_axis`.
 
@@ -213,15 +227,21 @@ this document and that one differ, fix one of them.
    `mm`, `cm`, `m`, `angstrom`/`Å`, `pm`; for time, `s`/`second`, `ms`, `us`/`µs`, `ns`,
    `minute`, `hour`, `day`. Any unit string on any axis is accepted and never rejected until
    a conversion is asked for (`"s"`, `"m"`, `"degrees_north"`, `""`). A spatial axis with no
-   unit is taken as nanometres (every repo does this; log at debug); an unknown unit string
-   on an axis being converted is a `ValueError`, never silently the target unit; an axis not
+   unit is taken as nanometres, with a **warning once per array** (every repo assumed this
+   silently; a BigDataViewer N5 whose unitless `resolution` is in micrometres would be read
+   a thousandfold too small, and the warning is what tells you; `base_voxel_size` is the
+   fix); an unknown unit string on an axis being converted is a `ValueError`, never silently the target unit; an axis not
    being converted keeps its string. Voxel sizes and translations are floats and are never
    rounded or truncated by the package: a 10.48 nm voxel stays 10.48. `snap_integral` is
    used only to absorb float noise such as 9.9999999 before comparing or ceiling.
 
 4. **Metadata precedence per format, first match wins** (chunkmirage's table):
-   - zarr v2 / v3: the parent group's OME-NGFF `multiscales[0].datasets` entry whose
-     `path` is this array, matched **by name never by position**, composed with the
+   - zarr v2 / v3: the OME-NGFF `multiscales[0].datasets` entry whose `path` is this array,
+     matched **by name never by position**, in the parent group or, when the dataset path
+     has more than one component (`"seg/s0"`), in an ancestor up to four levels above; the
+     parent is read in both zarr formats, because a zarr v3 array inside a v2 group whose
+     `.zattrs` holds the multiscales is a layout in the wild. A parent that lists levels but
+     not this array warns, and the array is placed by its own attributes or not at all; composed with the
      multiscale-level `coordinateTransformations` when present (0.4 and 0.5; under
      `attributes.ome` in 0.5). An OME 0.6 group with `coordinateSystems` is read for its
      intrinsic system and never raises, chunkmirage's rule: take the coordinate system named
@@ -235,8 +255,15 @@ this document and that one differ, fix one of them.
    - N5: the array's `transform` (COSEM; C order unless `ordering: "F"`); else the parent's
      `multiscales[].datasets[].transform` for this path; else `pixelResolution` (both the
      `{dimensions, unit}` form and a bare list) or `resolution`, from the array else the
-     group, times the level's `downsamplingFactors`; plus `offset`. These lists are
-     x-first.
+     group, times the level's `downsamplingFactors`; plus `offset`; axes from the `axes`
+     attribute. These lists are x-first. Without an `offset`, a funlib `resolution` means a
+     corner at 0 (translation half a voxel), while a `pixelResolution` follows
+     BigDataViewer.
+   - **Short lists.** A funlib, COSEM or N5 per-axis list shorter than the array (a 3-entry
+     `voxel_size` on a `(c, z, y, x)` prediction, which funlib's `prepare_ds(num_channels=)`
+     writes) covers the trailing axes; the leading axes get voxel size 1, translation 0,
+     unit `""` and the default axis names. OME lists must match the array exactly. A zarr
+     `offset` with no voxel size places the array with voxels of 1.
    - precomputed: `resolution` (nm, xyz) and `voxel_offset` (voxels, the corner) of the
      scale; levels are the `scales` entries in order, chosen by `scale_index`, by key, or by
      the last path segment when the path names a scale.
@@ -251,19 +278,23 @@ this document and that one differ, fix one of them.
    that). Voxel size is stricter: an OME `scale` and a per-array `voxel_size` /
    `resolution` that disagree beyond `rtol 1e-6` raise `ValueError`, as cellmap-analyze does
    deliberately, because that is how stale attributes are caught and no choice between
-   them is safe.
+   them is safe; `metadata_conflicts="warn"` lets a server show the image anyway, with the
+   OME scale.
 
 5. **Stores are read through tensorstore's kvstore only**, never zarr-python: `zarr.json`,
    `.zarray`, `.zattrs`, `.zgroup`, `attributes.json`, `info`. Format detection probes keys
    in this order: `zarr.json`, `.zarray`, `.zgroup`, `info`, `attributes.json`; when none is
    found, the parent is probed for `info` and the last path segment is taken as a
-   precomputed scale key (mesh-n-bone's case). A `precomputed://` prefix is accepted and
+   precomputed scale key (mesh-n-bone's case), then `s0` is probed so a group with no
+   document of its own (an N5 directory holding `s0, s1, ...`) is still a group. A `precomputed://` prefix is accepted and
    dropped. The `.n5` or `.zarr` suffix is never used to decide the format. A zarr v2
    compressor carrying members tensorstore rejects (the `checksum` newer numcodecs writes
    for zstd) is opened without them. Access: a path with no scheme is a local file; `s3://`
    is tried anonymously then with default credentials; `gs://` with default credentials then
    through the bucket's public https URL (`TENSORSTORE_GCS_HTTP_URL` overrides);
-   `http(s)://`, `file://`, `memory://` one way. The next way is tried only when the error
+   `http(s)://`, `file://`, `memory://` one way. `AWS_ENDPOINT_URL` names an S3-compatible
+   endpoint (MinIO, moto, a mirror) and `AWS_REGION` or `AWS_DEFAULT_REGION` the region, as
+   the AWS tools read them. The next way is tried only when the error
    starts `PERMISSION_DENIED` or `UNAUTHENTICATED`; the way that worked is remembered per
    (driver, bucket) for the process. Format probing runs all probe keys under one way before
    moving to the next: a bucket with listing off answers 403 for a missing key, so a 403 on
@@ -313,22 +344,30 @@ this document and that one differ, fix one of them.
    `"resample"` reads the level `level_mode` picks and resamples (Behaviour 4); `"relabel"`
    reads that level voxel for voxel and reports `voxel_size` as the requested size with the
    level's `translation`, so a box of `m` requested voxels returns `m` stored voxels of the
-   level. `relabel` and `nearest` are different things and both exist: one is a grid
-   policy, the other a resampling kernel. The pyramid an array belongs to is found through
+   level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
+   more). `relabel` and `nearest` are different things and both exist: one is a grid
+   policy, the other a resampling kernel. `level` also takes a position, `0` or `"first"`
+   for the first listed level. The pyramid an array belongs to is found through
    its parent's `multiscales`; a group without `multiscales` is probed for `s0, s1, ...`.
 
 4. **Resampling** (`voxel_size=` with no level at it and `on_mismatch="resample"`, or
    `read(voxel_size=)`) follows cellmap-flow's `io/resample.py`: the target grid's voxel 0
    starts at the source **corner**, has `ceil(n * s / t)` voxels, and target voxel `j` is
    centred at `corner + (j + 1/2) * t`, which is source index `p = (j + 1/2) * t / s - 1/2`.
-   `"nearest"` takes the source voxel whose centre is nearest `p`; on a tie, which happens
-   for every even whole factor (a 4 nm to 8 nm read puts each target centre on a source
-   voxel boundary), the **lower** index. So a factor of 2 reads source voxels `0, 2, 4, ...`,
-   the same as cellmap-analyze's stride today, while a factor of 4 reads `1, 5, 9, ...`
-   where the stride read `0, 4, 8, ...`; the stride is a half-block bias and the change is
-   intended. `"linear"` takes the block mean when `t / s` is a whole number >= 2 (cut short
+   `"nearest"` takes the source voxel whose extent `[corner + i * s, corner + (i + 1) * s)`
+   holds the target centre: nearest neighbour as ITK defines it, and the same half-open
+   rule as Behaviour 2. A centre on a voxel boundary, which every even whole factor
+   produces, belongs to the upper voxel, so a factor of 2 reads source voxels `1, 3, 5, ...`
+   where a stride read `0, 2, 4, ...`; the stride is a half-block bias and the change is
+   intended. The target grid is **anchored** at the source corner unless `anchor` names
+   another world position for a target voxel corner; passing another volume's `corner`
+   reads this volume onto that volume's grid, which is what contact sites, masks and
+   intensity statistics need (cellmap-analyze's case: an 8 nm array with translation 0
+   read onto a 4 nm grid with corner -2 gives `0, 1, 1, 2, 2, 3, 3, 4`, where the
+   source-anchored read gives `0, 0, 1, 1, 2, 2, 3, 3`, half a voxel off). `"linear"` takes the block mean when `t / s` is a whole number >= 2 (cut short
    at the data's end), else linear interpolation between the two neighbours with the border
-   voxel repeated past the first and last centre. Integer dtypes are rounded back to their
+   voxel repeated past the first and last centre; a whole factor with an anchor off the
+   source grid also interpolates. Integer dtypes are rounded back to their
    dtype. The source voxels read are derived from the first and last **target centres** of
    the box, not from the box edges, then grown by the kernel radius (0 for nearest, 1 for
    linear) and clamped to the data with the border repeated; a block mean on a box aligned
@@ -394,7 +433,10 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
   packing exposed raw with the dtype as stored.
 - chunkmirage's additions: N5 with a bare-list `pixelResolution`; an OME 0.6
   `coordinateSystems` group (reads the intrinsic system, never raises); a zstd `.zarray`
-  carrying `checksum`.
+  carrying `checksum`; and, from the trials: short funlib, COSEM and N5 lists on a 4-D
+  array; N5 `resolution` without `offset`; the N5 `axes` attribute; a zarr `offset` with no
+  voxel size; a zarr v3 array in a v2 OME group; a dataset path with two components. Every
+  case states `placed_by`.
 - units: `µm`, `μm`, `um`, `micrometre`, `nanometer`, missing (nm), unknown (`ValueError`
   only when converted).
 - an array with both an OME `translation` and an `offset` equal to it, or to it less half a
@@ -405,13 +447,17 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
   bucket, and a 403 on one probe key with another probe key readable does not trigger the
   fallback; detection ignores the directory suffix and finds a precomputed scale key.
 
-Reads: every statement in Behaviour 1, 2, 3 and 9; the centre rule on a 10.48 nm grid with
+Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed through
+`s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; `read_index`
+with `select`; `base_voxel_size` rescaling a BigStitcher-style pyramid; `AWS_ENDPOINT_URL`
+and the region reaching the S3 specs; the centre rule on a 10.48 nm grid with
 translation 3.7 at indices around 1e5, corner- and centre-aligned (mesh-n-bone's float-noise
 case); a `(t, c, z, y, x)` OME 0.5 store read with a time window and a spatial box, and with
 `select`.
 
-Resampling: a factor-2 `"nearest"` read equals the stride read and a factor-4 one takes the
-second voxel of each block; `"linear"` at a whole factor is the block mean; two adjoining
+Resampling: `"nearest"` takes the source voxel holding each target centre (factor 2 reads
+`1, 3, 5, 7`; a 5 nm read of 4 nm voxels reads `0, 1, 3, 4, ...`); the anchored read onto
+another grid from Behaviour 4, and its two halves agree with the whole; `"linear"` at a whole factor is the block mean; two adjoining
 reads agree with one read across both at both methods and at whole and non-whole factors; a
 2x `"nearest"` read of an integer label volume introduces no new values and pads outside
 the data; a resample target set at open reports the target voxel size with the same corner.
@@ -450,6 +496,29 @@ a PyPI package, so a git dependency is not an option); mesh-n-bone and cellmap-a
 cheaply); cellmap-flow; chunkmirage; the rest as their owners choose. Every consumer pins
 a version range (`>=0.1,<1`), never a commit; the commit pins that exist today exist only
 because chunkmirage was not on PyPI.
+
+### Trial status, 2026-10-21
+
+Each repo's session put worldarray beside its environment and compared it with its own
+reader on its own data; none merged or pushed anything. Correct on every store tried, with
+byte-identical reads where compared: cellmap-analyze-scripts (one script; drops the
+scale-factor bookkeeping and its environment constraint), salamander (three arrays
+including a prepare_ds-written prediction; four scripts, 40 to 60 lines),
+registration-station (16 OME 0.5 levels; 1.5 to 2x faster than zarr-python cold, more
+warm; two parsers and ten diagnostics scripts), liconn-err (three tiles including a BDV
+N5; 33 of 148 lines; exposed two stores with wrong or missing units, hence the warning in
+Conventions 3 and `base_voxel_size`), CineMap (sharded zarr v3 over https; about 100 of
+486 lines), chunkmirage (323 of 326 tests, the other three deleted as covered;
+`tensorstore_source.py` 649 to 219 lines; found the short-list blocker and the N5
+`resolution` rule, both fixed), mesh-n-bone (320 passed; src +181/-1531 with
+`precomputed_io.py` gone and `zarr_io.py` 768 to 16; the five-way cube exact on all five;
+found the nested dataset path bug, fixed, and two placement bugs of its own, fixed on its
+branch), cellmap-analyze (317 passed, 7 failed of which 5 were worldarray gaps, all fixed
+here: the S3 endpoint, short lists, the hybrid layout, `keep` and `finer`, the resample
+anchor; about 800 lines deletable now, 640 more with three call-site edits). Pending:
+cellmap-flow (running). Every repo that writes asked for the v2 write API: create an OME
+0.5 multiscale group and array from voxel size, centre translation, axes and units;
+race-safe region writes from many jobs; add a level to a group; encode a chunk key.
 
 ## 7. Open questions
 
