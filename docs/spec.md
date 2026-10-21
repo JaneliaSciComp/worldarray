@@ -589,7 +589,7 @@ key and an N5 `units` string, are fixed here, its convention points are decided 
 Neuroglancer and fibsem-tools as the tie-breakers, and its mapping asks are in: an array
 path keeps its array, relabel keeps the corner, `shape` reports the target, a `transform`
 hook, `list_chunks`, level choice from the group document, `strict_units`, the public unit
-table, `fill_value`, `s<N>` precomputed paths). Pending: cellmap-flow's re-run. Every repo that writes asked for the v2 write API: create an OME
+table, `fill_value`, `s<N>` precomputed paths). cellmap-flow's third run against the fixed build: 1,141 passed and one known failure of its own; its `io/` 2,201 to 1,065 lines; its 4 MiB block read re-measured within 0.1 to 0.5 ms of raw tensorstore and level with its base on both padding modes. Every live consumer's session has declared worldarray acceptable to publish. Every repo that writes asked for the v2 write API: create an OME
 0.5 multiscale group and array from voxel size, centre translation, axes and units;
 race-safe region writes from many jobs; add a level to a group; encode a chunk key.
 
