@@ -158,7 +158,7 @@ These are the rules the package exists to hold in one place.
    document of its own; the `.n5` or `.zarr` suffix is
    never consulted. `s3://` is tried anonymously then with default credentials, `gs://`
    with default credentials then through the bucket's public https URL; the way that
-   worked is remembered per bucket. `AWS_ENDPOINT_URL` names an S3-compatible endpoint. Metadata reads give up after about five seconds. A
+   worked is remembered per bucket. `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` names an S3-compatible endpoint. Metadata reads give up after about five seconds. A
    zarr v2 compressor carrying members tensorstore rejects (`checksum`) is opened without
    them.
 
