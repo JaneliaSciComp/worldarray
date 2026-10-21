@@ -1,6 +1,6 @@
 [project]
 name = "worldarray"
-version = "0.1.0a0"
+version = "0.1.0"
 description = "Chunked arrays in world coordinates, through tensorstore."
 readme = "README.md"
 license = { file = "LICENSE" }
