@@ -8,6 +8,7 @@ contract; the README is its first five sections.
 
 from __future__ import annotations
 
+from . import units
 from .array import Pyramid, WorldArray, metadata, open, open_pyramid, open_tensorstore
 from .context import capped_context, capped_context_spec, shared_context
 from .geometry import Box, index_range
@@ -37,4 +38,5 @@ __all__ = [
     "open_tensorstore",
     "select_level",
     "shared_context",
+    "units",
 ]

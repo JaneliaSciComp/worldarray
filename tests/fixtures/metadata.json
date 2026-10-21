@@ -1,5 +1,5 @@
 {
-  "about": "Conformance cases for worldarray's metadata reading (spec, Conventions 1 and 4). Each case is a store described by its attribute documents (shape and lists in the store's own order: C order for zarr, x-first for N5 attributes and precomputed) and what the package must report, in the store's own units. chunkmirage's TypeScript side builds the same stores from this file. 'expect' is the package's reading; a case with 'layered' also says what chunkmirage derives from the raw attributes.",
+  "about": "Conformance cases for worldarray's metadata reading (spec, Conventions 1 and 4). Each case is a store described by its attribute documents (shape and lists in the store's own order: C order for zarr, x-first for N5 attributes and precomputed) and what the package must report, in the store's own units. chunkmirage's TypeScript side builds the same stores from this file. 'expect' is the package's reading; a case with 'layered' also says what chunkmirage derives from the raw attributes. An array nothing places has voxels of 1 with its corner at the origin (translation 0.5), as Neuroglancer draws a plain zarr.",
   "cases": [
     {
       "name": "n5_is_transposed_to_c_order_with_resolution_and_offset",
@@ -538,9 +538,9 @@
           1
         ],
         "translation": [
-          0,
-          0,
-          0
+          0.5,
+          0.5,
+          0.5
         ],
         "axes": [
           "z",
@@ -779,9 +779,9 @@
           1
         ],
         "translation": [
-          0,
-          0,
-          0
+          0.5,
+          0.5,
+          0.5
         ],
         "axes": [
           "time",
@@ -828,9 +828,9 @@
           1
         ],
         "translation": [
-          0,
-          0,
-          0
+          0.5,
+          0.5,
+          0.5
         ],
         "axes": [
           "z",
@@ -1335,6 +1335,92 @@
         ],
         "axes_named": false,
         "placed_by": "n5"
+      }
+    },
+    {
+      "name": "n5_units_written_once_as_a_string",
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "resolution": [
+          8,
+          4,
+          2
+        ],
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "units": "um"
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          1,
+          2,
+          4
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "um",
+          "um",
+          "um"
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
+    },
+    {
+      "name": "zarr_scale_attribute_is_a_voxel_size",
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "scale": [
+          2,
+          4,
+          8
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          1,
+          2,
+          4
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "placed_by": "funlib"
       }
     }
   ]

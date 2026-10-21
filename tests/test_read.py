@@ -144,6 +144,9 @@ def test_levels_and_selection(pyramid):
     assert wa.open(group + "/s1").index_box(((0, 0, 0), (16, 16, 16))) == ((0, 0, 0), (2, 2, 2))
     with pytest.warns(UserWarning, match="ignored"):
         wa.open(group + "/s0", level="s2")
+    assert (
+        wa.open(group + "/s0", level="first").level_name == "s0"
+    )  # silent: an array is its own first level
     assert wa.open(group + "/s1").levels == [
         ("s0", (4.0, 4.0, 4.0)),
         ("s1", (8.0, 8.0, 8.0)),
@@ -154,7 +157,11 @@ def test_levels_and_selection(pyramid):
 def test_relabel_reads_voxel_for_voxel_and_renames_the_grid(pyramid):
     group, levels = pyramid
     vol = wa.open(group, voxel_size=(12, 12, 12), on_mismatch="relabel")
-    assert vol.voxel_size == (12.0, 12.0, 12.0) and vol.translation == (4.0, 4.0, 4.0)
+    assert vol.voxel_size == (12.0, 12.0, 12.0) and vol.translation == (
+        6.0,
+        6.0,
+        6.0,
+    )  # the corner stays
     out = vol.read(((-2, -2, -2), (22, 22, 22)))  # two relabelled voxels from the corner
     np.testing.assert_array_equal(out, levels["s1"][:2, :2, :2])
 
@@ -432,3 +439,76 @@ def test_level_path_reopens_a_precomputed_scale(tmp_path):
     again = wa.open(coarse.level_path)
     assert again.level_name == "s1" and again.voxel_size == (8.0, 8.0, 8.0)
     np.testing.assert_array_equal(again.read_index((0, 0, 0), (2, 2, 2)), data[::2, ::2, ::2])
+
+
+def test_array_path_is_the_array_whatever_voxel_size_asks(pyramid):
+    group, levels = pyramid
+    vol = wa.open(group + "/s0", voxel_size=(8, 8, 8), on_mismatch="resample")
+    assert vol.level_name == "s0" and vol.resampled and vol.source_voxel_size == (4.0, 4.0, 4.0)
+    assert vol.shape == (8, 8, 8) and vol.voxel_size == (
+        8.0,
+        8.0,
+        8.0,
+    )  # the target grid covering the data
+    assert wa.open(group, voxel_size=(8, 8, 8)).level_name == "s1"  # a group still picks a level
+
+
+def test_relabel_keeps_the_corner(pyramid):
+    group, _ = pyramid
+    vol = wa.open(group + "/s1", voxel_size=(12, 12, 12), on_mismatch="relabel")
+    assert (
+        vol.corner == (0.0, 0.0, 0.0) and vol.translation == (6.0, 6.0, 6.0) and not vol.resampled
+    )
+
+
+def test_transform_is_applied_before_padding(cube):
+    path, data = cube
+    vol = wa.open(path, transform=lambda a: a.astype("float32") + 1000)
+    out = vol.read_index((-1, 0, 0), (2, 2, 2), padding=0)
+    assert out.dtype == np.float32 and (out[0] == 0).all()
+    np.testing.assert_array_equal(out[1:], data[0:2, 0:2, 0:2].astype("float32") + 1000)
+    edge = vol.read_index((-1, 0, 0), (2, 2, 2), padding="edge")
+    np.testing.assert_array_equal(edge[0], edge[1])
+    at8 = vol.read(((0, 0, 0), (16, 16, 16)), voxel_size=(8, 8, 8))
+    assert at8.dtype == np.float32 and at8.min() >= 1000
+
+
+def test_list_chunks(cube, tmp_path):
+    path, data = cube  # chunks (3, 4, 5) over (6, 8, 10): every chunk written
+    assert wa.open(path).list_chunks() == sorted(np.ndindex(2, 2, 2))
+    n5 = tmp_path / "lc.n5"
+    write_n5_group(n5)
+    write_n5(n5 / "s0", pattern((4, 8, 8)), attrs={"resolution": [4, 4, 4]}, chunks=(2, 8, 8))
+    assert wa.open(str(n5 / "s0")).list_chunks() == [(0, 0, 0), (1, 0, 0)]
+    z3 = tmp_path / "lc3.zarr"
+    write_zarr3_group(z3)
+    write_zarr3(z3 / "s0", pattern((4, 4, 4)), chunks=(2, 4, 4))
+    assert wa.open(str(z3 / "s0")).list_chunks() == [(0, 0, 0), (1, 0, 0)]
+
+
+def test_pyramid_selection_reads_the_group_document_only(pyramid, monkeypatch):
+    group, _ = pyramid
+    pyr = wa.open_pyramid(group)
+    assert pyr.voxel_sizes() == [
+        ("s0", (4.0, 4.0, 4.0)),
+        ("s1", (8.0, 8.0, 8.0)),
+        ("s2", (16.0, 16.0, 16.0)),
+    ]
+    assert pyr._levels == {}  # nothing opened to answer that
+    assert pyr.select((8, 8, 8)).level_name == "s1"
+    assert set(pyr._levels) == {"s1"}
+
+
+def test_precomputed_sN_path_means_scale_index(tmp_path):
+    data = pattern((4, 4, 4), "uint8")
+    pre = tmp_path / "keyed"
+    write_precomputed(
+        pre,
+        [
+            {"data": data, "resolution": [4, 4, 4], "key": "4_4_4"},
+            {"data": data[::2, ::2, ::2], "resolution": [8, 8, 8], "key": "8_8_8"},
+        ],
+    )
+    assert wa.open(str(pre / "s1")).voxel_size == (8.0, 8.0, 8.0)
+    assert wa.open(str(pre / "8_8_8")).level_name == "8_8_8"
+    assert tuple(wa.open_tensorstore(str(pre), level="s0").shape) == (4, 4, 4)

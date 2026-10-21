@@ -127,3 +127,13 @@ def test_s3_endpoint_and_region_come_from_the_environment(monkeypatch):
     monkeypatch.delenv("AWS_ENDPOINT_URL")
     monkeypatch.delenv("AWS_DEFAULT_REGION")
     assert "endpoint" not in store.kvstore_specs("s3://bucket/vol")[0]
+
+
+def test_s3_endpoint_service_variable_and_gcs_cache_key(monkeypatch):
+    monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "http://s3.local:9000")
+    assert store.kvstore_specs("s3://bucket/v")[0]["endpoint"] == "http://s3.local:9000"
+    store._metadata_kvstore.cache_clear()
+    monkeypatch.setenv("TENSORSTORE_GCS_HTTP_URL", "http://a.local")
+    spec = '{"driver": "memory"}'
+    first = store._metadata_kvstore(spec, "http://a.local")
+    assert store._metadata_kvstore(spec, "http://b.local") is not first  # keyed on the variable too

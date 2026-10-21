@@ -73,13 +73,17 @@ wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 | `metadata_conflicts` | `error` (default) or `warn` when a per-array `voxel_size` disagrees with the OME scale |
 | `base_voxel_size`, `base_units` | declare level 0's true voxel size; every level's voxel size and translation scale with it, for stores whose metadata is in voxels or unitless |
 | `anchor` | when resampling, where a target voxel corner lies; pass another volume's `corner` to read onto its grid |
+| `transform` | a callable applied to stored values before resampling and padding, so padding is never transformed |
+| `strict_units` | `False` takes an unknown unit such as `pixel` as the target unit, with a warning |
 
 `WorldArray` has `ts`, `meta` (native units), `grid` (requested units, all axes), `shape`,
 `dtype`, `axes`, `spatial`, `voxel_size`, `translation`, `corner`, `levels`, `level_name`,
 `level_path` (the array actually opened; `path` is what you passed),
 `read_index(begin, end, padding=None, mask=False, retries=None, select=None)`,
 `read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None)`,
-`index_box(box)`, `chunks_covering(begin, end)` and `reopen(context=None, **overrides)`. A **box** is a `(begin, end)` pair of float tuples over the spatial
+`index_box(box)`, `chunks_covering(begin, end)`, `list_chunks()`, `reopen(context=None, **overrides)`,
+`source_voxel_size` and `resampled`. An array path is read as that array whatever `voxel_size`
+asks for; only a group path chooses a level. A **box** is a `(begin, end)` pair of float tuples over the spatial
 axes (or over every axis), anything with `.begin`/`.end` or `.offset`/`.shape` (a funlib
 `Roi`, duck-typed), or a `wa.Box`. `Box` has funlib's Roi vocabulary on floats: `intersect`, `union`, `contains`,
 `grow`, `shift`, `snap(voxel_size, translation)` to a grid, `to_index`, `Box.from_index`; and
@@ -142,7 +146,8 @@ These are the rules the package exists to hold in one place.
    (x-first lists; without `offset`, a level with `downsamplingFactors` follows
    BigDataViewer and a funlib `resolution` without them is a corner at 0). Per-axis lists shorter than the array cover the
    trailing axes (a 3-entry `voxel_size` on a `(c, z, y, x)` prediction); OME lists must
-   match. precomputed: the scale's `resolution` and `voxel_offset`. An OME
+   match. An array nothing places has voxels of 1 with its corner at the origin, as
+   Neuroglancer draws a plain array. precomputed: the scale's `resolution` and `voxel_offset`. An OME
    `translation` beside an `offset` equal to it, or half a voxel below it, passes silently;
    any other pair warns. An OME `scale` disagreeing with a per-array `voxel_size` raises.
    Everything unconsumed stays in `attrs` and `group_attrs`.

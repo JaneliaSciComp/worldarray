@@ -74,8 +74,11 @@ def discover(node: Node) -> list[LevelRef]:
     return [LevelRef(name, join(node.path, name)) for name in names]
 
 
-def _spatial_voxel_size(meta: ArrayMeta) -> np.ndarray:
-    return np.asarray([meta.voxel_size[i] for i in meta.spatial], dtype=float)
+def _spatial_voxel_size(level) -> np.ndarray:
+    """The spatial voxel size of an ``ArrayMeta``, or of a plain per-spatial-axis tuple."""
+    if hasattr(level, "spatial"):
+        return np.asarray([level.voxel_size[i] for i in level.spatial], dtype=float)
+    return np.asarray(level, dtype=float)
 
 
 def same_voxel_size(a, b) -> bool:
@@ -89,8 +92,8 @@ def coarser_anywhere(resolution, target) -> bool:
 
 
 def select_level(
-    levels: Sequence[tuple[str, ArrayMeta]], voxel_size, mode: Mode = "floor"
-) -> tuple[str, ArrayMeta]:
+    levels: Sequence[tuple[str, ArrayMeta | tuple[float, ...]]], voxel_size, mode: Mode = "floor"
+) -> tuple[str, ArrayMeta | tuple[float, ...]]:
     """The ``(name, meta)`` to read at ``voxel_size`` (spatial axes, the pyramid's units).
 
     - ``floor``: the level at ``voxel_size``, else the coarsest level that is no coarser than

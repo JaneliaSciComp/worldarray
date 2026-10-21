@@ -133,3 +133,20 @@ def test_hybrid_layout_zarr3_array_in_a_zarr2_ome_group(tmp_path):
     vol = wa.open(str(group / "s0"))
     assert vol.meta.format == "zarr3" and vol.meta.placed_by == "ome"
     assert vol.voxel_size == (4.0, 4.0, 4.0) and vol.translation == (2.0, 2.0, 2.0)
+
+
+def test_lenient_units_take_unknown_units_as_the_target(tmp_path, caplog):
+    group = tmp_path / "px.zarr"
+    write_zarr2_group(
+        group, ome_multiscales("zyx", [("s0", (4, 4, 4), None)], units={a: "pixel" for a in "zyx"})
+    )
+    write_zarr2(group / "s0", pattern((2, 2, 2)))
+    with pytest.raises(ValueError):
+        wa.open(str(group / "s0"))
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        vol = wa.open(str(group / "s0"), strict_units=False)
+    assert vol.voxel_size == (4.0, 4.0, 4.0) and any(
+        "unknown unit" in r.message for r in caplog.records
+    )
+    assert "nanometer" in wa.units.TABLE["length"] and "second" in wa.units.TABLE["time"]
+    assert wa.open(str(group / "s0"), units=None).meta.fill_value in (None, 0)

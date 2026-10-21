@@ -111,12 +111,17 @@ vol = wa.open(
     base_voxel_size=None,  # declare level 0's true voxel size (in base_units): every level's spatial voxel
     base_units=None,       #   size and translation scale with it, for stores whose metadata is in voxels or unitless
     anchor=None,           # where a target voxel corner lies when resampling; the source corner by default
+    transform=None,        # a callable applied to stored values before resampling and padding (a norm chain)
+    strict_units=True,     # False: an unknown unit ("pixel") is taken as the target unit, with a warning
 )
 
 vol.ts             # tensorstore.TensorStore: C-order axes, origin 0, selected axes dropped
 vol.meta           # ArrayMeta in the store's own units
 vol.grid           # ArrayMeta in the requested units, every axis
 vol.shape, vol.dtype, vol.axes, vol.spatial, vol.level_name, vol.levels, vol.remote
+                   # shape is the stored shape, or with a resample target the target voxels covering the data
+vol.source_voxel_size, vol.resampled   # the stored level's voxel size; whether reads resample to a target
+vol.list_chunks()  # the chunk indices that exist in storage, by listing keys (zarr v2/v3, N5, unsharded precomputed)
 vol.path           # what the caller passed (a group, say); vol.level_path is the array actually opened
 vol.voxel_size     # tuple[float] in `units`, spatial axes, the array's order (zyx for a volume)
 vol.translation    # tuple[float] in `units`: the CENTRE of voxel 0        (OME-NGFF's word, OME-NGFF's meaning)
@@ -124,15 +129,17 @@ vol.corner         # tuple[float] in `units`: translation - voxel_size / 2 (what
 vol.retries        # settable after construction (cellmap-analyze scales the timeout per handle)
 vol.padding, vol.method   # the defaults `read` uses; settable
 
-vol.read_index(begin, end, padding=None, mask=False, retries=None, select=None) -> ndarray | (ndarray, mask)
+vol.read_index(begin, end, padding=None, mask=False, retries=None, select=None, transform=None)
                                     # select pins axes for this read only; begin/end cover the rest
-vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None)
+vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None, transform=None)
 vol.index_box(box) -> (begin, end)  # the voxels a world box selects on this grid, for snapping a box first
 vol.chunks_covering(begin, end)     # chunk indices a voxel box touches
 vol.reopen(context=None, **overrides) -> WorldArray   # the same array on another context (a worker changing its concurrency)
 
 pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None)
 pyr.names; pyr.levels; pyr.by_name("s1"); pyr.select(voxel_size, mode="floor")
+pyr.voxel_sizes()   # (name, spatial voxel size) per level from the group's own document where it lists the
+                    #   levels' scales (OME-NGFF, COSEM N5, precomputed), so choosing a level opens nothing
 
 wa.metadata(path, level=None, units=None) -> ArrayMeta
 wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
@@ -140,6 +147,7 @@ wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group),
 wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore   # reads no world metadata, so an
                                                    #   array with odd placement attributes (a coordinate array) still opens
 wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
+wa.units.TABLE      # the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1) ; wa.capped_context_spec(...)
 ```
@@ -152,7 +160,9 @@ when the store names none), `axes_named`, `units` (as stored, any string; `""` w
 of voxel 0, in `units`; 0.0 where the store gives none), `format`, `path` (normalised),
 `parent`, `attrs` and `group_attrs` (raw), and `placed_by`: which rule gave `voxel_size` and
 `translation`, one of `ome`, `cosem`, `funlib`, `n5`, `precomputed`, `dimension_units`, or
-None when nothing placed the array (then voxel size is 1 and translation 0). Derived: `ndim`, `spatial` (indices of the axes
+None when nothing placed the array (then voxel size is 1 with the **corner at the origin**,
+translation 0.5, as Neuroglancer draws a plain zarr), and `fill_value` as the store reports
+it. Derived: `ndim`, `spatial` (indices of the axes
 named z, y or x when any are; else the last three), `corner`, `in_units(space=, time=)`,
 `in_nm()`, `drop_axis`.
 
@@ -170,7 +180,10 @@ is the migration of a clipped, snapped Roi read, without funlib.
 
 There is no `offset` attribute anywhere in this API, because that word means the corner in
 funlib and the centre in OME; `translation` and `corner` are the two names for the two
-things. There is no funlib `Roi` on the way out either: an integer corner-based Roi cannot
+things. `path` names the array that is read: an array path is that array whatever `voxel_size`
+asks for (it resamples or relabels in place, never hops to a sibling level); only a group
+path chooses a level. `level="first"` or `0` on an array path is silently the array.
+There is no funlib `Roi` on the way out either: an integer corner-based Roi cannot
 hold a 10.48 nm grid, nor a 5 nm grid with translation 0 (corner -2.5), so a bridge that
 returned one would raise on inputs cellmap-analyze reads every day. A consumer that works
 in integer Rois builds them from `corner`, `voxel_size` and `shape` in its own subclass,
@@ -204,11 +217,17 @@ this document and that one differ, fix one of them.
    | Stored | Means | Read as `translation` |
    |---|---|---|
    | OME-NGFF `translation` (zarr v2/v3) | centre of voxel 0 | as is |
-   | COSEM `transform.translate` (N5 or zarr) | centre | as is |
+   | COSEM `transform.translate` (N5 or zarr) | centre (fibsem-tools wrote it as the first sample's position; Neuroglancer ignores `transform` and `offset` on N5 entirely) | as is |
    | funlib `offset` with `resolution`/`voxel_size` (N5 or zarr; `offset` missing = 0) | corner | `offset + voxel_size / 2` |
    | N5 `pixelResolution` x `downsamplingFactors f`, no offset | BigDataViewer | `(f - 1) / 2 * pixelResolution` |
    | precomputed `voxel_offset` x `resolution` | corner | `+ resolution / 2` |
    | CF coordinate array (xarray zarr) | sample position = centre | as is (chunkmirage layers this) |
+   | nothing at all | Neuroglancer draws a plain array with its corner at the origin | voxels of 1, translation 0.5 |
+
+   Stored numbers are never rounded onto a grid: a funlib `offset` of 4 at 8 nm stays 4
+   (cellmap-flow rounded it to 8). A group's `multiscales` transform for an array outranks
+   the array's own `resolution` (chunkmirage's documented order), and an OME scale outranks
+   a per-array `voxel_size`.
 
    Neuroglancer does the same, so placement by `translation` matches what Neuroglancer
    shows. Its zarr datasource (`src/datasource/zarr/ome.ts`, verified 2026-10-21) says: "In
@@ -300,9 +319,13 @@ this document and that one differ, fix one of them.
    for zstd) is opened without them. Access: a path with no scheme is a local file; `s3://`
    is tried anonymously then with default credentials; `gs://` with default credentials then
    through the bucket's public https URL (`TENSORSTORE_GCS_HTTP_URL` overrides);
-   `http(s)://`, `file://`, `memory://` one way. `AWS_ENDPOINT_URL` names an S3-compatible
-   endpoint (MinIO, moto, a mirror) and `AWS_REGION` or `AWS_DEFAULT_REGION` the region, as
-   the AWS tools read them. The next way is tried only when the error
+   `http(s)://`, `file://`, `memory://` one way. `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` names an
+   S3-compatible endpoint (MinIO, moto, a mirror) and `AWS_REGION` or `AWS_DEFAULT_REGION`
+   the region, as the AWS tools read them; `TENSORSTORE_GCS_HTTP_URL` is tensorstore's own
+   redirect for `gs://`, and the opened-kvstore cache is keyed on it, so a process that
+   changes it between opens reads the right host. An N5 `units` written once as a string
+   is read as that unit on every axis; tensorstore is given only the array members of
+   `attributes.json`, so attributes it would reject do not stop the open. The next way is tried only when the error
    starts `PERMISSION_DENIED` or `UNAUTHENTICATED`; the way that worked is remembered per
    (driver, bucket) for the process. Format probing runs all probe keys under one way before
    moving to the next: a bucket with listing off answers 403 for a missing key, so a 403 on
@@ -324,7 +347,7 @@ this document and that one differ, fix one of them.
    worker serves different kinds of reads (mesh-n-bone's meshing reads blocks it has grown
    by one output voxel per side; its pyramid builder reads ungrown blocks). `padding` is the
    fill only. There is no context or halo argument: a caller that wants context grows its
-   own box.
+   own box. `transform` is applied to the stored values before padding.
 
 2. **World boxes select voxels by their centres.** For a box `[b, e)` on an axis with voxel
    size `s` and translation `t`, the voxels read are `i` with `ceil((b - t) / s) <= i <
@@ -353,8 +376,8 @@ this document and that one differ, fix one of them.
    requested `voxel_size`, `on_mismatch` decides: `"error"` raises with the list;
    `"resample"` reads the level `level_mode` picks and resamples (Behaviour 4); `"relabel"`
    reads that level voxel for voxel and reports `voxel_size` as the requested size with the
-   level's `translation`, so a box of `m` requested voxels returns `m` stored voxels of the
-   level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
+   **corner kept** (translation moves by half the difference), so a box of `m` requested
+   voxels returns `m` stored voxels of the level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
    more). `relabel` and `nearest` are different things and both exist: one is a grid
    policy, the other a resampling kernel. `level` also takes a position, `0` or `"first"`
    for the first listed level. The pyramid an array belongs to is found through
@@ -374,9 +397,10 @@ this document and that one differ, fix one of them.
    reads this volume onto that volume's grid, which is what contact sites, masks and
    intensity statistics need (cellmap-analyze's case: an 8 nm array with translation 0
    read onto a 4 nm grid with corner -2 gives `0, 1, 1, 2, 2, 3, 3, 4`, where the
-   source-anchored read gives `0, 0, 1, 1, 2, 2, 3, 3`, half a voxel off). `"linear"` takes the block mean when `t / s` is a whole number >= 2 (cut short
-   at the data's end), else linear interpolation between the two neighbours with the border
-   voxel repeated past the first and last centre; a whole factor with an anchor off the
+   source-anchored read gives `0, 0, 1, 1, 2, 2, 3, 3`, half a voxel off). `"linear"` takes the block mean when `t / s` is a whole number >= 2; a block cut short
+   by the end of the data is the mean of what it has (a pyramid's last block), and a block
+   that overlaps no data is outside; else linear interpolation between the two neighbours
+   with the border voxel repeated past the first and last centre; a whole factor with an anchor off the
    source grid also interpolates. Integer dtypes are rounded back to their
    dtype. The source voxels read are derived from the first and last **target centres** of
    the box, not from the box edges, then grown by the kernel radius (0 for nearest, 1 for
@@ -385,8 +409,12 @@ this document and that one differ, fix one of them.
    index and the source array, never on where the read starts or ends: two adjoining reads
    agree with one read across both (the chunk independence property, tested on boundaries
    at every method; cellmap-analyze's current resampler fails it). Target voxels whose
-   centres lie outside the data get the fill (or the nearest value with `"edge"`), and the
-   mask marks them.
+   centres lie outside the data get the fill (with `"edge"`, the border voxel for nearest
+   and linear, the last block holding data for the mean), and the mask marks them. With a
+   resample target, `shape` reports the target voxels covering the data on each spatial
+   axis. A `transform` (a normalisation chain) is applied to the stored values before
+   resampling and before padding, so padding is never transformed and the output takes the
+   transform's dtype.
 
 5. **No dtype heuristic.** The package never decides that an array holds labels. `method`
    defaults to `"nearest"`, which invents no values and is correct for labels and acceptable
@@ -448,7 +476,8 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
   voxel size; a zarr v3 array in a v2 OME group; a dataset path with two components. Every
   case states `placed_by`.
 - units: `µm`, `μm`, `um`, `micrometre`, `nanometer`, missing (nm), unknown (`ValueError`
-  only when converted).
+  only when converted; a factor of 1 with a warning under `strict_units=False`); an N5
+  `units` string; a `scale` attribute as a voxel size.
 - an array with both an OME `translation` and an `offset` equal to it, or to it less half a
   voxel, reads the translation silently; any other pair warns and still reads the
   translation; an OME `scale` disagreeing with a per-array `voxel_size` raises.
@@ -459,8 +488,12 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
 
 Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed through
 `s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; `read_index`
-with `select`; `base_voxel_size` rescaling a BigStitcher-style pyramid; `AWS_ENDPOINT_URL`
-and the region reaching the S3 specs; the centre rule on a 10.48 nm grid with
+with `select`; `base_voxel_size` rescaling a BigStitcher-style pyramid; `AWS_ENDPOINT_URL`,
+`AWS_ENDPOINT_URL_S3` and the region reaching the S3 specs and the GCS redirect keying the
+kvstore cache; an array path kept under `voxel_size`; relabel keeping the corner; a
+`transform` applied before padding and before resampling; `list_chunks` on zarr v2, zarr v3
+and N5; a pyramid choosing a level from the group document without opening one; a
+precomputed `s<N>` path; the centre rule on a 10.48 nm grid with
 translation 3.7 at indices around 1e5, corner- and centre-aligned (mesh-n-bone's float-noise
 case); a `(t, c, z, y, x)` OME 0.5 store read with a time window and a spatial box, and with
 `select`.
@@ -525,8 +558,15 @@ Conventions 3 and `base_voxel_size`), CineMap (sharded zarr v3 over https; about
 found the nested dataset path bug, fixed, and two placement bugs of its own, fixed on its
 branch), cellmap-analyze (317 passed, 7 failed of which 5 were worldarray gaps, all fixed
 here: the S3 endpoint, short lists, the hybrid layout, `keep` and `finer`, the resample
-anchor; about 800 lines deletable now, 640 more with three call-site edits). Pending:
-cellmap-flow (running). Every repo that writes asked for the v2 write API: create an OME
+anchor; about 800 lines deletable now, 640 more with three call-site edits; its re-run on
+the fixes: 329 passed, the 4 left being its own pins of intended changes), cellmap-flow
+(against the first build: `io/` shrinks by 1,035 of 2,201 lines, but 97 tests failed on
+real differences; its three blockers, the S3 endpoint variables, the GCS redirect cache
+key and an N5 `units` string, are fixed here, its convention points are decided above with
+Neuroglancer and fibsem-tools as the tie-breakers, and its mapping asks are in: an array
+path keeps its array, relabel keeps the corner, `shape` reports the target, a `transform`
+hook, `list_chunks`, level choice from the group document, `strict_units`, the public unit
+table, `fill_value`, `s<N>` precomputed paths). Pending: cellmap-flow's re-run. Every repo that writes asked for the v2 write API: create an OME
 0.5 multiscale group and array from voxel size, centre translation, axes and units;
 race-safe region writes from many jobs; add a level to a group; encode a chunk key.
 

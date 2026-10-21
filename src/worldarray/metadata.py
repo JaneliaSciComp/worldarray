@@ -54,6 +54,7 @@ class ArrayMeta:
     attrs: dict = field(default_factory=dict)
     group_attrs: dict = field(default_factory=dict)
     placed_by: str | None = None  # which rule gave voxel_size and translation; None: nothing did
+    fill_value: object = None  # the store's fill value, as tensorstore reports it
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "dtype", np.dtype(self.dtype))
@@ -82,7 +83,9 @@ class ArrayMeta:
             for i, (t, v) in enumerate(zip(self.translation, self.voxel_size))
         )
 
-    def in_units(self, space: str | None = None, time: str | None = None) -> ArrayMeta:
+    def in_units(
+        self, space: str | None = None, time: str | None = None, strict: bool = True
+    ) -> ArrayMeta:
         """The same metadata with spatial axes in ``space`` and time axes in ``time``.
         Axes not asked about keep their unit string, whatever it is. A spatial axis with no
         unit is taken as nanometres, with a warning once per array (a BigDataViewer N5 with
@@ -102,7 +105,15 @@ class ArrayMeta:
                         self.path,
                         self.axes[i],
                     )
-                f = U.factor(unit, space, missing_as=U.NANOMETER)
+                if not strict and unit != "" and U.kind(unit) == "unknown":
+                    logger.warning(
+                        "%s: unknown unit %r on axis %r taken as %s",
+                        self.path,
+                        unit,
+                        self.axes[i],
+                        space,
+                    )
+                f = U.factor(unit, space, missing_as=U.NANOMETER, lenient=not strict)
             elif k == "time" and time is not None:
                 target = time
                 f = U.factor(unit, time)
@@ -207,7 +218,9 @@ def read_meta(
         axes_named=axes_named,
         units=found.units if found.units is not None else ("",) * ndim,
         voxel_size=found.voxel_size if found.voxel_size is not None else (1.0,) * ndim,
-        translation=found.translation if found.translation is not None else (0.0,) * ndim,
+        translation=found.translation
+        if found.translation is not None
+        else corner_to_centre((0.0,) * ndim, (1.0,) * ndim, axes),  # unplaced: a corner at 0
         format=node.format,
         path=node.path
         if scale_index is None
@@ -216,7 +229,19 @@ def read_meta(
         attrs=attrs,
         group_attrs=group_attrs,
         placed_by=found.placed_by if found.voxel_size is not None else None,
+        fill_value=_fill_value(store),
     )
+
+
+def _fill_value(store: ts.TensorStore):
+    try:
+        fv = store.fill_value
+    except Exception:
+        return None
+    if fv is None:
+        return None
+    arr = np.asarray(fv)
+    return arr.item() if arr.size == 1 else arr
 
 
 def _floats(values, ndim: int, what: str, pad: float | None = None) -> tuple[float, ...]:
@@ -417,7 +442,9 @@ def _array_attrs(attrs: dict, ndim: int, path: str) -> _Resolved:
     if isinstance(transform, dict) and "scale" in transform:
         return _cosem_transform(transform, ndim, path)
     found.axes = _axes(attrs.get("axis_names"), ndim)
-    vs = attrs.get("voxel_size", attrs.get("resolution"))
+    vs = attrs.get("voxel_size", attrs.get("resolution", attrs.get("scale")))
+    if not isinstance(vs, (list, tuple)):
+        vs = None
     offset = attrs.get("offset")
     if vs is None and offset is None:
         return found
@@ -528,6 +555,8 @@ def _n5(attrs: dict, group_attrs: dict, node: Node, ndim: int) -> _Resolved:
     voxel_size = base * factors
 
     units_list = attrs.get("units", group_attrs.get("units"))
+    if isinstance(units_list, str):  # "um" written once for every axis
+        units_list = [units_list] * ndim
     if unit is None and units_list is not None:
         units = _units(list(units_list)[::-1], ndim, pad="")
     else:
@@ -568,3 +597,64 @@ def _precomputed(info: dict, scale_index: int, ndim: int) -> _Resolved:
     return _Resolved(
         ("z", "y", "x"), ("nm", "nm", "nm"), tuple(resolution), tuple(spatial_tr), "precomputed"
     )
+
+
+# --- pyramids from the group document alone ---------------------------------
+
+
+def light_voxel_sizes(
+    group: Node, names: list[str], space: str | None
+) -> list[tuple[str, tuple[float, ...]]] | None:
+    """``(name, spatial voxel size)`` for every level of a group, from the group's own
+    document, in ``space`` units (native when None): OME-NGFF datasets, COSEM N5
+    ``multiscales[].datasets[].transform`` and precomputed ``scales``. None when the
+    document does not say (then the levels have to be opened), or when a unit cannot be
+    converted."""
+    try:
+        if group.format == "precomputed":
+            f = U.factor("nm", space) if space else 1.0
+            out = []
+            for i, scale in enumerate(group.docs["info"]["scales"]):
+                res = [float(v) * f for v in scale["resolution"]][::-1]
+                out.append((str(scale.get("key", i)), tuple(res)))
+            return out
+        multiscales = group.multiscales
+        if not multiscales:
+            return None
+        out = []
+        for name in names:
+            hit = _dataset_for(multiscales, name)
+            if hit is None:
+                return None
+            ms, ds = hit
+            if group.format == "n5":
+                transform = ds.get("transform")
+                if not isinstance(transform, dict) or "scale" not in transform:
+                    return None
+                ndim = len(transform["scale"])
+                found = _cosem_transform(transform, ndim, name)
+            else:
+                axes_spec = ms.get("axes") or (
+                    _ome06_system(
+                        ms,
+                        list(ds.get("coordinateTransformations", []) or []),
+                        ms["coordinateSystems"],
+                    ).get("axes", [])
+                    if ms.get("coordinateSystems")
+                    else []
+                )
+                ndim = len(axes_spec)
+                if ndim == 0:
+                    return None
+                found = _ome(ms, ds, ndim, name)
+            assert found.voxel_size is not None
+            axes = found.axes or default_axes(ndim)
+            units = found.units or ("",) * ndim
+            sizes = []
+            for i in spatial_axes(axes):
+                f = U.factor(units[i], space, missing_as=U.NANOMETER) if space else 1.0
+                sizes.append(found.voxel_size[i] * f)
+            out.append((name, tuple(sizes)))
+        return out
+    except (ValueError, KeyError, TypeError):
+        return None

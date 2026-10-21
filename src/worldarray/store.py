@@ -87,8 +87,9 @@ def kvstore_specs(root: str) -> list[dict]:
     spec = ts.KvStore.Spec(root).to_json()
     if spec["driver"] == "s3":
         extra: dict = {}
-        if os.environ.get("AWS_ENDPOINT_URL"):  # an S3-compatible endpoint (MinIO, moto, a mirror)
-            extra["endpoint"] = os.environ["AWS_ENDPOINT_URL"]
+        endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get("AWS_ENDPOINT_URL")
+        if endpoint:  # an S3-compatible endpoint (MinIO, moto, a mirror), as the AWS tools read it
+            extra["endpoint"] = endpoint
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
         if region:
             extra["aws_region"] = region
@@ -157,12 +158,18 @@ def metadata_spec(spec: dict) -> dict:
 
 
 @functools.lru_cache(maxsize=512)
-def _metadata_kvstore(spec_json: str) -> ts.KvStore:
+def _metadata_kvstore(spec_json: str, gcs_url: str | None) -> ts.KvStore:
+    """One opened kvstore per spec, and per ``TENSORSTORE_GCS_HTTP_URL``: tensorstore's gcs
+    driver reads that variable when the store is opened, so a cached store would keep
+    talking to the host the variable named then."""
     return ts.KvStore.open(metadata_spec(json.loads(spec_json))).result()
 
 
 def _read_key(spec: dict, key: str) -> bytes | None:
-    result = _metadata_kvstore(json.dumps(spec, sort_keys=True)).read(key).result()
+    kv = _metadata_kvstore(
+        json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL")
+    )
+    result = kv.read(key).result()
     return None if result.state == "missing" else bytes(result.value)
 
 
@@ -294,6 +301,23 @@ def detect(path: str, *, missing_ok: bool = False) -> Node | None:
 # ---------------------------------------------------------------------------
 # Opening
 
+
+def precomputed_scale_index(info: dict, key: str | int) -> int:
+    """The index of a precomputed scale named by its key (``"8_8_8"``), by position
+    (``1``), or by cellmap-flow's ``s<N>`` convention when no scale is keyed that way."""
+    keys = [str(s.get("key", i)) for i, s in enumerate(info["scales"])]
+    if isinstance(key, int) and not isinstance(key, bool):
+        if not -len(keys) <= key < len(keys):
+            raise ValueError(f"no precomputed scale {key}; there are {len(keys)}: {keys}")
+        return key % len(keys)
+    if key in keys:
+        return keys.index(key)
+    m = re.fullmatch(r"s(\d+)", str(key))
+    if m and int(m.group(1)) < len(keys):
+        return int(m.group(1))
+    raise ValueError(f"no precomputed scale {key!r}; scales: {keys}")
+
+
 _KNOWN_COMPRESSOR_MEMBERS = {
     "zstd": {"id", "level"},
     "blosc": {"id", "cname", "clevel", "shuffle", "blocksize"},
@@ -334,6 +358,16 @@ def open_array(
         spec: dict[str, Any] = {"driver": _DRIVER[node.format], "kvstore": kvstore}
         if node.format == "zarr2":
             spec["metadata"] = cleaned_zarray(node.docs[".zarray"])
+            spec["assume_metadata"] = True
+        if node.format == "n5":
+            # only the array members: tensorstore rejects attributes it validates and finds
+            # odd (a "units" string instead of a list); everything else is read here, not by it
+            core = node.docs["attributes.json"]
+            spec["metadata"] = {
+                k: core[k]
+                for k in ("dimensions", "blockSize", "dataType", "compression")
+                if k in core
+            }
             spec["assume_metadata"] = True
         if node.format == "precomputed" and scale_index is not None:
             spec["scale_index"] = scale_index

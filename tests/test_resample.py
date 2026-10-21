@@ -119,3 +119,23 @@ def test_resample_target_set_at_open(tmp_path):
         and vol.corner == (0.0, 0.0, 0.0)
     )
     np.testing.assert_array_equal(vol.read(((0, 0, 0), (32, 16, 16)))[:, 0, 0], [1, 3, 5, 7])
+
+
+def test_partial_block_mean_and_edge_fill(tmp_path):
+    """Seven 4 nm voxels read at 8 nm: the last block has one voxel and is its mean; past
+    the data, "edge" repeats the last block and a fill value fills."""
+    data = np.broadcast_to(np.arange(7, dtype="float32")[:, None, None], (7, 4, 4)).copy()
+    group = tmp_path / "seven.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (4, 4, 4), (2, 2, 2))]))
+    write_zarr2(group / "s0", data)
+    vol = wa.open(str(group / "s0"), method="linear")
+    out = vol.read(((0, 0, 0), (48, 16, 16)), voxel_size=(8, 8, 8), padding="edge")
+    assert list(out[:, 0, 0]) == pytest.approx([0.5, 2.5, 4.5, 6.0, 6.0, 6.0])
+    out, inside = vol.read(((0, 0, 0), (48, 16, 16)), voxel_size=(8, 8, 8), padding=-1, mask=True)
+    assert list(out[:, 0, 0]) == pytest.approx([0.5, 2.5, 4.5, 6.0, -1, -1]) and list(
+        inside[:, 0, 0]
+    ) == [1, 1, 1, 1, 0, 0]
+    near = vol.read(
+        ((0, 0, 0), (48, 16, 16)), voxel_size=(8, 8, 8), method="nearest", padding="edge"
+    )
+    assert list(near[:, 0, 0]) == pytest.approx([1, 3, 5, 6, 6, 6])

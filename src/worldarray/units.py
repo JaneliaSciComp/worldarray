@@ -11,7 +11,7 @@ from __future__ import annotations
 NANOMETER = "nanometer"
 SECOND = "second"
 
-_LENGTH_M = {
+LENGTH_M = {
     "picometer": 1e-12, "picometre": 1e-12, "pm": 1e-12,
     "angstrom": 1e-10, "ångström": 1e-10, "å": 1e-10, "Å": 1e-10,
     "nanometer": 1e-9, "nanometre": 1e-9, "nm": 1e-9,
@@ -20,7 +20,7 @@ _LENGTH_M = {
     "centimeter": 1e-2, "centimetre": 1e-2, "cm": 1e-2,
     "meter": 1.0, "metre": 1.0, "m": 1.0,
 }  # fmt: skip
-_TIME_S = {
+TIME_S = {
     "nanosecond": 1e-9, "ns": 1e-9,
     "microsecond": 1e-6, "us": 1e-6, "µs": 1e-6, "μs": 1e-6,
     "millisecond": 1e-3, "ms": 1e-3,
@@ -35,10 +35,10 @@ def _lookup(unit: str) -> tuple[str, float] | None:
     """``(kind, size in the kind's base unit)`` of a unit string, or None when unknown.
     Plurals and case are forgiven; the Greek letters are matched as they are."""
     for key in (unit, unit.strip(), unit.strip().lower(), unit.strip().lower().rstrip("s")):
-        if key in _LENGTH_M:
-            return "space", _LENGTH_M[key]
-        if key in _TIME_S:
-            return "time", _TIME_S[key]
+        if key in LENGTH_M:
+            return "space", LENGTH_M[key]
+        if key in TIME_S:
+            return "time", TIME_S[key]
     return None
 
 
@@ -48,12 +48,18 @@ def kind(unit: str) -> str:
     return found[0] if found else "unknown"
 
 
-def factor(unit_from: str, unit_to: str, *, missing_as: str | None = None) -> float:
+TABLE = {"length": LENGTH_M, "time": TIME_S}  # public: cellmap-flow exports it to the browser
+
+
+def factor(
+    unit_from: str, unit_to: str, *, missing_as: str | None = None, lenient: bool = False
+) -> float:
     """How many ``unit_to`` one ``unit_from`` is.
 
     ``unit_from == ""`` (nothing stored) is read as ``missing_as`` when that is given, else
     it is an error: the caller decides what an unlabelled axis means, not this table. An
-    unknown unit, or a length asked for in a time unit, is a ``ValueError``.
+    unknown unit, or a length asked for in a time unit, is a ``ValueError``; with
+    ``lenient`` an unknown unit is a factor of 1 (the caller warns).
     """
     if unit_from == "":
         if missing_as is None:
@@ -61,6 +67,8 @@ def factor(unit_from: str, unit_to: str, *, missing_as: str | None = None) -> fl
         unit_from = missing_as
     a, b = _lookup(unit_from), _lookup(unit_to)
     if a is None:
+        if lenient:  # "pixel", "voxel", a typo: the numbers are taken as already in unit_to
+            return 1.0
         raise ValueError(f"unknown unit {unit_from!r}")
     if b is None:
         raise ValueError(f"unknown unit {unit_to!r}")

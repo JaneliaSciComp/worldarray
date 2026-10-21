@@ -4,13 +4,18 @@ One class for both kinds of consumer. Index-space readers (chunkmirage, CineMap,
 liconn-err) use ``.ts``, ``.meta`` and ``read_index`` and keep native units
 (``units=None``). World-box readers (cellmap-flow, cellmap-analyze, mesh-n-bone) use
 ``read`` with boxes in the units they ask for, nanometres by default (spec, section 2).
+
+Subclass or compose, as you like: every piece of internal state is underscore-prefixed, and
+the public attributes ``path``, ``units``, ``context``, ``padding``, ``method``,
+``retries`` and ``transform`` are the defaults the reads use, settable at any time.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -18,16 +23,18 @@ import numpy as np
 import tensorstore as ts
 
 from . import resample as _resample
+from . import units as U
 from .context import shared_context
 from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, same_voxel_size, select_level
-from .metadata import ArrayMeta, read_meta
+from .metadata import ArrayMeta, light_voxel_sizes, read_meta
 from .retry import Retry, read_with_retries
-from .store import Node, detect, is_remote, open_array
+from .store import Node, detect, is_remote, open_array, precomputed_scale_index
 
 logger = logging.getLogger(__name__)
 
 Units = str | dict[str, str] | None
+Transform = Callable[[np.ndarray], np.ndarray]
 
 
 def _unit_targets(units: Units) -> tuple[str | None, str | None]:
@@ -41,7 +48,8 @@ def _unit_targets(units: Units) -> tuple[str | None, str | None]:
 class WorldArray:
     """A stored array in world coordinates.
 
-    ``path`` names an array, a level under a multiscale group, or a group (then ``level`` or
+    ``path`` names an array (then it is the array that is read, whatever ``voxel_size``
+    asks for), a level under a multiscale group, or a group (then ``level`` or
     ``voxel_size`` picks the level; a group with neither raises, listing its levels).
     """
 
@@ -63,6 +71,8 @@ class WorldArray:
         base_voxel_size: Sequence[float] | None = None,
         base_units: str | None = None,
         anchor: Sequence[float] | None = None,
+        transform: Transform | None = None,
+        strict_units: bool = True,
         _ref: LevelRef | None = None,
         _node: Node | None = None,
     ):
@@ -72,6 +82,7 @@ class WorldArray:
         self.padding = padding
         self.method = method
         self.units = units
+        self.transform = transform
         self.context = context if context is not None else shared_context(0)
         self.retries = retries if retries is not None else Retry()
         self._select = dict(select or {})
@@ -84,6 +95,7 @@ class WorldArray:
             base_voxel_size=base_voxel_size,
             base_units=base_units,
             anchor=anchor,
+            strict_units=strict_units,
         )
         self._anchor = tuple(float(a) for a in anchor) if anchor is not None else None
 
@@ -105,49 +117,42 @@ class WorldArray:
         if base_voxel_size is not None:
             self._meta = self._rescaled_to_base(base_voxel_size, base_units)
         space, time = _unit_targets(units)
-        self._grid = self._meta.in_units(space=space, time=time)
+        self._grid = self._meta.in_units(space=space, time=time, strict=strict_units)
 
         self._target: tuple[float, ...] | None = None
         if voxel_size is not None:
             requested = tuple(float(v) for v in voxel_size)
-            current = self.voxel_size
-            if not same_voxel_size(current, requested):
+            if not same_voxel_size(self._source_voxel_size(), requested):
                 if on_mismatch == "error":
                     raise ValueError(
-                        f"{path}: no level at voxel size {list(requested)}; levels: {self._level_list()}"
+                        f"{path}: no level at voxel size {list(requested)}; levels: {self.levels}"
                     )
                 if on_mismatch == "resample":
                     self._target = requested
                 elif on_mismatch == "keep":
                     pass  # the chosen level, at its own voxel size
-                else:  # relabel: read the level voxel for voxel and call its voxels the requested size
-                    vs = list(self._grid.voxel_size)
+                else:
+                    # relabel: read the level voxel for voxel and call its voxels the requested
+                    # size; the corner stays, so the translation moves by half the difference
+                    vs, tr = list(self._grid.voxel_size), list(self._grid.translation)
+                    corner = self._grid.corner
                     for k, axis in enumerate(self._grid.spatial):
                         vs[axis] = requested[k]
-                    self._grid = replace(self._grid, voxel_size=tuple(vs))
+                        tr[axis] = corner[axis] + requested[k] / 2
+                    self._grid = replace(self._grid, voxel_size=tuple(vs), translation=tuple(tr))
 
     # --- construction helpers -------------------------------------------------
 
     def _choose_level(self, node: Node, level, voxel_size, level_mode, on_mismatch) -> LevelRef:
-        if (
-            node.format == "precomputed"
-            and node.scale_key is not None
-            and level is None
-            and voxel_size is None
-        ):
-            keys = [str(s.get("key", i)) for i, s in enumerate(node.docs["info"]["scales"])]
-            if node.scale_key not in keys:
-                raise ValueError(
-                    f"{self.path}: no precomputed scale {node.scale_key!r}; scales: {keys}"
-                )
-            return LevelRef(node.scale_key, node.path, keys.index(node.scale_key))
         if level == "first":
             level = 0
-        if node.kind == "array" and level is None and voxel_size is None:
-            return LevelRef(node.path.rsplit("/", 1)[-1], node.path)
-        if node.kind == "array" and level is not None:
-            warnings.warn(f"{self.path} is an array; level={level!r} is ignored", stacklevel=3)
-            return LevelRef(node.path.rsplit("/", 1)[-1], node.path)
+        if node.format == "precomputed" and node.scale_key is not None and level is None:
+            index = precomputed_scale_index(node.docs["info"], node.scale_key)
+            return LevelRef(node.scale_key, node.path, index)
+        if node.kind == "array":
+            if level is not None and level != 0:  # "first" (already 0) and 0 mean "this array"
+                warnings.warn(f"{self.path} is an array; level={level!r} is ignored", stacklevel=3)
+            return LevelRef(node.path.rsplit("/", 1)[-1], node.path)  # the array itself, always
         self._pyramid = Pyramid(
             self.path, context=self.context, units=self.units, select=self._select, _node=node
         )
@@ -157,7 +162,7 @@ class WorldArray:
             mode = "resample" if on_mismatch == "resample" else level_mode
             return self._pyramid._select_ref(voxel_size, mode)
         raise ValueError(
-            f"{self.path} is a group; pass level=<name> or voxel_size=...; levels: {self._pyramid.names}"
+            f"{self.path} is a group; pass level=<name or index> or voxel_size=...; levels: {self._pyramid.names}"
         )
 
     def _apply_select(self) -> None:
@@ -171,9 +176,6 @@ class WorldArray:
             axis = self._meta.axes.index(name)
             self._store = self._store[ts.d[axis][int(index)]]
             self._meta = self._meta.drop_axis(axis)
-
-    def _level_list(self) -> list[tuple[str, tuple[float, ...]]]:
-        return self.levels
 
     def _rescaled_to_base(self, base: Sequence[float], base_units: str | None) -> ArrayMeta:
         """This level's metadata with the pyramid's level 0 declared to have voxels of
@@ -201,13 +203,19 @@ class WorldArray:
                 units[axis] = base_units
         return replace(self._meta, voxel_size=tuple(vs), translation=tuple(tr), units=tuple(units))
 
-    @property
-    def levels_pyramid(self) -> Pyramid:
-        if self._pyramid is None:
-            self._pyramid = Pyramid(
-                self.path, context=self.context, units=self.units, select=self._select
-            )
-        return self._pyramid
+    def _source_voxel_size(self) -> tuple[float, ...]:
+        return tuple(self._grid.voxel_size[i] for i in self._grid.spatial)
+
+    def _origins(self) -> list[float]:
+        """The target grid's corner, per spatial axis, in source voxels from the source corner."""
+        if self._target is None:
+            return [0.0] * len(self._grid.spatial)
+        corner = self._grid.corner
+        anchors = self.anchor
+        return [
+            (anchors[k] - corner[axis]) / self._grid.voxel_size[axis]
+            for k, axis in enumerate(self._grid.spatial)
+        ]
 
     # --- what it is -------------------------------------------------------------
 
@@ -223,12 +231,24 @@ class WorldArray:
 
     @property
     def grid(self) -> ArrayMeta:
-        """Metadata in the requested units (``units``), all axes."""
+        """The stored level's metadata in the requested units (``units``), all axes."""
         return self._grid
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return self._grid.shape
+        """The shape reads see: the stored shape, or with a resample target the number of
+        target voxels covering the data on each spatial axis."""
+        if self._target is None:
+            return self._grid.shape
+        shape = list(self._grid.shape)
+        for k, axis in enumerate(self._grid.spatial):
+            shape[axis] = _resample.target_shape(
+                self._grid.shape[axis],
+                self._grid.voxel_size[axis],
+                self._target[k],
+                self._origins()[k],
+            )
+        return tuple(shape)
 
     @property
     def dtype(self) -> np.dtype:
@@ -247,7 +267,17 @@ class WorldArray:
         """Spatial axes, in ``units``; the resample target when one is set."""
         if self._target is not None:
             return self._target
-        return tuple(self._grid.voxel_size[i] for i in self._grid.spatial)
+        return self._source_voxel_size()
+
+    @property
+    def source_voxel_size(self) -> tuple[float, ...]:
+        """The stored level's voxel size on the spatial axes, in ``units``."""
+        return self._source_voxel_size()
+
+    @property
+    def resampled(self) -> bool:
+        """Whether reads resample to a target voxel size (``on_mismatch="resample"``)."""
+        return self._target is not None
 
     @property
     def translation(self) -> tuple[float, ...]:
@@ -290,12 +320,17 @@ class WorldArray:
 
     @property
     def levels(self) -> list[tuple[str, tuple[float, ...]]]:
-        """``(name, spatial voxel size)`` of every level of the pyramid this array belongs to."""
+        """``(name, spatial voxel size)`` of every level of the pyramid this array belongs to,
+        from the group's metadata where it lists them, else by opening each level."""
+        return self.levels_pyramid.voxel_sizes()
+
+    @property
+    def levels_pyramid(self) -> Pyramid:
         if self._pyramid is None:
             self._pyramid = Pyramid(
                 self.path, context=self.context, units=self.units, select=self._select
             )
-        return [(lvl.level_name, lvl.voxel_size) for lvl in self._pyramid.levels]
+        return self._pyramid
 
     @property
     def level_name(self) -> str:
@@ -327,6 +362,7 @@ class WorldArray:
             "select": self._select,
             "units": self.units,
             "retries": self.retries,
+            "transform": self.transform,
             **overrides,
         }
         return WorldArray(
@@ -341,11 +377,55 @@ class WorldArray:
         """The chunk indices a voxel box touches, clipped to the array."""
         cs = self._meta.chunk_shape
         first = [max(0, int(b)) // c for b, c in zip(begin, cs)]
-        last = [(min(int(e), n) - 1) // c for e, n, c in zip(end, self.shape, cs)]
+        last = [(min(int(e), n) - 1) // c for e, n, c in zip(end, self._grid.shape, cs)]
         if any(hi < lo for lo, hi in zip(first, last)):
             return
         for idx in np.ndindex(*[hi - lo + 1 for lo, hi in zip(first, last)]):
             yield tuple(int(i + lo) for i, lo in zip(idx, first))
+
+    def list_chunks(self) -> list[tuple[int, ...]]:
+        """The chunk indices that exist in storage (C order, the storage grid), by listing the
+        array's keys: zarr v2 and v3, N5, and unsharded precomputed. For a sharded zarr v3
+        array the storage grid is the shard grid. Works on any kvstore, URLs included."""
+        node = self._node
+        kv = ts.KvStore.open(self._store.kvstore.spec()).result()
+        keys = [k.decode() if isinstance(k, bytes) else str(k) for k in kv.list().result()]
+        if node.format == "zarr2":
+            sep = node.docs.get(".zarray", {}).get("dimension_separator", ".")
+            pattern = re.compile(r"^\d+(?:" + re.escape(sep) + r"\d+)*$")
+            found = [tuple(int(p) for p in k.split(sep)) for k in keys if pattern.match(k)]
+        elif node.format == "zarr3":
+            enc = node.docs.get("zarr.json", {}).get("chunk_key_encoding", {}) or {}
+            sep = (enc.get("configuration") or {}).get("separator", "/")
+            prefix = "c" if enc.get("name", "default") == "default" else ""
+            found = []
+            for k in keys:
+                parts = k.split(sep)
+                if prefix and (not parts or parts[0] != prefix):
+                    continue
+                parts = parts[1:] if prefix else parts
+                if parts and all(p.isdigit() for p in parts):
+                    found.append(tuple(int(p) for p in parts))
+        elif node.format == "n5":
+            found = [
+                tuple(int(p) for p in k.split("/"))[::-1]
+                for k in keys
+                if k and all(p.isdigit() for p in k.split("/"))
+            ]
+        else:  # precomputed, unsharded: "x0-x1_y0-y1_z0-z1"
+            scale = node.docs["info"]["scales"][self._ref.scale_index or 0]
+            if "sharding" in scale:
+                raise NotImplementedError(
+                    "list_chunks: sharded precomputed stores list shards, not chunks"
+                )
+            chunk = scale["chunk_sizes"][0]
+            found = []
+            for k in keys:
+                m = re.fullmatch(r"(\d+)-\d+_(\d+)-\d+_(\d+)-\d+", k.rsplit("/", 1)[-1])
+                if m:
+                    starts = [int(m.group(i)) for i in (1, 2, 3)]
+                    found.append(tuple(s // c for s, c in zip(starts, chunk))[::-1])
+        return sorted(set(found))
 
     def read_index(
         self,
@@ -355,19 +435,22 @@ class WorldArray:
         mask: bool = False,
         retries: Retry | None = None,
         select: dict[str, int] | None = None,
+        transform: Transform | None = None,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
-        """The voxels ``[begin, end)`` on every axis, clipped to the array, read, and padded
-        to the full box with ``padding`` (a value, or ``"edge"`` for the nearest voxel). A box
-        entirely outside the array returns the fill without touching storage. With ``mask``,
-        also a boolean array that is True inside the array. ``select`` pins axes for this
-        read only (``{"c": 1}``): ``begin``/``end`` then cover the remaining axes and the
-        result drops the pinned ones."""
+        """The voxels ``[begin, end)`` on every axis of the stored array, clipped to it, read,
+        and padded to the full box with ``padding`` (a value, or ``"edge"`` for the nearest
+        voxel). A box entirely outside the array returns the fill without touching storage.
+        With ``mask``, also a boolean array that is True inside the array. ``select`` pins
+        axes for this read only (``{"c": 1}``): ``begin``/``end`` then cover the remaining
+        axes and the result drops the pinned ones. ``transform`` (default ``self.transform``)
+        is applied to the stored values before padding, so padding is never transformed."""
         if select:
-            return self._read_index_selected(begin, end, select, padding, mask, retries)
+            return self._read_index_selected(begin, end, select, padding, mask, retries, transform)
         padding = self.padding if padding is None else padding
+        transform = self.transform if transform is None else transform
         begin = np.asarray(begin, dtype=np.int64)
         end = np.asarray(end, dtype=np.int64)
-        shape = np.asarray(self.shape, dtype=np.int64)
+        shape = np.asarray(self._grid.shape, dtype=np.int64)
         if begin.shape != shape.shape or end.shape != shape.shape:
             raise ValueError(
                 f"begin/end must have {len(shape)} entries, got {begin.tolist()} / {end.tolist()}"
@@ -399,28 +482,40 @@ class WorldArray:
                     before.append(int(e - b) - 1)
                     after.append(0)
             if any(s == 0 for s in out_shape):
-                out = np.empty(out_shape, dtype=self.dtype)
+                out = np.empty(out_shape, dtype=self._grid.dtype)
             else:
-                block = self._read_block(read_lo, read_hi, retries)
+                block = self._read_block(read_lo, read_hi, retries, transform)
                 out = np.pad(block, list(zip(before, after)), mode="edge")
         else:
-            out = np.full(out_shape, padding, dtype=self.dtype)
-            if overlap:
-                out[inner] = self._read_block(clip_lo.tolist(), clip_hi.tolist(), retries)
+            block = (
+                self._read_block(clip_lo.tolist(), clip_hi.tolist(), retries, transform)
+                if overlap
+                else None
+            )
+            dtype = block.dtype if block is not None else self._grid.dtype
+            out = np.full(out_shape, padding, dtype=dtype)
+            if block is not None:
+                out[inner] = block
         out = np.ascontiguousarray(out)
         return (out, inside) if mask else out
 
     def _read_block(
-        self, lo: Sequence[int], hi: Sequence[int], retries: Retry | None
+        self,
+        lo: Sequence[int],
+        hi: Sequence[int],
+        retries: Retry | None,
+        transform: Transform | None = None,
     ) -> np.ndarray:
         view = self._store[tuple(slice(int(a), int(c)) for a, c in zip(lo, hi))]
         data = read_with_retries(view, retries or self.retries, remote=self.remote, what=self.path)
         data = np.asarray(data)
         if not data.dtype.isnative:
             data = data.astype(data.dtype.newbyteorder("="))
+        if transform is not None:
+            data = np.asarray(transform(data))
         return data
 
-    def _read_index_selected(self, begin, end, select, padding, mask, retries):
+    def _read_index_selected(self, begin, end, select, padding, mask, retries, transform):
         axes = self._grid.axes
         pinned: dict[int, int] = {}
         for name, index in select.items():
@@ -440,15 +535,17 @@ class WorldArray:
                 b, e = next(it)
                 full_begin.append(int(b))
                 full_end.append(int(e))
-        out = self.read_index(full_begin, full_end, padding=padding, mask=mask, retries=retries)
+        out = self.read_index(
+            full_begin, full_end, padding=padding, mask=mask, retries=retries, transform=transform
+        )
         drop = tuple(sorted(pinned))
         if mask:
             return np.squeeze(out[0], axis=drop), np.squeeze(out[1], axis=drop)
         return np.squeeze(out, axis=drop)
 
     def index_box(self, box) -> tuple[tuple[int, ...], tuple[int, ...]]:
-        """The voxel index range a world box selects on this array's own grid (Behaviour 2),
-        over the spatial axes or every axis; the other axes come back whole. For snapping a
+        """The voxel index range a world box selects on the stored grid (Behaviour 2), over
+        the spatial axes or every axis; the other axes come back whole. For snapping a
         caller's box to whole voxels before an index read."""
         box = Box.coerce(box)
         spatial, ndim = self._grid.spatial, self._grid.ndim
@@ -466,7 +563,7 @@ class WorldArray:
             [self._grid.voxel_size[a] for a in axes],
             [self._grid.translation[a] for a in axes],
         )
-        begin, end = [0] * ndim, list(self.shape)
+        begin, end = [0] * ndim, list(self._grid.shape)
         for a, b, e in zip(axes, lo, hi):
             begin[a], end[a] = b, e
         return tuple(begin), tuple(end)
@@ -483,21 +580,22 @@ class WorldArray:
         retries: Retry | None = None,
         strict: bool = False,
         anchor: Sequence[float] | None = None,
+        transform: Transform | None = None,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """The data in a world box, half-open per axis, in ``units``.
 
-        ``anchor``: when resampling, a world position per spatial axis where a target voxel
-        corner lies (pass another volume's ``corner`` to read onto its grid); the source
-        corner, or the ``anchor`` given at open, otherwise.
-
         The box covers the spatial axes (other axes are read whole, or as ``select`` pinned
         them) or every axis. A voxel is read iff its centre lies in the box. ``voxel_size``
-        reads at that size instead (resampling by ``method``); ``strict`` raises for a box
-        aligned to neither voxel corners nor voxel centres.
+        reads at that size instead (resampling by ``method``); ``anchor`` says where a
+        target voxel corner lies (pass another volume's ``corner`` to read onto its grid;
+        the source corner, or the ``anchor`` given at open, otherwise); ``transform`` is
+        applied to the stored values before resampling and padding; ``strict`` raises for a
+        box aligned to neither voxel corners nor voxel centres.
         """
         box = Box.coerce(box)
         padding = self.padding if padding is None else padding
         method = self.method if method is None else method
+        transform = self.transform if transform is None else transform
         target = tuple(float(v) for v in voxel_size) if voxel_size is not None else self._target
         spatial = self._grid.spatial
         ndim = self._grid.ndim
@@ -511,7 +609,7 @@ class WorldArray:
                 f"box has {box.ndim} axes; the array has {ndim} ({len(spatial)} spatial)"
             )
 
-        source_vs = tuple(self._grid.voxel_size[i] for i in spatial)
+        source_vs = self._source_voxel_size()
         if target is not None and same_voxel_size(target, source_vs):
             target = None
 
@@ -539,20 +637,22 @@ class WorldArray:
         lo, hi = index_range(box.begin, box.end, box_vs, box_tr)
 
         begin = [0] * ndim
-        end = list(self.shape)
+        end = list(self._grid.shape)
         for a, lo_a, hi_a in zip(axes, lo, hi):
             begin[a], end[a] = lo_a, hi_a
 
         if target is None:
-            return self.read_index(begin, end, padding=padding, mask=mask, retries=retries)
+            return self.read_index(
+                begin, end, padding=padding, mask=mask, retries=retries, transform=transform
+            )
 
         def read_index(b, e, pad):
-            return self.read_index(b, e, padding=pad, retries=retries)
+            return self.read_index(b, e, padding=pad, retries=retries, transform=transform)
 
         return _resample.resample(
             read_index,
-            self.shape,
-            self.dtype,
+            self._grid.shape,
+            self._grid.dtype,
             spatial,
             source_vs,
             target,
@@ -567,7 +667,9 @@ class WorldArray:
 
 class Pyramid:
     """The levels of a multiscale group (or of the group an array belongs to), each a
-    ``WorldArray``, opened on first use."""
+    ``WorldArray``, opened on first use. Choosing a level by voxel size reads the group's
+    own metadata where it lists the levels' scales (OME-NGFF, COSEM N5, precomputed), and
+    opens the levels only when it does not."""
 
     def __init__(
         self,
@@ -591,6 +693,7 @@ class Pyramid:
                 f"{path}: no levels found (no multiscales datasets, no s0, no precomputed scales)"
             )
         self._levels: dict[str, WorldArray] = {}
+        self._light: list[tuple[str, tuple[float, ...]]] | None = None
 
     @property
     def names(self) -> list[str]:
@@ -630,9 +733,22 @@ class Pyramid:
     def by_name(self, level: str | int) -> WorldArray:
         return self._open(self._ref(level))
 
+    def voxel_sizes(self) -> list[tuple[str, tuple[float, ...]]]:
+        """``(name, spatial voxel size in the requested units)`` per level, from the group's
+        metadata when it lists the levels' scales, else by opening each level."""
+        if self._light is None:
+            space, _ = _unit_targets(self.units)
+            group = self._node if self._node.kind == "group" else None
+            if group is None and self._refs and self._refs[0].path != self._node.path:
+                group = detect(self._refs[0].path.rsplit("/", 1)[0], missing_ok=True)
+            light = light_voxel_sizes(group, self.names, space) if group is not None else None
+            if light is None:
+                light = [(lvl.level_name, lvl.source_voxel_size) for lvl in self.levels]
+            self._light = light
+        return self._light
+
     def _select_ref(self, voxel_size, mode: Mode = "floor") -> LevelRef:
-        pairs = [(lvl.level_name, lvl.grid) for lvl in self.levels]
-        name, _ = select_level(pairs, voxel_size, mode)
+        name, _ = select_level(self.voxel_sizes(), voxel_size, mode)
         return self._ref(name)
 
     def select(self, voxel_size, mode: Mode = "floor") -> WorldArray:
@@ -657,14 +773,11 @@ def open_pyramid(path: str, **kwargs) -> Pyramid:
     return Pyramid(path, **kwargs)
 
 
-def metadata(path: str, *, level: str | None = None, units: Units = None) -> ArrayMeta:
+def metadata(path: str, *, level: str | int | None = None, units: Units = None) -> ArrayMeta:
     """The ``ArrayMeta`` of an array (or of ``level`` under a group), in native units unless
     ``units`` says otherwise."""
-    return (
-        WorldArray(path, level=level, units=units).meta
-        if units is None
-        else WorldArray(path, level=level, units=units).grid
-    )
+    vol = WorldArray(path, level=level, units=units)
+    return vol.meta if units is None else vol.grid
 
 
 def open_tensorstore(
@@ -676,16 +789,18 @@ def open_tensorstore(
     opens."""
     context = context if context is not None else shared_context(0)
     node = detect(path)
+    if level == "first":
+        level = 0
     if node.format == "precomputed":
-        keys = [str(s.get("key", i)) for i, s in enumerate(node.docs["info"]["scales"])]
         wanted = node.scale_key if level is None else level
+        if wanted is None:
+            keys = [str(s.get("key", i)) for i, s in enumerate(node.docs["info"]["scales"])]
+            raise ValueError(f"{path} is a precomputed volume; pass level= one of {keys}")
         index = (
             wanted
             if isinstance(wanted, int)
-            else (keys.index(wanted) if wanted is not None else None)
+            else precomputed_scale_index(node.docs["info"], wanted)
         )
-        if index is None:
-            raise ValueError(f"{path} is a precomputed volume; pass level= one of {keys}")
         return open_array(node, context=context, scale_index=index)
     if node.kind == "group":
         refs = discover(node)
@@ -702,3 +817,6 @@ def open_tensorstore(
     elif level is not None:
         warnings.warn(f"{path} is an array; level={level!r} is ignored", stacklevel=2)
     return open_array(node, context=context)
+
+
+__all__ = ["Pyramid", "WorldArray", "metadata", "open", "open_pyramid", "open_tensorstore", "U"]
