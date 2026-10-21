@@ -1,12 +1,16 @@
 [project]
 name = "worldarray"
 version = "0.1.0"
-description = "Chunked arrays in world coordinates, through tensorstore."
+description = "Read zarr, N5 and Neuroglancer precomputed volumes in world coordinates through tensorstore: correct voxel placement, pyramid levels, padded region reads, resampling. numpy + tensorstore only."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "David Ackerman (@davidackerman)" }]
 requires-python = ">=3.10"
-keywords = ["zarr", "n5", "neuroglancer", "precomputed", "ome-ngff", "tensorstore", "imaging"]
+keywords = [
+    "zarr", "ome-zarr", "ome-ngff", "n5", "neuroglancer", "precomputed", "tensorstore",
+    "volumetric", "multiscale", "pyramid", "world-coordinates", "bioimaging", "microscopy",
+    "electron-microscopy", "connectomics", "cloud-storage", "s3", "gcs", "chunked-arrays",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -18,6 +22,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
 # The whole dependency tree: tensorstore does the I/O, numpy holds the result. No zarr-python,
