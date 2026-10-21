@@ -135,6 +135,13 @@ def test_levels_and_selection(pyramid):
         pyr.select((12, 12, 12), mode="exact")
     with pytest.raises(ValueError, match="no level at"):
         wa.open(group, voxel_size=(12, 12, 12))
+    kept = wa.open(group, voxel_size=(12, 12, 12), on_mismatch="keep")
+    assert kept.level_name == "s1" and kept.voxel_size == (8.0, 8.0, 8.0)
+    with pytest.raises(ValueError, match="coarser"):
+        pyr.select((2, 2, 2), mode="finer")
+    assert pyr.select((2, 2, 2), mode="floor").level_name == "s0"
+    assert wa.open(group, level="first").level_name == "s0"
+    assert wa.open(group + "/s1").index_box(((0, 0, 0), (16, 16, 16))) == ((0, 0, 0), (2, 2, 2))
     with pytest.warns(UserWarning, match="ignored"):
         wa.open(group + "/s0", level="s2")
     assert wa.open(group + "/s1").levels == [
@@ -287,3 +294,33 @@ def test_base_voxel_size_rescales_every_level(tmp_path):
     assert wa.open(
         str(group / "s0"), base_voxel_size=(1.0, 0.157, 0.157), units=None
     ).voxel_size == pytest.approx((1.0, 0.157, 0.157))
+
+
+def test_nested_dataset_paths_find_the_multiscales_two_levels_up(tmp_path, caplog):
+    """A fileglancer crop: the group's multiscales list "seg/s0", and the array sits two
+    directories below the group (mesh-n-bone's case)."""
+    import logging
+
+    group = tmp_path / "crop.zarr"
+    write_zarr2_group(
+        group,
+        ome_multiscales(
+            "zyx", [("seg/s0", (4, 4, 4), (2, 2, 2)), ("seg/s1", (8, 8, 8), (4, 4, 4))]
+        ),
+    )
+    write_zarr2_group(group / "seg")
+    write_zarr2(group / "seg" / "s0", pattern((4, 4, 4)))
+    write_zarr2(group / "seg" / "s1", pattern((2, 2, 2)))
+    assert wa.open(str(group / "seg" / "s1")).voxel_size == (8.0, 8.0, 8.0)
+    assert wa.open(str(group), level="seg/s1").translation == (4.0, 4.0, 4.0)
+    assert wa.open_pyramid(str(group / "seg" / "s0")).names == ["seg/s0", "seg/s1"]
+    write_zarr2(group / "seg" / "s9", pattern((2, 2, 2)))  # listed nowhere
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        assert wa.open(str(group / "seg" / "s9"), units=None).meta.placed_by is None
+    assert (
+        not caplog.records
+    )  # the immediate parent lists nothing, so there is nothing to warn about
+    write_zarr2(group / "s7", pattern((2, 2, 2)))
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        wa.open(str(group / "s7"), units=None)
+    assert any("list no dataset" in r.message for r in caplog.records)

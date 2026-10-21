@@ -122,3 +122,14 @@ def test_converting_a_unitless_axis_warns_once(tmp_path, caplog):
         wa.open(str(group / "s0"))
     assert sum("no unit stored" in r.message for r in caplog.records) == 1
     assert wa.open(str(group / "s0"), units=None).meta.units == ("", "", "")
+
+
+def test_hybrid_layout_zarr3_array_in_a_zarr2_ome_group(tmp_path):
+    from conftest import write_zarr3
+
+    group = tmp_path / "hybrid.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (4, 4, 4), (2, 2, 2))]))
+    write_zarr3(group / "s0", pattern((2, 2, 2)))
+    vol = wa.open(str(group / "s0"))
+    assert vol.meta.format == "zarr3" and vol.meta.placed_by == "ome"
+    assert vol.voxel_size == (4.0, 4.0, 4.0) and vol.translation == (2.0, 2.0, 2.0)

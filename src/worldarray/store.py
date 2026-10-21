@@ -86,7 +86,13 @@ def kvstore_specs(root: str) -> list[dict]:
         return [{"driver": "file", "path": root}]
     spec = ts.KvStore.Spec(root).to_json()
     if spec["driver"] == "s3":
-        return [{**spec, "aws_credentials": {"type": t}} for t in ("anonymous", "default")]
+        extra: dict = {}
+        if os.environ.get("AWS_ENDPOINT_URL"):  # an S3-compatible endpoint (MinIO, moto, a mirror)
+            extra["endpoint"] = os.environ["AWS_ENDPOINT_URL"]
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        if region:
+            extra["aws_region"] = region
+        return [{**spec, **extra, "aws_credentials": {"type": t}} for t in ("anonymous", "default")]
     if spec["driver"] == "gcs":
         public = (os.environ.get("TENSORSTORE_GCS_HTTP_URL") or GCS_PUBLIC_URL).rstrip("/")
         return [

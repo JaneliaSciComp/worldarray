@@ -115,3 +115,15 @@ def test_metadata_reads_carry_capped_retries():
     assert "context" not in store.metadata_spec({"driver": "file", "path": "/x/"})
     assert wa.corner_to_centre((0, 0, 0, 0), (1, 2, 4, 8)) == (0.0, 1.0, 2.0, 4.0)
     assert wa.default_axes(4) == ("c", "z", "y", "x")
+
+
+def test_s3_endpoint_and_region_come_from_the_environment(monkeypatch):
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "http://localhost:5000")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-west-2")
+    specs = store.kvstore_specs("s3://bucket/vol")
+    assert all(
+        s["endpoint"] == "http://localhost:5000" and s["aws_region"] == "us-west-2" for s in specs
+    )
+    monkeypatch.delenv("AWS_ENDPOINT_URL")
+    monkeypatch.delenv("AWS_DEFAULT_REGION")
+    assert "endpoint" not in store.kvstore_specs("s3://bucket/vol")[0]

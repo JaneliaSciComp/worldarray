@@ -14,6 +14,7 @@ must match the array exactly.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field, replace
@@ -191,7 +192,7 @@ def read_meta(
     elif node.format == "n5":
         attrs = node.docs.get("attributes.json", {})
         group_attrs = (Location(up).read_json("attributes.json") or {}) if up else {}
-        found = _n5(attrs, group_attrs, basename(node.path), ndim)
+        found = _n5(attrs, group_attrs, node, ndim)
     else:
         attrs, group_attrs = _zarr_attrs(node, up)
         found = _zarr(attrs, group_attrs, basename(node.path), ndim, node, conflicts)
@@ -255,12 +256,51 @@ def _axes(names, ndim: int) -> tuple[str, ...] | None:
 def _zarr_attrs(node: Node, up: str | None) -> tuple[dict, dict]:
     if node.format == "zarr3":
         attrs = node.docs["zarr.json"].get("attributes", {}) or {}
-        group_doc = Location(up).read_json("zarr.json") if up else None
-        group_attrs = (group_doc or {}).get("attributes", {}) or {}
     else:
         attrs = node.location.read_json(".zattrs") or {}
-        group_attrs = (Location(up).read_json(".zattrs") or {}) if up else {}
-    return attrs, group_attrs
+    return attrs, _group_attrs_at(up, node.format)
+
+
+def _group_attrs_at(path: str | None, fmt: str) -> dict:
+    """A group's user attributes. zarr groups are read in both formats, because a zarr v3
+    array inside a v2 group whose ``.zattrs`` holds the OME multiscales (cellmap-analyze
+    writes these) is a layout in the wild; the array's own format wins where both exist."""
+    if path is None:
+        return {}
+    loc = Location(path)
+    if fmt == "n5":
+        return loc.read_json("attributes.json") or {}
+    docs = loc.read_many(("zarr.json", ".zattrs"))
+    v3 = (json.loads(docs["zarr.json"]) if docs["zarr.json"] else {}).get("attributes", {}) or {}
+    v2 = json.loads(docs[".zattrs"]) if docs[".zattrs"] else {}
+    return {**v2, **v3} if fmt == "zarr3" else {**v3, **v2}
+
+
+def _ome_hit(node: Node, group_attrs: dict, max_depth: int = 4) -> tuple[dict, dict] | None:
+    """The ``(multiscale, dataset)`` listing this array: in the parent, or in a further
+    ancestor when the dataset path has more than one component (``"seg/s0"``). A parent that
+    lists levels but not this array gets a warning, and the array is placed by its own
+    attributes or not at all."""
+    name = basename(node.path)
+    hit = _dataset_for(multiscales_of(group_attrs), name)
+    if hit is not None:
+        return hit
+    ancestor, rel = parent(node.path), name
+    for _ in range(max_depth - 1):
+        if ancestor is None or parent(ancestor) is None:
+            break
+        rel = f"{basename(ancestor)}/{rel}"
+        ancestor = parent(ancestor)
+        hit = _dataset_for(multiscales_of(_group_attrs_at(ancestor, node.format)), rel)
+        if hit is not None:
+            return hit
+    if multiscales_of(group_attrs):
+        logger.warning(
+            "%s: the parent group's multiscales list no dataset named %r; the array is placed by its own attributes, or not at all",
+            node.path,
+            name,
+        )
+    return None
 
 
 def _dataset_for(multiscales: list[dict], name: str) -> tuple[dict, dict] | None:
@@ -277,7 +317,7 @@ def _zarr(
     attrs: dict, group_attrs: dict, name: str, ndim: int, node: Node, conflicts: str
 ) -> _Resolved:
     found = _Resolved()
-    hit = _dataset_for(multiscales_of(group_attrs), name)
+    hit = _ome_hit(node, group_attrs)
     if hit is not None:
         found = _ome(hit[0], hit[1], ndim, node.path)
     if found.voxel_size is None:
@@ -444,17 +484,18 @@ def _check_against_attrs(
 # --- N5 --------------------------------------------------------------------
 
 
-def _n5(attrs: dict, group_attrs: dict, name: str, ndim: int) -> _Resolved:
+def _n5(attrs: dict, group_attrs: dict, node: Node, ndim: int) -> _Resolved:
     """COSEM ``transform`` on the array; else the group's ``multiscales[].datasets[].transform``
     for this path; else ``pixelResolution``/``resolution`` (array, else group) times the
     level's ``downsamplingFactors``, plus ``offset``. Lists other than ``transform`` are
     x-first and reversed to C order here. Without an ``offset``: a funlib ``resolution``
     means a corner at 0 (translation half a voxel); a ``pixelResolution`` follows
     BigDataViewer, ``(f - 1) / 2`` full-resolution voxels on."""
+    name = basename(node.path)
     transform = attrs.get("transform")
     if isinstance(transform, dict) and "scale" in transform:
         return _cosem_transform(transform, ndim, name)
-    hit = _dataset_for(group_attrs.get("multiscales", []) or [], name)
+    hit = _ome_hit(node, group_attrs)
     if hit is not None and isinstance(hit[1].get("transform"), dict):
         return _cosem_transform(hit[1]["transform"], ndim, name)
 

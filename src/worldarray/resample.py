@@ -4,8 +4,10 @@ The target grid's voxel 0 starts at the source **corner** and has ``ceil(n * s /
 on an axis with ``n`` source voxels of size ``s`` and target size ``t``; target voxel ``j``
 is centred at ``corner + (j + 1/2) * t``, which is source index ``p = (j + 1/2) * t / s - 1/2``.
 
-``"nearest"`` takes the source voxel whose centre is nearest ``p``; on a tie (every even
-whole factor) the lower index. ``"linear"`` takes the block mean when ``t / s`` is a whole
+``"nearest"`` takes the source voxel whose extent holds the target centre, nearest neighbour
+as ITK defines it; a centre on a voxel boundary (every even whole factor) belongs to the
+upper voxel. The target grid is anchored at the source corner unless an ``origin`` says
+otherwise, so a volume can be read onto another volume's grid. ``"linear"`` takes the block mean when ``t / s`` is a whole
 number of 2 or more, else linear interpolation between the two neighbours, the border voxel
 repeated past the first and last centre. Integer intensity dtypes are rounded back.
 
@@ -41,30 +43,33 @@ class AxisPlan:
     stop: np.ndarray | None = None
 
 
-def plan_axis(n: int, s: float, t: float, jb: int, je: int, method: Method) -> AxisPlan:
+def plan_axis(
+    n: int, s: float, t: float, jb: int, je: int, method: Method, origin: float = 0.0
+) -> AxisPlan:
+    """``origin``: the target grid's voxel 0 corner, in source voxels from the source corner
+    (0 when the two grids share a corner)."""
     j = np.arange(jb, je, dtype=float)
     ratio = t / s
-    centre = snap_integral((j + 0.5) * ratio)  # target centre, in source voxels from the corner
+    centre = snap_integral(
+        origin + (j + 0.5) * ratio
+    )  # target centre, in source voxels from the corner
     inside = (centre >= 0) & (centre < n)
     if je <= jb:
         return AxisPlan(0, 0, inside, "same")
-    if np.isclose(ratio, 1.0, rtol=1e-9):
-        idx = np.clip(np.round(centre - 0.5), 0, n - 1).astype(int)
-        lo, hi = _bounds(idx[inside], n)
-        return AxisPlan(lo, hi, inside, "nearest", index=idx)
     whole = snap_integral(ratio)
-    if method == "linear" and whole == np.round(whole) and whole >= 2:
-        f = int(whole)
-        start = np.clip((j * f).astype(int), 0, n)
-        stop = np.clip(((j + 1) * f).astype(int), 0, n)
+    aligned = float(snap_integral(origin)).is_integer()
+    if method == "linear" and whole == np.round(whole) and whole >= 2 and aligned:
+        f, o = int(whole), int(round(float(origin)))
+        start = np.clip((o + j * f).astype(int), 0, n)
+        stop = np.clip((o + (j + 1) * f).astype(int), 0, n)
         lo = int(start[inside].min()) if inside.any() else 0
         hi = int(stop[inside].max()) if inside.any() else 0
         return AxisPlan(lo, hi, inside, "mean", start=start, stop=stop)
     p = snap_integral(centre - 0.5)  # source index of the target centre
     if method == "nearest":
-        idx = np.clip(np.ceil(snap_integral(p - 0.5)), 0, n - 1).astype(
-            int
-        )  # ties to the lower index
+        # the source voxel whose extent [i, i + 1) holds the target centre: nearest neighbour as
+        # ITK defines it; a centre on a boundary belongs to the upper voxel
+        idx = np.clip(np.floor(centre), 0, n - 1).astype(int)
         lo, hi = _bounds(idx[inside], n)
         return AxisPlan(lo, hi, inside, "nearest", index=idx)
     if method == "linear":
@@ -123,15 +128,24 @@ def resample(
     method: Method,
     padding,
     mask: bool,
+    origins: Sequence[float] | None = None,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """The target voxels ``[begin, end)`` (target indices on the spatial axes, source indices
-    elsewhere) of the source read through ``read_index(begin, end, padding)``."""
+    elsewhere) of the source read through ``read_index(begin, end, padding)``. ``origins``:
+    per spatial axis, the target grid's corner in source voxels from the source corner."""
     ndim = len(shape)
     plans: dict[int, AxisPlan] = {}
     read_begin, read_end = list(begin), list(end)
     for k, axis in enumerate(spatial):
+        origin = float(origins[k]) if origins is not None else 0.0
         plan = plan_axis(
-            shape[axis], source_voxel_size[k], target_voxel_size[k], begin[axis], end[axis], method
+            shape[axis],
+            source_voxel_size[k],
+            target_voxel_size[k],
+            begin[axis],
+            end[axis],
+            method,
+            origin,
         )
         plans[axis] = plan
         read_begin[axis], read_end[axis] = plan.lo, plan.hi

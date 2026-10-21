@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .array import Pyramid, WorldArray, metadata, open, open_pyramid, open_tensorstore
 from .context import capped_context, capped_context_spec, shared_context
-from .geometry import Box
+from .geometry import Box, index_range
 from .levels import select_level
 from .metadata import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
@@ -25,6 +25,7 @@ __all__ = [
     "corner_to_centre",
     "default_axes",
     "detect",
+    "index_range",
     "Pyramid",
     "Retry",
     "WorldArray",

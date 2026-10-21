@@ -17,7 +17,7 @@ import numpy as np
 from .metadata import ArrayMeta
 from .store import Location, Node, basename, detect, join, parent
 
-Mode = Literal["floor", "exact", "nearest", "resample"]
+Mode = Literal["floor", "finer", "exact", "nearest", "resample"]
 
 
 @dataclass(frozen=True)
@@ -54,18 +54,21 @@ def discover(node: Node) -> list[LevelRef]:
             for i, s in enumerate(node.docs["info"]["scales"])
         ]
     if node.kind == "array":
-        up = parent(node.path)
-        if up is not None:
-            try:
-                group = detect(up)
-            except FileNotFoundError:
-                group = None
+        ancestor, rel = parent(node.path), basename(node.path)
+        for _ in range(4):  # a dataset path may have more than one component ("seg/s0")
+            if ancestor is None:
+                break
+            group = detect(ancestor, missing_ok=True)
             if (
                 group is not None
                 and group.kind == "group"
-                and basename(node.path) in _group_multiscale_paths(group)
+                and rel in _group_multiscale_paths(group)
             ):
                 return discover(group)
+            if parent(ancestor) is None:
+                break
+            rel = f"{basename(ancestor)}/{rel}"
+            ancestor = parent(ancestor)
         return [LevelRef(basename(node.path), node.path)]
     names = _group_multiscale_paths(node) or _probe_levels(node.path)
     return [LevelRef(name, join(node.path, name)) for name in names]
@@ -92,6 +95,8 @@ def select_level(
 
     - ``floor``: the level at ``voxel_size``, else the coarsest level that is no coarser than
       it on any axis, else the first.
+    - ``finer``: as ``floor``, but ``ValueError`` instead of falling back to the first level
+      when every level is coarser than the target on some axis (cellmap-analyze's rule).
     - ``exact``: the level at ``voxel_size``, else ``ValueError`` listing the levels.
     - ``nearest``: the level closest on a log scale summed over the axes; the finer on a tie.
     - ``resample``: the level to resample from: the level at ``voxel_size`` if there is one;
@@ -110,9 +115,14 @@ def select_level(
             return name, meta
     if mode == "exact":
         raise ValueError(f"no level at voxel size {target.tolist()}; levels: " + _describe(sizes))
-    if mode in ("floor", "resample"):
+    if mode in ("floor", "finer", "resample"):
         candidates = [(name, meta) for name, meta, vs in sizes if not coarser_anywhere(vs, target)]
         if not candidates:
+            if mode == "finer":
+                raise ValueError(
+                    f"every level is coarser than {target.tolist()} on some axis; levels: "
+                    + _describe(sizes)
+                )
             return levels[0]
         # the coarsest of them: largest voxel volume
         return max(candidates, key=lambda nm: float(np.prod(_spatial_voxel_size(nm[1]))))

@@ -62,11 +62,12 @@ class WorldArray:
         metadata_conflicts: str = "error",
         base_voxel_size: Sequence[float] | None = None,
         base_units: str | None = None,
+        anchor: Sequence[float] | None = None,
         _ref: LevelRef | None = None,
         _node: Node | None = None,
     ):
-        if on_mismatch not in ("error", "resample", "relabel"):
-            raise ValueError("on_mismatch is 'error', 'resample' or 'relabel'")
+        if on_mismatch not in ("error", "resample", "relabel", "keep"):
+            raise ValueError("on_mismatch is 'error', 'resample', 'relabel' or 'keep'")
         self.path = path
         self.padding = padding
         self.method = method
@@ -82,7 +83,9 @@ class WorldArray:
             metadata_conflicts=metadata_conflicts,
             base_voxel_size=base_voxel_size,
             base_units=base_units,
+            anchor=anchor,
         )
+        self._anchor = tuple(float(a) for a in anchor) if anchor is not None else None
 
         node = _node if _node is not None else detect(path)
         self._pyramid: Pyramid | None = None
@@ -115,6 +118,8 @@ class WorldArray:
                     )
                 if on_mismatch == "resample":
                     self._target = requested
+                elif on_mismatch == "keep":
+                    pass  # the chosen level, at its own voxel size
                 else:  # relabel: read the level voxel for voxel and call its voxels the requested size
                     vs = list(self._grid.voxel_size)
                     for k, axis in enumerate(self._grid.spatial):
@@ -136,6 +141,8 @@ class WorldArray:
                     f"{self.path}: no precomputed scale {node.scale_key!r}; scales: {keys}"
                 )
             return LevelRef(node.scale_key, node.path, keys.index(node.scale_key))
+        if level == "first":
+            level = 0
         if node.kind == "array" and level is None and voxel_size is None:
             return LevelRef(node.path.rsplit("/", 1)[-1], node.path)
         if node.kind == "array" and level is not None:
@@ -249,9 +256,21 @@ class WorldArray:
         return tuple(self._grid.translation[i] for i in self._grid.spatial)
 
     @property
+    def anchor(self) -> tuple[float, ...]:
+        """Where a target voxel corner sits when resampling: the source corner unless
+        ``anchor`` was given, so a volume can be read onto another volume's grid."""
+        if self._anchor is not None:
+            return self._anchor
+        c = self._grid.corner
+        return tuple(c[i] for i in self._grid.spatial)
+
+    @property
     def corner(self) -> tuple[float, ...]:
         """``translation - voxel_size / 2`` on the spatial axes: what funlib, daisy and
-        Neuroglancer call the offset. The same corner at every voxel size."""
+        Neuroglancer call the offset. The same corner at every voxel size, unless an
+        ``anchor`` moved the target grid."""
+        if self._target is not None and self._anchor is not None:
+            return self._anchor
         c = self._grid.corner
         return tuple(c[i] for i in self._grid.spatial)
 
@@ -406,6 +425,31 @@ class WorldArray:
             return np.squeeze(out[0], axis=drop), np.squeeze(out[1], axis=drop)
         return np.squeeze(out, axis=drop)
 
+    def index_box(self, box) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """The voxel index range a world box selects on this array's own grid (Behaviour 2),
+        over the spatial axes or every axis; the other axes come back whole. For snapping a
+        caller's box to whole voxels before an index read."""
+        box = Box.coerce(box)
+        spatial, ndim = self._grid.spatial, self._grid.ndim
+        if box.ndim == len(spatial):
+            axes = list(spatial)
+        elif box.ndim == ndim:
+            axes = list(range(ndim))
+        else:
+            raise ValueError(
+                f"box has {box.ndim} axes; the array has {ndim} ({len(spatial)} spatial)"
+            )
+        lo, hi = index_range(
+            box.begin,
+            box.end,
+            [self._grid.voxel_size[a] for a in axes],
+            [self._grid.translation[a] for a in axes],
+        )
+        begin, end = [0] * ndim, list(self.shape)
+        for a, b, e in zip(axes, lo, hi):
+            begin[a], end[a] = b, e
+        return tuple(begin), tuple(end)
+
     # --- world space ------------------------------------------------------------
 
     def read(
@@ -417,8 +461,13 @@ class WorldArray:
         mask: bool = False,
         retries: Retry | None = None,
         strict: bool = False,
+        anchor: Sequence[float] | None = None,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """The data in a world box, half-open per axis, in ``units``.
+
+        ``anchor``: when resampling, a world position per spatial axis where a target voxel
+        corner lies (pass another volume's ``corner`` to read onto its grid); the source
+        corner, or the ``anchor`` given at open, otherwise.
 
         The box covers the spatial axes (other axes are read whole, or as ``select`` pinned
         them) or every axis. A voxel is read iff its centre lies in the box. ``voxel_size``
@@ -445,14 +494,21 @@ class WorldArray:
         if target is not None and same_voxel_size(target, source_vs):
             target = None
 
-        # the grid the box is measured against: the source, or the target grid from the same corner
+        # the grid the box is measured against: the source, or the target grid from the anchor
         vs = list(self._grid.voxel_size)
         tr = list(self._grid.translation)
+        origins: list[float] = []
         if target is not None:
             corner = self._grid.corner
+            anchors = tuple(float(a) for a in anchor) if anchor is not None else self.anchor
+            if len(anchors) != len(spatial):
+                raise ValueError(
+                    f"anchor has {len(anchors)} entries; the array has {len(spatial)} spatial axes"
+                )
             for k, axis in enumerate(spatial):
                 vs[axis] = target[k]
-                tr[axis] = corner[axis] + target[k] / 2
+                tr[axis] = anchors[k] + target[k] / 2
+                origins.append((anchors[k] - corner[axis]) / source_vs[k])
         box_vs = [vs[a] for a in axes]
         box_tr = [tr[a] for a in axes]
         if strict and not is_aligned(box.begin, box.end, box_vs, box_tr):
@@ -484,6 +540,7 @@ class WorldArray:
             method,
             padding,
             mask,
+            origins,
         )
 
 
