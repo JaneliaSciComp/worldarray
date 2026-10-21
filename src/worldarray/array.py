@@ -27,7 +27,7 @@ from . import units as U
 from .context import shared_context
 from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, same_voxel_size, select_level
-from .metadata import ArrayMeta, light_levels, read_meta, read_meta_light
+from .placement import ArrayMeta, light_levels, read_meta, read_meta_light
 from .retry import Retry, read_with_retries
 from .store import Node, detect, is_remote, open_array, precomputed_scale_index
 

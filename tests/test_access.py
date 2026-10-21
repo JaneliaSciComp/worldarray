@@ -158,7 +158,7 @@ def test_roots_are_never_probed_and_bad_ancestors_do_not_break_an_open(tmp_path,
     import importlib
 
     md = importlib.import_module(
-        "worldarray.metadata"
+        "worldarray.placement"
     )  # wa.metadata() the function shadows the module name
 
     calls = []

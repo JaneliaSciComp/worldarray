@@ -14,7 +14,7 @@ from typing import Literal
 
 import numpy as np
 
-from .metadata import ArrayMeta
+from .placement import ArrayMeta
 from .store import Location, Node, basename, detect, is_root, join, parent
 
 Mode = Literal["floor", "finer", "exact", "nearest", "resample"]

@@ -13,7 +13,7 @@ from .array import Pyramid, WorldArray, metadata, open, open_pyramid, open_tenso
 from .context import capped_context, capped_context_spec, shared_context
 from .geometry import Box, index_range
 from .levels import select_level
-from .metadata import ArrayMeta, corner_to_centre, default_axes
+from .placement import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
 from .store import Node, detect, list_chunk_keys
 
