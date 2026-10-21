@@ -74,8 +74,7 @@ wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 `dtype`, `axes`, `spatial`, `voxel_size`, `translation`, `corner`, `levels`, `level_name`,
 `read_index(begin, end, padding=None, mask=False, retries=None)`,
 `read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False)`,
-`chunks_covering(begin, end)`, `reopen(context=None, **overrides)` and, for the migration,
-`to_ndarray_ts(roi)`. A **box** is a `(begin, end)` pair of float tuples over the spatial
+`chunks_covering(begin, end)` and `reopen(context=None, **overrides)`. A **box** is a `(begin, end)` pair of float tuples over the spatial
 axes (or over every axis), anything with `.begin`/`.end` or `.offset`/`.shape` (a funlib
 `Roi`, duck-typed), or a `wa.Box`. There is no `offset` attribute: that word means the
 corner in funlib and the centre in OME, so the two things have two names, `corner` and

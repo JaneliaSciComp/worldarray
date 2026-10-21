@@ -47,7 +47,9 @@ the half voxel, and conformance tests the TypeScript side can run too.
 
 ## 1. Scope
 
-One class, `WorldArray`, with two faces.
+One class, `WorldArray`, with two faces. No legacy names: `ImageDataInterface`,
+`open_ds_tensorstore` and `to_ndarray_ts` are not in this package; each migrating repo keeps
+whatever shim it needs in its own subclass, for as long as it needs it.
 
 - **Index space, native units** (`units=None`): `.ts`, `.meta` and `read_index`. For
   chunkmirage, CineMap, liconn-err, registration-station and any tool that works in its own
@@ -117,7 +119,6 @@ vol.padding, vol.method   # the defaults `read` uses; settable
 
 vol.read_index(begin, end, padding=None, mask=False, retries=None) -> ndarray | (ndarray, mask)
 vol.read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False) -> ndarray | (ndarray, mask)
-vol.to_ndarray_ts(roi)              # read(roi), the name every existing copy used
 vol.chunks_covering(begin, end)     # chunk indices a voxel box touches
 vol.reopen(context=None, **overrides) -> WorldArray   # the same array on another context (a worker changing its concurrency)
 
@@ -125,10 +126,9 @@ pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None)
 pyr.names; pyr.levels; pyr.by_name("s1"); pyr.select(voxel_size, mode="floor")
 
 wa.metadata(path, level=None, units=None) -> ArrayMeta
-wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore   # alias open_ds_tensorstore, deprecated
+wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1) ; wa.capped_context_spec(...)
-wa.ImageDataInterface   # WorldArray under the name the migrating repos import; warns; goes away in 0.2
 ```
 
 `ArrayMeta` is a frozen dataclass with one entry per axis, in the array's C order, and

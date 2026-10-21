@@ -62,21 +62,19 @@ def test_world_box_selects_voxels_by_their_centres(cube):
     vol.read(((2, 2, 2), (18, 18, 18)), strict=True)
 
 
-def test_roi_like_objects_and_funlib_alias(cube):
+def test_roi_like_objects_are_boxes(cube):
     path, data = cube
 
     class Roi:
         offset, shape = (4, 4, 4), (8, 8, 8)
 
+    class Span:
+        begin, end = (4, 4, 4), (12, 12, 12)
+
     vol = wa.open(path)
     np.testing.assert_array_equal(vol.read(Roi()), data[1:3, 1:3, 1:3])
-    np.testing.assert_array_equal(vol.to_ndarray_ts(Roi()), data[1:3, 1:3, 1:3])
-    with pytest.warns(DeprecationWarning):
-        legacy = wa.ImageDataInterface(path)
-    assert legacy.voxel_size == (4.0, 4.0, 4.0)
-    with pytest.warns(DeprecationWarning):
-        raw = wa.open_ds_tensorstore(path)
-    assert tuple(raw.shape) == data.shape
+    np.testing.assert_array_equal(vol.read(Span()), data[1:3, 1:3, 1:3])
+    assert tuple(wa.open_tensorstore(path).shape) == data.shape
 
 
 def test_centre_rule_is_exact_far_from_the_origin():

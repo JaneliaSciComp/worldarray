@@ -61,7 +61,6 @@ ignore = ["B008", "B905", "E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["error::DeprecationWarning:worldarray"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["worldarray", "conftest"]

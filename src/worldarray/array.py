@@ -409,10 +409,6 @@ class WorldArray:
             mask,
         )
 
-    def to_ndarray_ts(self, roi, **kwargs) -> np.ndarray:
-        """``read(roi)``, under the name every existing copy used."""
-        return self.read(roi, **kwargs)
-
 
 class Pyramid:
     """The levels of a multiscale group (or of the group an array belongs to), each a
