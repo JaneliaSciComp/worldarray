@@ -3,109 +3,1290 @@
   "cases": [
     {
       "name": "n5_is_transposed_to_c_order_with_resolution_and_offset",
-      "format": "n5", "shape": [4, 6, 8],
-      "attrs": {"resolution": [8, 4, 2], "offset": [80, 40, 20]},
-      "expect": {"voxel_size": [2, 4, 8], "translation": [21, 42, 84], "axes": ["z", "y", "x"], "units": ["", "", ""], "axes_named": false}
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "resolution": [
+          8,
+          4,
+          2
+        ],
+        "offset": [
+          80,
+          40,
+          20
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          21,
+          42,
+          84
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
     },
     {
       "name": "n5_cosem_transform_is_c_order",
-      "format": "n5", "shape": [4, 6, 8],
-      "attrs": {"transform": {"axes": ["z", "y", "x"], "scale": [2, 4, 8], "translate": [1, 2, 3], "units": ["nm", "nm", "nm"]}},
-      "expect": {"voxel_size": [2, 4, 8], "translation": [1, 2, 3], "axes": ["z", "y", "x"], "units": ["nm", "nm", "nm"], "axes_named": true}
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "transform": {
+          "axes": [
+            "z",
+            "y",
+            "x"
+          ],
+          "scale": [
+            2,
+            4,
+            8
+          ],
+          "translate": [
+            1,
+            2,
+            3
+          ],
+          "units": [
+            "nm",
+            "nm",
+            "nm"
+          ]
+        }
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          1,
+          2,
+          3
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": true,
+        "placed_by": "cosem"
+      }
     },
     {
       "name": "n5_group_pixelresolution_and_downsampling_factors_bigdataviewer",
-      "format": "n5", "shape": [4, 6, 8], "array": "s1",
-      "group_attrs": {"pixelResolution": {"dimensions": [4, 4, 4], "unit": "nm"}},
-      "attrs": {"downsamplingFactors": [2, 2, 2]},
-      "expect": {"voxel_size": [8, 8, 8], "translation": [2, 2, 2], "axes": ["z", "y", "x"], "units": ["nm", "nm", "nm"], "axes_named": false}
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "array": "s1",
+      "group_attrs": {
+        "pixelResolution": {
+          "dimensions": [
+            4,
+            4,
+            4
+          ],
+          "unit": "nm"
+        }
+      },
+      "attrs": {
+        "downsamplingFactors": [
+          2,
+          2,
+          2
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          8,
+          8,
+          8
+        ],
+        "translation": [
+          2,
+          2,
+          2
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
     },
     {
       "name": "n5_group_multiscales_transform_matched_by_path",
-      "format": "n5", "shape": [4, 6, 8], "array": "s1",
-      "group_attrs": {"multiscales": [{"datasets": [
-        {"path": "s0", "transform": {"axes": ["z", "y", "x"], "scale": [4, 4, 4], "translate": [0, 0, 0], "units": ["nm", "nm", "nm"]}},
-        {"path": "s1", "transform": {"axes": ["z", "y", "x"], "scale": [8, 8, 8], "translate": [2, 2, 2], "units": ["nm", "nm", "nm"]}}
-      ]}]},
-      "expect": {"voxel_size": [8, 8, 8], "translation": [2, 2, 2], "axes": ["z", "y", "x"], "units": ["nm", "nm", "nm"], "axes_named": true}
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "array": "s1",
+      "group_attrs": {
+        "multiscales": [
+          {
+            "datasets": [
+              {
+                "path": "s0",
+                "transform": {
+                  "axes": [
+                    "z",
+                    "y",
+                    "x"
+                  ],
+                  "scale": [
+                    4,
+                    4,
+                    4
+                  ],
+                  "translate": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "units": [
+                    "nm",
+                    "nm",
+                    "nm"
+                  ]
+                }
+              },
+              {
+                "path": "s1",
+                "transform": {
+                  "axes": [
+                    "z",
+                    "y",
+                    "x"
+                  ],
+                  "scale": [
+                    8,
+                    8,
+                    8
+                  ],
+                  "translate": [
+                    2,
+                    2,
+                    2
+                  ],
+                  "units": [
+                    "nm",
+                    "nm",
+                    "nm"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          8,
+          8,
+          8
+        ],
+        "translation": [
+          2,
+          2,
+          2
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": true,
+        "placed_by": "cosem"
+      }
     },
     {
       "name": "n5_bare_list_pixelresolution",
-      "format": "n5", "shape": [4, 6, 8],
-      "attrs": {"pixelResolution": [2, 4, 8], "offset": [0, 0, 0]},
-      "expect": {"voxel_size": [8, 4, 2], "translation": [4, 2, 1], "axes": ["z", "y", "x"], "units": ["", "", ""], "axes_named": false}
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "pixelResolution": [
+          2,
+          4,
+          8
+        ],
+        "offset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          8,
+          4,
+          2
+        ],
+        "translation": [
+          4,
+          2,
+          1
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
     },
     {
       "name": "ome_levels_are_matched_by_path",
-      "format": "zarr2", "shape": [4, 6, 8], "array": "s1",
-      "group_attrs": {"multiscales": [{"version": "0.4",
-        "axes": [{"name": "z", "type": "space", "unit": "nanometer"}, {"name": "y", "type": "space", "unit": "nanometer"}, {"name": "x", "type": "space", "unit": "nanometer"}],
-        "datasets": [
-          {"path": "s0", "coordinateTransformations": [{"type": "scale", "scale": [4, 4, 4]}, {"type": "translation", "translation": [2, 2, 2]}]},
-          {"path": "s1", "coordinateTransformations": [{"type": "scale", "scale": [8, 8, 8]}, {"type": "translation", "translation": [4, 4, 4]}]}
-        ]}]},
-      "expect": {"voxel_size": [8, 8, 8], "translation": [4, 4, 4], "axes": ["z", "y", "x"], "units": ["nanometer", "nanometer", "nanometer"], "axes_named": true}
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "array": "s1",
+      "group_attrs": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "axes": [
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "nanometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      4,
+                      4,
+                      4
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      2,
+                      2,
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "s1",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      8,
+                      8,
+                      8
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      4,
+                      4,
+                      4
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          8,
+          8,
+          8
+        ],
+        "translation": [
+          4,
+          4,
+          4
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nanometer",
+          "nanometer",
+          "nanometer"
+        ],
+        "axes_named": true,
+        "placed_by": "ome"
+      }
     },
     {
       "name": "ome_top_level_transforms_apply_after_each_dataset",
-      "format": "zarr2", "shape": [4, 6, 8],
-      "group_attrs": {"multiscales": [{"version": "0.4",
-        "axes": [{"name": "z", "type": "space", "unit": "nanometer"}, {"name": "y", "type": "space", "unit": "nanometer"}, {"name": "x", "type": "space", "unit": "nanometer"}],
-        "datasets": [{"path": "s0", "coordinateTransformations": [{"type": "scale", "scale": [4, 4, 4]}, {"type": "translation", "translation": [2, 2, 2]}]}],
-        "coordinateTransformations": [{"type": "scale", "scale": [2, 2, 2]}]}]},
-      "expect": {"voxel_size": [8, 8, 8], "translation": [4, 4, 4], "axes": ["z", "y", "x"], "units": ["nanometer", "nanometer", "nanometer"], "axes_named": true}
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "group_attrs": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "axes": [
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "nanometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      4,
+                      4,
+                      4
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      2,
+                      2,
+                      2
+                    ]
+                  }
+                ]
+              }
+            ],
+            "coordinateTransformations": [
+              {
+                "type": "scale",
+                "scale": [
+                  2,
+                  2,
+                  2
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          8,
+          8,
+          8
+        ],
+        "translation": [
+          4,
+          4,
+          4
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nanometer",
+          "nanometer",
+          "nanometer"
+        ],
+        "axes_named": true,
+        "placed_by": "ome"
+      }
     },
     {
       "name": "ome_unlisted_array_does_not_borrow_another_levels_scale",
-      "format": "zarr2", "shape": [4, 6, 8], "array": "s1",
-      "group_attrs": {"multiscales": [{"version": "0.4",
-        "axes": [{"name": "z", "type": "space", "unit": "nanometer"}, {"name": "y", "type": "space", "unit": "nanometer"}, {"name": "x", "type": "space", "unit": "nanometer"}],
-        "datasets": [{"path": "s0", "coordinateTransformations": [{"type": "scale", "scale": [4, 4, 4]}]}]}]},
-      "expect": {"voxel_size": [1, 1, 1], "translation": [0, 0, 0], "axes": ["z", "y", "x"], "units": ["", "", ""], "axes_named": false}
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "array": "s1",
+      "group_attrs": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "axes": [
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "nanometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      4,
+                      4,
+                      4
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          1,
+          1
+        ],
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "placed_by": null
+      }
     },
     {
       "name": "zarr_legacy_array_attrs_are_a_corner",
-      "format": "zarr2", "shape": [4, 6, 8],
-      "attrs": {"resolution": [2, 4, 8], "offset": [10, 20, 30], "units": ["nm", "nm", "nm"], "axis_names": ["z", "y", "x"]},
-      "expect": {"voxel_size": [2, 4, 8], "translation": [11, 22, 34], "axes": ["z", "y", "x"], "units": ["nm", "nm", "nm"], "axes_named": true}
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "resolution": [
+          2,
+          4,
+          8
+        ],
+        "offset": [
+          10,
+          20,
+          30
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axis_names": [
+          "z",
+          "y",
+          "x"
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          11,
+          22,
+          34
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": true,
+        "placed_by": "funlib"
+      }
     },
     {
       "name": "zarr3_ome_05_group",
-      "format": "zarr3", "shape": [2, 4, 6, 8], "dimension_names": ["c", "z", "y", "x"],
-      "group_attrs": {"ome": {"version": "0.5", "multiscales": [{
-        "axes": [{"name": "c", "type": "channel"}, {"name": "z", "type": "space", "unit": "micrometer"}, {"name": "y", "type": "space", "unit": "micrometer"}, {"name": "x", "type": "space", "unit": "micrometer"}],
-        "datasets": [{"path": "s0", "coordinateTransformations": [{"type": "scale", "scale": [1, 0.008, 0.004, 0.004]}, {"type": "translation", "translation": [0, 0.004, 0.002, 0.002]}]}]}]}},
-      "expect": {"voxel_size": [1, 0.008, 0.004, 0.004], "translation": [0, 0.004, 0.002, 0.002], "axes": ["c", "z", "y", "x"], "units": ["", "micrometer", "micrometer", "micrometer"], "axes_named": true}
+      "format": "zarr3",
+      "shape": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "dimension_names": [
+        "c",
+        "z",
+        "y",
+        "x"
+      ],
+      "group_attrs": {
+        "ome": {
+          "version": "0.5",
+          "multiscales": [
+            {
+              "axes": [
+                {
+                  "name": "c",
+                  "type": "channel"
+                },
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "micrometer"
+                }
+              ],
+              "datasets": [
+                {
+                  "path": "s0",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        1,
+                        0.008,
+                        0.004,
+                        0.004
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        0,
+                        0.004,
+                        0.002,
+                        0.002
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          0.008,
+          0.004,
+          0.004
+        ],
+        "translation": [
+          0,
+          0.004,
+          0.002,
+          0.002
+        ],
+        "axes": [
+          "c",
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "micrometer",
+          "micrometer",
+          "micrometer"
+        ],
+        "axes_named": true,
+        "placed_by": "ome"
+      }
     },
     {
       "name": "precomputed_voxel_offset_becomes_a_centre_translation",
-      "format": "precomputed", "shape": [4, 6, 8], "resolution": [4, 4, 4], "voxel_offset": [10, 20, 30],
-      "expect": {"voxel_size": [4, 4, 4], "translation": [122, 82, 42], "axes": ["z", "y", "x"], "units": ["nm", "nm", "nm"], "axes_named": true}
+      "format": "precomputed",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "resolution": [
+        4,
+        4,
+        4
+      ],
+      "voxel_offset": [
+        10,
+        20,
+        30
+      ],
+      "expect": {
+        "voxel_size": [
+          4,
+          4,
+          4
+        ],
+        "translation": [
+          122,
+          82,
+          42
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": true,
+        "placed_by": "precomputed"
+      }
     },
     {
       "name": "xarray_dimensions_and_packing_are_exposed_raw",
-      "format": "zarr2", "shape": [3, 4, 5], "dtype": "int16",
-      "attrs": {"_ARRAY_DIMENSIONS": ["time", "lat", "lon"], "scale_factor": 0.01, "add_offset": 298.15, "_FillValue": -32768},
-      "expect": {"voxel_size": [1, 1, 1], "translation": [0, 0, 0], "axes": ["time", "lat", "lon"], "units": ["", "", ""], "axes_named": true, "dtype": "int16", "attrs_include": ["scale_factor", "add_offset", "_FillValue"]},
-      "layered": {"note": "chunkmirage reads the coordinate arrays and decodes the packing to float32 kelvin; the package exposes the attributes and leaves the dtype as stored"}
+      "format": "zarr2",
+      "shape": [
+        3,
+        4,
+        5
+      ],
+      "dtype": "int16",
+      "attrs": {
+        "_ARRAY_DIMENSIONS": [
+          "time",
+          "lat",
+          "lon"
+        ],
+        "scale_factor": 0.01,
+        "add_offset": 298.15,
+        "_FillValue": -32768
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          1,
+          1
+        ],
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "axes": [
+          "time",
+          "lat",
+          "lon"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": true,
+        "dtype": "int16",
+        "attrs_include": [
+          "scale_factor",
+          "add_offset",
+          "_FillValue"
+        ],
+        "placed_by": null
+      },
+      "layered": {
+        "note": "chunkmirage reads the coordinate arrays and decodes the packing to float32 kelvin; the package exposes the attributes and leaves the dtype as stored"
+      }
     },
     {
       "name": "zarr2_zstd_compressor_with_checksum_member_opens",
-      "format": "zarr2", "shape": [4, 6, 8],
-      "compressor": {"id": "zstd", "level": 3}, "patch_zarray": {"checksum": false},
-      "expect": {"voxel_size": [1, 1, 1], "translation": [0, 0, 0], "axes": ["z", "y", "x"], "units": ["", "", ""], "axes_named": false, "reads_back": true}
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "compressor": {
+        "id": "zstd",
+        "level": 3
+      },
+      "patch_zarray": {
+        "checksum": false
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          1,
+          1
+        ],
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "reads_back": true,
+        "placed_by": null
+      }
     },
     {
       "name": "ome_06_coordinate_systems_intrinsic_only",
-      "format": "zarr3", "shape": [4, 6, 8], "dimension_names": ["z", "y", "x"],
-      "group_attrs": {"ome": {"version": "0.6", "multiscales": [{
-        "coordinateSystems": [
-          {"name": "intrinsic", "axes": [{"name": "z", "type": "space", "unit": "micrometer"}, {"name": "y", "type": "space", "unit": "micrometer"}, {"name": "x", "type": "space", "unit": "micrometer"}]},
-          {"name": "stage", "axes": [{"name": "z", "type": "space", "unit": "millimeter"}, {"name": "y", "type": "space", "unit": "millimeter"}, {"name": "x", "type": "space", "unit": "millimeter"}]}
+      "format": "zarr3",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "dimension_names": [
+        "z",
+        "y",
+        "x"
+      ],
+      "group_attrs": {
+        "ome": {
+          "version": "0.6",
+          "multiscales": [
+            {
+              "coordinateSystems": [
+                {
+                  "name": "intrinsic",
+                  "axes": [
+                    {
+                      "name": "z",
+                      "type": "space",
+                      "unit": "micrometer"
+                    },
+                    {
+                      "name": "y",
+                      "type": "space",
+                      "unit": "micrometer"
+                    },
+                    {
+                      "name": "x",
+                      "type": "space",
+                      "unit": "micrometer"
+                    }
+                  ]
+                },
+                {
+                  "name": "stage",
+                  "axes": [
+                    {
+                      "name": "z",
+                      "type": "space",
+                      "unit": "millimeter"
+                    },
+                    {
+                      "name": "y",
+                      "type": "space",
+                      "unit": "millimeter"
+                    },
+                    {
+                      "name": "x",
+                      "type": "space",
+                      "unit": "millimeter"
+                    }
+                  ]
+                }
+              ],
+              "datasets": [
+                {
+                  "path": "s0",
+                  "coordinateTransformations": [
+                    {
+                      "type": "sequence",
+                      "input": "/s0",
+                      "output": "intrinsic",
+                      "transformations": [
+                        {
+                          "type": "scale",
+                          "scale": [
+                            0.1,
+                            0.1,
+                            0.1
+                          ]
+                        },
+                        {
+                          "type": "translation",
+                          "translation": [
+                            1,
+                            2,
+                            3
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "coordinateTransformations": [
+                {
+                  "type": "translation",
+                  "translation": [
+                    500,
+                    500,
+                    500
+                  ],
+                  "input": "intrinsic",
+                  "output": "stage"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "voxel_size": [
+          0.1,
+          0.1,
+          0.1
         ],
-        "datasets": [{"path": "s0", "coordinateTransformations": [{"type": "sequence", "input": "/s0", "output": "intrinsic", "transformations": [{"type": "scale", "scale": [0.1, 0.1, 0.1]}, {"type": "translation", "translation": [1, 2, 3]}]}]}],
-        "coordinateTransformations": [{"type": "translation", "translation": [500, 500, 500], "input": "intrinsic", "output": "stage"}]}]}},
-      "expect": {"voxel_size": [0.1, 0.1, 0.1], "translation": [1, 2, 3], "axes": ["z", "y", "x"], "units": ["micrometer", "micrometer", "micrometer"], "axes_named": true}
+        "translation": [
+          1,
+          2,
+          3
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "micrometer",
+          "micrometer",
+          "micrometer"
+        ],
+        "axes_named": true,
+        "placed_by": "ome"
+      }
+    },
+    {
+      "name": "n5_resolution_without_offset_is_a_corner_at_zero",
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "resolution": [
+          8,
+          4,
+          2
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          1,
+          2,
+          4
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
+    },
+    {
+      "name": "n5_axes_attribute_is_x_first",
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "resolution": [
+          8,
+          4,
+          2
+        ],
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "axes": [
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          1,
+          2,
+          4
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": true,
+        "placed_by": "n5"
+      }
+    },
+    {
+      "name": "zarr_funlib_short_lists_cover_the_trailing_axes",
+      "format": "zarr2",
+      "shape": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "voxel_size": [
+          2,
+          4,
+          8
+        ],
+        "offset": [
+          10,
+          20,
+          30
+        ],
+        "axis_names": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "nm",
+          "nm",
+          "nm"
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          0,
+          11,
+          22,
+          34
+        ],
+        "axes": [
+          "c",
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": true,
+        "placed_by": "funlib"
+      }
+    },
+    {
+      "name": "n5_short_pixelresolution_on_a_4d_array",
+      "format": "n5",
+      "shape": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "pixelResolution": {
+          "dimensions": [
+            8,
+            4,
+            2
+          ],
+          "unit": "nm"
+        },
+        "offset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "axes": [
+          "c",
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
+    },
+    {
+      "name": "cosem_transform_short_on_a_4d_array",
+      "format": "zarr2",
+      "shape": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "transform": {
+          "axes": [
+            "z",
+            "y",
+            "x"
+          ],
+          "scale": [
+            2,
+            4,
+            8
+          ],
+          "translate": [
+            1,
+            2,
+            3
+          ],
+          "units": [
+            "nm",
+            "nm",
+            "nm"
+          ]
+        }
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "translation": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "axes": [
+          "c",
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "nm",
+          "nm",
+          "nm"
+        ],
+        "axes_named": true,
+        "placed_by": "cosem"
+      }
+    },
+    {
+      "name": "zarr_offset_without_voxel_size_places_with_voxels_of_one",
+      "format": "zarr2",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "attrs": {
+        "offset": [
+          10,
+          20,
+          30
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          1,
+          1,
+          1
+        ],
+        "translation": [
+          10.5,
+          20.5,
+          30.5
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "placed_by": "funlib"
+      }
     }
   ]
 }

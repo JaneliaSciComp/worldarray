@@ -12,14 +12,19 @@ from .array import Pyramid, WorldArray, metadata, open, open_pyramid, open_tenso
 from .context import capped_context, capped_context_spec, shared_context
 from .geometry import Box
 from .levels import select_level
-from .metadata import ArrayMeta
+from .metadata import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
+from .store import Node, detect
 
 __version__ = "0.1.0a0"
 
 __all__ = [
     "ArrayMeta",
     "Box",
+    "Node",
+    "corner_to_centre",
+    "default_axes",
+    "detect",
     "Pyramid",
     "Retry",
     "WorldArray",

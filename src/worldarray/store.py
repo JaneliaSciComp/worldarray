@@ -218,15 +218,41 @@ class Node:
     def location(self) -> Location:
         return Location(self.path)
 
+    @property
+    def attrs(self) -> dict:
+        """The node's user attributes, raw: zarr v3 ``attributes``, zarr v2 ``.zattrs``, the N5
+        ``attributes.json``, a precomputed ``info``. ``{}`` for a group with no document."""
+        if self.format == "zarr3":
+            return dict(self.docs.get("zarr.json", {}).get("attributes", {}) or {})
+        if self.format == "zarr2":
+            return dict(self.location.read_json(".zattrs") or {})
+        if self.format == "n5":
+            return dict(self.docs.get("attributes.json", {}) or {})
+        return dict(self.docs.get("info", {}) or {})
+
+    @property
+    def multiscales(self) -> list[dict]:
+        """The OME-NGFF ``multiscales`` list (0.5's ``ome`` nesting unwrapped), else ``[]``."""
+        return multiscales_of(self.attrs)
+
+
+def multiscales_of(attrs: dict) -> list[dict]:
+    ome = attrs.get("ome")
+    if isinstance(ome, dict) and "multiscales" in ome:
+        return list(ome["multiscales"])
+    return list(attrs.get("multiscales", []) or [])
+
 
 def _decode(docs: dict[str, bytes | None]) -> dict[str, Any]:
     return {k: json.loads(v) for k, v in docs.items() if v is not None}
 
 
-def detect(path: str) -> Node:
+def detect(path: str, *, missing_ok: bool = False) -> Node | None:
     """Probe ``zarr.json``, ``.zarray``, ``.zgroup``, ``info``, ``attributes.json`` in that
     order; failing all, probe the parent for ``info`` and take the last path segment as a
-    precomputed scale key. The ``.n5`` or ``.zarr`` suffix is never consulted."""
+    precomputed scale key, then probe ``s0`` for a group that has no document of its own.
+    The ``.n5`` or ``.zarr`` suffix is never consulted. Nothing found raises
+    ``FileNotFoundError``, or returns None with ``missing_ok``."""
     path = normalize_path(path)
     docs = _decode(Location(path).read_many(PROBE_KEYS))
     if "zarr.json" in docs:
@@ -246,8 +272,16 @@ def detect(path: str) -> Node:
         info = Location(up).read_json("info")
         if info is not None:
             return Node("precomputed", "group", up, {"info": info}, scale_key=basename(path))
+    child = _decode(
+        Location(join(path, "s0")).read_many(("zarr.json", ".zarray", "attributes.json"))
+    )
+    if child:
+        fmt = "zarr3" if "zarr.json" in child else "zarr2" if ".zarray" in child else "n5"
+        return Node(fmt, "group", path, {})
+    if missing_ok:
+        return None
     raise FileNotFoundError(
-        f"{path}: none of {', '.join(PROBE_KEYS)} found, and the parent holds no precomputed info"
+        f"{path}: none of {', '.join(PROBE_KEYS)} found, the parent holds no precomputed info, and there is no s0"
     )
 
 

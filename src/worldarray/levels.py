@@ -28,18 +28,7 @@ class LevelRef:
 
 
 def _group_multiscale_paths(node: Node) -> list[str]:
-    if node.format == "zarr3":
-        attrs = node.docs["zarr.json"].get("attributes", {}) or {}
-    elif node.format == "zarr2":
-        attrs = node.location.read_json(".zattrs") or {}
-    else:
-        attrs = node.docs.get("attributes.json", {}) or {}
-    ome = attrs.get("ome")
-    multiscales = (
-        ome["multiscales"]
-        if isinstance(ome, dict) and "multiscales" in ome
-        else attrs.get("multiscales")
-    )
+    multiscales = node.multiscales
     if not multiscales:
         return []
     return [str(ds["path"]).strip("/") for ds in multiscales[0].get("datasets", []) if "path" in ds]

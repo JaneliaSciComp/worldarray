@@ -49,7 +49,7 @@ class WorldArray:
         self,
         path: str,
         *,
-        level: str | None = None,
+        level: str | int | None = None,
         voxel_size: Sequence[float] | None = None,
         level_mode: Mode = "floor",
         on_mismatch: str = "error",
@@ -59,6 +59,9 @@ class WorldArray:
         units: Units = "nanometer",
         context: ts.Context | None = None,
         retries: Retry | None = None,
+        metadata_conflicts: str = "error",
+        base_voxel_size: Sequence[float] | None = None,
+        base_units: str | None = None,
         _ref: LevelRef | None = None,
         _node: Node | None = None,
     ):
@@ -72,7 +75,13 @@ class WorldArray:
         self.retries = retries if retries is not None else Retry()
         self._select = dict(select or {})
         self._opts = dict(
-            level=level, voxel_size=voxel_size, level_mode=level_mode, on_mismatch=on_mismatch
+            level=level,
+            voxel_size=voxel_size,
+            level_mode=level_mode,
+            on_mismatch=on_mismatch,
+            metadata_conflicts=metadata_conflicts,
+            base_voxel_size=base_voxel_size,
+            base_units=base_units,
         )
 
         node = _node if _node is not None else detect(path)
@@ -86,8 +95,12 @@ class WorldArray:
         )
         self._node = node_for_level
         self._store = open_array(node_for_level, context=self.context, scale_index=ref.scale_index)
-        self._meta = read_meta(node_for_level, self._store, scale_index=ref.scale_index)
+        self._meta = read_meta(
+            node_for_level, self._store, scale_index=ref.scale_index, conflicts=metadata_conflicts
+        )
         self._apply_select()
+        if base_voxel_size is not None:
+            self._meta = self._rescaled_to_base(base_voxel_size, base_units)
         space, time = _unit_targets(units)
         self._grid = self._meta.in_units(space=space, time=time)
 
@@ -154,6 +167,39 @@ class WorldArray:
 
     def _level_list(self) -> list[tuple[str, tuple[float, ...]]]:
         return self.levels
+
+    def _rescaled_to_base(self, base: Sequence[float], base_units: str | None) -> ArrayMeta:
+        """This level's metadata with the pyramid's level 0 declared to have voxels of
+        ``base`` (in ``base_units``): every level's spatial voxel size and translation scale
+        by the same per-axis factor, so stores whose metadata is in voxels of level 0 (as
+        BigStitcher writes) or unitless (a BigDataViewer N5) can be placed correctly."""
+        base = tuple(float(v) for v in base)
+        level0 = self.levels_pyramid.levels[0].meta if len(self.levels_pyramid) > 1 else self._meta
+        spatial = self._meta.spatial
+        if len(base) != len(spatial):
+            raise ValueError(
+                f"base_voxel_size has {len(base)} entries; the array has {len(spatial)} spatial axes"
+            )
+        vs, tr, units = (
+            list(self._meta.voxel_size),
+            list(self._meta.translation),
+            list(self._meta.units),
+        )
+        for k, axis in enumerate(spatial):
+            factor = base[k] / level0.voxel_size[axis]
+            vs[axis] *= factor
+            tr[axis] *= factor
+            if base_units is not None:
+                units[axis] = base_units
+        return replace(self._meta, voxel_size=tuple(vs), translation=tuple(tr), units=tuple(units))
+
+    @property
+    def levels_pyramid(self) -> Pyramid:
+        if self._pyramid is None:
+            self._pyramid = Pyramid(
+                self.path, context=self.context, units=self.units, select=self._select
+            )
+        return self._pyramid
 
     # --- what it is -------------------------------------------------------------
 
@@ -268,11 +314,16 @@ class WorldArray:
         padding: Any = None,
         mask: bool = False,
         retries: Retry | None = None,
+        select: dict[str, int] | None = None,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """The voxels ``[begin, end)`` on every axis, clipped to the array, read, and padded
         to the full box with ``padding`` (a value, or ``"edge"`` for the nearest voxel). A box
         entirely outside the array returns the fill without touching storage. With ``mask``,
-        also a boolean array that is True inside the array."""
+        also a boolean array that is True inside the array. ``select`` pins axes for this
+        read only (``{"c": 1}``): ``begin``/``end`` then cover the remaining axes and the
+        result drops the pinned ones."""
+        if select:
+            return self._read_index_selected(begin, end, select, padding, mask, retries)
         padding = self.padding if padding is None else padding
         begin = np.asarray(begin, dtype=np.int64)
         end = np.asarray(end, dtype=np.int64)
@@ -328,6 +379,32 @@ class WorldArray:
         if not data.dtype.isnative:
             data = data.astype(data.dtype.newbyteorder("="))
         return data
+
+    def _read_index_selected(self, begin, end, select, padding, mask, retries):
+        axes = self._grid.axes
+        pinned: dict[int, int] = {}
+        for name, index in select.items():
+            if name not in axes:
+                raise ValueError(f"{self.path}: no axis named {name!r} to select; axes are {axes}")
+            pinned[axes.index(name)] = int(index)
+        if len(begin) != self._grid.ndim - len(pinned):
+            raise ValueError(
+                f"begin/end must have {self._grid.ndim - len(pinned)} entries with select={select}"
+            )
+        full_begin, full_end, it = [], [], iter(zip(begin, end))
+        for axis in range(self._grid.ndim):
+            if axis in pinned:
+                full_begin.append(pinned[axis])
+                full_end.append(pinned[axis] + 1)
+            else:
+                b, e = next(it)
+                full_begin.append(int(b))
+                full_end.append(int(e))
+        out = self.read_index(full_begin, full_end, padding=padding, mask=mask, retries=retries)
+        drop = tuple(sorted(pinned))
+        if mask:
+            return np.squeeze(out[0], axis=drop), np.squeeze(out[1], axis=drop)
+        return np.squeeze(out, axis=drop)
 
     # --- world space ------------------------------------------------------------
 
@@ -441,11 +518,18 @@ class Pyramid:
     def names(self) -> list[str]:
         return [r.name for r in self._refs]
 
-    def _ref(self, name: str) -> LevelRef:
+    def _ref(self, level: str | int) -> LevelRef:
+        """A level by name, or by position (0 is the first listed, the finest by convention)."""
+        if isinstance(level, int) and not isinstance(level, bool):
+            if not -len(self._refs) <= level < len(self._refs):
+                raise ValueError(
+                    f"{self.path}: no level {level}; there are {len(self._refs)}: {self.names}"
+                )
+            return self._refs[level]
         for ref in self._refs:
-            if ref.name == name:
+            if ref.name == str(level):
                 return ref
-        raise ValueError(f"{self.path}: no level named {name!r}; levels: {self.names}")
+        raise ValueError(f"{self.path}: no level named {level!r}; levels: {self.names}")
 
     def _open(self, ref: LevelRef) -> WorldArray:
         if ref.name not in self._levels:
@@ -465,8 +549,8 @@ class Pyramid:
     def levels(self) -> tuple[WorldArray, ...]:
         return tuple(self._open(ref) for ref in self._refs)
 
-    def by_name(self, name: str) -> WorldArray:
-        return self._open(self._ref(name))
+    def by_name(self, level: str | int) -> WorldArray:
+        return self._open(self._ref(level))
 
     def _select_ref(self, voxel_size, mode: Mode = "floor") -> LevelRef:
         pairs = [(lvl.level_name, lvl.grid) for lvl in self.levels]
@@ -506,8 +590,37 @@ def metadata(path: str, *, level: str | None = None, units: Units = None) -> Arr
 
 
 def open_tensorstore(
-    path: str, *, level: str | None = None, context: ts.Context | None = None
+    path: str, *, level: str | int | None = None, context: ts.Context | None = None
 ) -> ts.TensorStore:
     """The raw tensorstore of an array or level: C order, origin 0, a precomputed single
-    channel dropped. The access fallbacks and shared context apply."""
-    return WorldArray(path, level=level, units=None, context=context).ts
+    channel dropped. The access fallbacks and shared context apply. No world metadata is
+    read, so an array whose placement attributes are odd (a coordinate array, a field) still
+    opens."""
+    context = context if context is not None else shared_context(0)
+    node = detect(path)
+    if node.format == "precomputed":
+        keys = [str(s.get("key", i)) for i, s in enumerate(node.docs["info"]["scales"])]
+        wanted = node.scale_key if level is None else level
+        index = (
+            wanted
+            if isinstance(wanted, int)
+            else (keys.index(wanted) if wanted is not None else None)
+        )
+        if index is None:
+            raise ValueError(f"{path} is a precomputed volume; pass level= one of {keys}")
+        return open_array(node, context=context, scale_index=index)
+    if node.kind == "group":
+        refs = discover(node)
+        if level is None:
+            raise ValueError(f"{path} is a group; pass level= one of {[r.name for r in refs]}")
+        ref = (
+            refs[level]
+            if isinstance(level, int)
+            else next((r for r in refs if r.name == level), None)
+        )
+        if ref is None:
+            raise ValueError(f"{path}: no level {level!r}; levels: {[r.name for r in refs]}")
+        node = detect(ref.path)
+    elif level is not None:
+        warnings.warn(f"{path} is an array; level={level!r} is ignored", stacklevel=2)
+    return open_array(node, context=context)

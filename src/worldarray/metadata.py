@@ -6,24 +6,32 @@ voxel 0's corner are moved half a voxel along the spatial axes on reading: preco
 ``voxel_offset`` and funlib's ``offset`` (0 when only a ``resolution`` is given). N5 levels
 with ``pixelResolution`` and ``downsamplingFactors`` and no offset follow BigDataViewer: a
 downsampled voxel's centre is the centre of the block it covers (spec, Conventions 1 and 4).
+
+Per-axis lists shorter than the array (a 3-entry ``voxel_size`` on a ``(c, z, y, x)``
+prediction) cover the trailing axes; the leading axes get 1.0, 0.0 or ``""``. OME lists
+must match the array exactly.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field, replace
 
 import numpy as np
 import tensorstore as ts
 
 from . import units as U
-from .store import Location, Node, basename, parent
+from .store import Location, Node, basename, multiscales_of, parent
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_AXES = ("t", "c", "z", "y", "x")
 SPATIAL_NAMES = frozenset({"z", "y", "x"})
 RTOL = 1e-6
+PLACED_BY = ("ome", "cosem", "funlib", "n5", "precomputed", "dimension_units")
+
+_warned_unitless: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -44,6 +52,7 @@ class ArrayMeta:
     parent: str | None = None
     attrs: dict = field(default_factory=dict)
     group_attrs: dict = field(default_factory=dict)
+    placed_by: str | None = None  # which rule gave voxel_size and translation; None: nothing did
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "dtype", np.dtype(self.dtype))
@@ -75,7 +84,9 @@ class ArrayMeta:
     def in_units(self, space: str | None = None, time: str | None = None) -> ArrayMeta:
         """The same metadata with spatial axes in ``space`` and time axes in ``time``.
         Axes not asked about keep their unit string, whatever it is. A spatial axis with no
-        unit is taken as nanometres; an unknown unit on an axis being converted raises."""
+        unit is taken as nanometres, with a warning once per array (a BigDataViewer N5 with
+        a unitless micrometre ``resolution`` would otherwise be read a thousandfold too
+        small, silently); an unknown unit on an axis being converted raises."""
         sp = set(self.spatial)
         units, vs, tr = list(self.units), list(self.voxel_size), list(self.translation)
         for i, unit in enumerate(self.units):
@@ -83,9 +94,12 @@ class ArrayMeta:
             target = None
             if i in sp and space is not None and k in ("space", "unknown"):
                 target = space
-                if unit == "":
-                    logger.debug(
-                        "%s: no unit on axis %r, taking nanometres", self.path, self.axes[i]
+                if unit == "" and self.path not in _warned_unitless:
+                    _warned_unitless.add(self.path)
+                    logger.warning(
+                        "%s: no unit stored on spatial axis %r; taking nanometres (pass units=None to keep the store's numbers)",
+                        self.path,
+                        self.axes[i],
                     )
                 f = U.factor(unit, space, missing_as=U.NANOMETER)
             elif k == "time" and time is not None:
@@ -125,8 +139,11 @@ def default_axes(ndim: int) -> tuple[str, ...]:
     return tuple(f"dim_{i}" for i in range(ndim - len(DEFAULT_AXES))) + DEFAULT_AXES
 
 
-def corner_to_centre(corner, voxel_size, axes) -> tuple[float, ...]:
-    sp = set(spatial_axes(axes))
+def corner_to_centre(corner, voxel_size, axes=None) -> tuple[float, ...]:
+    """Voxel 0's centre from its corner: half a voxel on along the spatial axes (those named
+    z, y or x; the last three when ``axes`` is None or names none of them)."""
+    corner, voxel_size = tuple(corner), tuple(voxel_size)
+    sp = set(spatial_axes(tuple(axes) if axes is not None else default_axes(len(corner))))
     return tuple(
         float(c) + (float(v) / 2 if i in sp else 0.0)
         for i, (c, v) in enumerate(zip(corner, voxel_size))
@@ -145,11 +162,23 @@ class _Resolved:
     units: tuple[str, ...] | None = None
     voxel_size: tuple[float, ...] | None = None
     translation: tuple[float, ...] | None = None
+    placed_by: str | None = None
 
 
-def read_meta(node: Node, store: ts.TensorStore, *, scale_index: int | None = None) -> ArrayMeta:
+def read_meta(
+    node: Node,
+    store: ts.TensorStore,
+    *,
+    scale_index: int | None = None,
+    conflicts: str = "error",
+) -> ArrayMeta:
     """The metadata of ``store``, an array ``node`` (or one scale of a precomputed node)
-    opened by ``store.open_array``, so already in C order with its origin at 0."""
+    opened by ``store.open_array``, so already in C order with its origin at 0.
+    ``conflicts``: what a per-array ``voxel_size`` that disagrees with the OME scale does,
+    ``"error"`` (cellmap-analyze's choice, catches stale attributes) or ``"warn"`` (a server
+    that would rather show the image)."""
+    if conflicts not in ("error", "warn"):
+        raise ValueError("conflicts is 'error' or 'warn'")
     shape = tuple(int(s) for s in store.shape)
     dtype = store.dtype.numpy_dtype
     chunk_shape = tuple(int(c) for c in store.chunk_layout.read_chunk.shape)
@@ -157,18 +186,15 @@ def read_meta(node: Node, store: ts.TensorStore, *, scale_index: int | None = No
     up = parent(node.path)
 
     if node.format == "precomputed":
-        attrs, group_attrs, found = (
-            {},
-            node.docs["info"],
-            _precomputed(node.docs["info"], scale_index or 0, ndim),
-        )
+        attrs, group_attrs = {}, node.docs["info"]
+        found = _precomputed(node.docs["info"], scale_index or 0, ndim)
     elif node.format == "n5":
         attrs = node.docs.get("attributes.json", {})
         group_attrs = (Location(up).read_json("attributes.json") or {}) if up else {}
         found = _n5(attrs, group_attrs, basename(node.path), ndim)
     else:
         attrs, group_attrs = _zarr_attrs(node, up)
-        found = _zarr(attrs, group_attrs, basename(node.path), ndim, node)
+        found = _zarr(attrs, group_attrs, basename(node.path), ndim, node, conflicts)
 
     axes_named = found.axes is not None
     axes = tuple(str(a) for a in found.axes) if found.axes is not None else default_axes(ndim)
@@ -188,16 +214,39 @@ def read_meta(node: Node, store: ts.TensorStore, *, scale_index: int | None = No
         parent=up,
         attrs=attrs,
         group_attrs=group_attrs,
+        placed_by=found.placed_by if found.voxel_size is not None else None,
     )
 
 
-def _floats(values, ndim: int, what: str) -> tuple[float, ...]:
+def _floats(values, ndim: int, what: str, pad: float | None = None) -> tuple[float, ...]:
+    """``values`` as floats, one per axis. Shorter lists cover the trailing axes and the
+    leading ones get ``pad``; with ``pad`` None (OME) the length must match."""
     values = tuple(float(v) for v in values)
+    if len(values) < ndim and pad is not None:
+        values = (float(pad),) * (ndim - len(values)) + values
     if len(values) != ndim:
         raise ValueError(
             f"{what} has {len(values)} entries for a {ndim}-dimensional array: {values}"
         )
     return values
+
+
+def _units(values, ndim: int, pad: str | None = None) -> tuple[str, ...]:
+    out = tuple("" if v is None else str(v) for v in values)
+    if len(out) < ndim and pad is not None:
+        out = (pad,) * (ndim - len(out)) + out
+    if len(out) != ndim:
+        raise ValueError(f"units has {len(out)} entries for a {ndim}-dimensional array: {out}")
+    return out
+
+
+def _axes(names, ndim: int) -> tuple[str, ...] | None:
+    """Axis names, the leading axes defaulted when the list is short; None when it is empty
+    or too long."""
+    names = tuple(str(a) for a in names or ())
+    if not names or len(names) > ndim:
+        return None
+    return default_axes(ndim)[: ndim - len(names)] + names
 
 
 # --- zarr ------------------------------------------------------------------
@@ -214,13 +263,6 @@ def _zarr_attrs(node: Node, up: str | None) -> tuple[dict, dict]:
     return attrs, group_attrs
 
 
-def _multiscales(group_attrs: dict) -> list[dict]:
-    ome = group_attrs.get("ome")
-    if isinstance(ome, dict) and "multiscales" in ome:
-        return list(ome["multiscales"])
-    return list(group_attrs.get("multiscales", []) or [])
-
-
 def _dataset_for(multiscales: list[dict], name: str) -> tuple[dict, dict] | None:
     """``(multiscale, dataset)`` whose dataset ``path`` is ``name``: matched by name, never by
     position, so an array the group does not list borrows no other level's scale."""
@@ -231,15 +273,17 @@ def _dataset_for(multiscales: list[dict], name: str) -> tuple[dict, dict] | None
     return None
 
 
-def _zarr(attrs: dict, group_attrs: dict, name: str, ndim: int, node: Node) -> _Resolved:
+def _zarr(
+    attrs: dict, group_attrs: dict, name: str, ndim: int, node: Node, conflicts: str
+) -> _Resolved:
     found = _Resolved()
-    hit = _dataset_for(_multiscales(group_attrs), name)
+    hit = _dataset_for(multiscales_of(group_attrs), name)
     if hit is not None:
         found = _ome(hit[0], hit[1], ndim, node.path)
     if found.voxel_size is None:
         found = _array_attrs(attrs, ndim, node.path)
     else:
-        _check_against_attrs(attrs, found, ndim, node.path)
+        _check_against_attrs(attrs, found, ndim, node.path, conflicts)
     if found.axes is None:
         dims = attrs.get("_ARRAY_DIMENSIONS") or node.docs.get("zarr.json", {}).get(
             "dimension_names"
@@ -248,14 +292,12 @@ def _zarr(attrs: dict, group_attrs: dict, name: str, ndim: int, node: Node) -> _
             found.axes = tuple(str(d) for d in dims)
     if found.voxel_size is None and node.format == "zarr3" and attrs.get("dimension_units"):
         units, vs = _dimension_units(attrs["dimension_units"], ndim)
-        found.units, found.voxel_size = units, vs
+        found.units, found.voxel_size, found.placed_by = units, vs, "dimension_units"
     return found
 
 
 def _dimension_units(spec: list, ndim: int) -> tuple[tuple[str, ...], tuple[float, ...]]:
     """tensorstore's ``dimension_units`` attribute: ``"4nm"``, ``null``, ``""``."""
-    import re
-
     units, vs = [], []
     for entry in spec:
         if not entry:
@@ -266,13 +308,6 @@ def _dimension_units(spec: list, ndim: int) -> tuple[tuple[str, ...], tuple[floa
         vs.append(float(m.group(1)) if m and m.group(1) else 1.0)
         units.append(m.group(2).strip() if m else "")
     return _units(units, ndim), _floats(vs, ndim, "dimension_units")
-
-
-def _units(values, ndim: int) -> tuple[str, ...]:
-    out = tuple("" if v is None else str(v) for v in values)
-    if len(out) != ndim:
-        raise ValueError(f"units has {len(out)} entries for a {ndim}-dimensional array: {out}")
-    return out
 
 
 def _ome(multiscale: dict, dataset: dict, ndim: int, path: str) -> _Resolved:
@@ -309,7 +344,7 @@ def _ome(multiscale: dict, dataset: dict, ndim: int, path: str) -> _Resolved:
             str((a.get("unit") if isinstance(a, dict) else None) or "") for a in axes_spec
         )
     return _Resolved(
-        axes, units, tuple(float(v) for v in scale), tuple(float(v) for v in translation)
+        axes, units, tuple(float(v) for v in scale), tuple(float(v) for v in translation), "ome"
     )
 
 
@@ -335,67 +370,66 @@ def _unpack_sequence(transforms: list[dict]) -> list[dict]:
 
 def _array_attrs(attrs: dict, ndim: int, path: str) -> _Resolved:
     """funlib (``resolution``/``voxel_size``, ``offset``, ``units``, ``axis_names``) or COSEM
-    (``transform``) attributes on the array itself, C order."""
+    (``transform``) attributes on the array itself, C order. An ``offset`` with no voxel
+    size places the array with voxels of 1."""
     found = _Resolved()
     transform = attrs.get("transform")
     if isinstance(transform, dict) and "scale" in transform:
         return _cosem_transform(transform, ndim, path)
+    found.axes = _axes(attrs.get("axis_names"), ndim)
     vs = attrs.get("voxel_size", attrs.get("resolution"))
-    if vs is None:
-        if attrs.get("axis_names"):
-            found.axes = (
-                tuple(str(a) for a in attrs["axis_names"])
-                if len(attrs["axis_names"]) == ndim
-                else None
-            )
+    offset = attrs.get("offset")
+    if vs is None and offset is None:
         return found
-    found.voxel_size = _floats(vs, ndim, f"{path}: voxel_size")
-    if attrs.get("axis_names") and len(attrs["axis_names"]) == ndim:
-        found.axes = tuple(str(a) for a in attrs["axis_names"])
+    found.voxel_size = _floats(
+        vs if vs is not None else [1.0] * ndim, ndim, f"{path}: voxel_size", pad=1.0
+    )
     if attrs.get("units") is not None:
-        found.units = _units(
-            attrs["units"] if isinstance(attrs["units"], list) else [attrs["units"]] * ndim, ndim
-        )
-    offset = attrs.get("offset", [0.0] * ndim)
-    corner = _floats(offset, ndim, f"{path}: offset")
-    found.translation = corner_to_centre(corner, found.voxel_size, found.axes or default_axes(ndim))
+        raw = attrs["units"] if isinstance(attrs["units"], list) else [attrs["units"]] * ndim
+        found.units = _units(raw, ndim, pad="")
+    corner = _floats(
+        offset if offset is not None else [0.0] * ndim, ndim, f"{path}: offset", pad=0.0
+    )
+    found.translation = corner_to_centre(corner, found.voxel_size, found.axes)
+    found.placed_by = "funlib"
     return found
 
 
 def _cosem_transform(transform: dict, ndim: int, path: str) -> _Resolved:
     order = transform.get("ordering", "C")
     rev = (lambda v: tuple(v)[::-1]) if order == "F" else tuple
-    scale = _floats(rev(transform["scale"]), ndim, f"{path}: transform.scale")
+    scale = _floats(rev(transform["scale"]), ndim, f"{path}: transform.scale", pad=1.0)
     translate = _floats(
-        rev(transform.get("translate", [0.0] * ndim)), ndim, f"{path}: transform.translate"
+        rev(transform.get("translate", [0.0] * ndim)), ndim, f"{path}: transform.translate", pad=0.0
     )
-    axes = tuple(str(a) for a in rev(transform["axes"])) if transform.get("axes") else None
-    units = _units(rev(transform["units"]), ndim) if transform.get("units") else None
-    return _Resolved(axes, units, scale, translate)  # translate is already a centre
+    axes = _axes(rev(transform["axes"]), ndim) if transform.get("axes") else None
+    units = _units(rev(transform["units"]), ndim, pad="") if transform.get("units") else None
+    return _Resolved(axes, units, scale, translate, "cosem")  # translate is already a centre
 
 
-def _check_against_attrs(attrs: dict, found: _Resolved, ndim: int, path: str) -> None:
+def _check_against_attrs(
+    attrs: dict, found: _Resolved, ndim: int, path: str, conflicts: str
+) -> None:
     """An OME translation beside a funlib ``offset``: equal (cellmap-analyze's writer) or a
     corner half a voxel below (funlib's writer) pass silently; anything else warns. A
-    disagreeing voxel size raises: that is how stale attributes are caught."""
+    disagreeing voxel size raises (or warns, per ``conflicts``): that is how stale
+    attributes are caught."""
     assert found.voxel_size is not None and found.translation is not None
     vs = np.asarray(found.voxel_size)
     attr_vs = attrs.get("voxel_size", attrs.get("resolution"))
-    if (
-        attr_vs is not None
-        and len(attr_vs) == ndim
-        and not np.allclose(attr_vs, vs, rtol=RTOL, atol=0)
-    ):
-        raise ValueError(
-            f"{path}: OME scale {found.voxel_size} disagrees with the array's voxel_size {list(attr_vs)}"
-        )
+    if attr_vs is not None and len(attr_vs) <= ndim:
+        padded = np.asarray(_floats(attr_vs, ndim, f"{path}: voxel_size", pad=1.0))
+        if not np.allclose(padded, vs, rtol=RTOL, atol=0):
+            message = f"{path}: OME scale {found.voxel_size} disagrees with the array's voxel_size {list(attr_vs)}"
+            if conflicts == "error":
+                raise ValueError(message)
+            logger.warning("%s; using the OME scale", message)
     offset = attrs.get("offset")
-    if offset is None or len(offset) != ndim:
+    if offset is None or len(offset) > ndim:
         return
-    offset = np.asarray(offset, dtype=float)
+    offset = np.asarray(_floats(offset, ndim, f"{path}: offset", pad=0.0))
     tr = np.asarray(found.translation)
-    axes = found.axes or default_axes(ndim)
-    corner = np.asarray(corner_to_centre(offset, vs, axes))
+    corner = np.asarray(corner_to_centre(offset, vs, found.axes))
     tol = RTOL * np.maximum(np.abs(vs), 1.0)
     if np.all(np.abs(offset - tr) <= tol) or np.all(np.abs(corner - tr) <= tol):
         return
@@ -414,7 +448,9 @@ def _n5(attrs: dict, group_attrs: dict, name: str, ndim: int) -> _Resolved:
     """COSEM ``transform`` on the array; else the group's ``multiscales[].datasets[].transform``
     for this path; else ``pixelResolution``/``resolution`` (array, else group) times the
     level's ``downsamplingFactors``, plus ``offset``. Lists other than ``transform`` are
-    x-first and reversed to C order here."""
+    x-first and reversed to C order here. Without an ``offset``: a funlib ``resolution``
+    means a corner at 0 (translation half a voxel); a ``pixelResolution`` follows
+    BigDataViewer, ``(f - 1) / 2`` full-resolution voxels on."""
     transform = attrs.get("transform")
     if isinstance(transform, dict) and "scale" in transform:
         return _cosem_transform(transform, ndim, name)
@@ -422,41 +458,51 @@ def _n5(attrs: dict, group_attrs: dict, name: str, ndim: int) -> _Resolved:
     if hit is not None and isinstance(hit[1].get("transform"), dict):
         return _cosem_transform(hit[1]["transform"], ndim, name)
 
+    axes = _axes(list(attrs.get("axes", group_attrs.get("axes", [])) or [])[::-1], ndim)
     unit: str | None = None
-    base = None
+    base, key = None, None
     for source in (attrs, group_attrs):
         if "pixelResolution" in source:
             pr = source["pixelResolution"]
-            if isinstance(pr, dict):
-                base, unit = pr.get("dimensions"), pr.get("unit")
-            else:
-                base = pr
+            base, unit = (
+                (pr.get("dimensions"), pr.get("unit")) if isinstance(pr, dict) else (pr, None)
+            )
+            key = "pixelResolution"
             break
         if "resolution" in source:
-            base = source["resolution"]
+            base, key = source["resolution"], "resolution"
             break
     if base is None:
-        return _Resolved()
-    base = np.asarray(_floats(base, ndim, f"{name}: pixelResolution"))[::-1]  # x-first -> C
+        return _Resolved(axes)
+    base = np.asarray(_floats(list(base)[::-1], ndim, f"{name}: {key}", pad=1.0))  # x-first -> C
     factors = np.asarray(
-        _floats(attrs.get("downsamplingFactors", [1] * ndim), ndim, f"{name}: downsamplingFactors")
-    )[::-1]
+        _floats(
+            list(attrs.get("downsamplingFactors", [1]))[::-1],
+            ndim,
+            f"{name}: downsamplingFactors",
+            pad=1.0,
+        )
+    )
     voxel_size = base * factors
 
     units_list = attrs.get("units", group_attrs.get("units"))
     if unit is None and units_list is not None:
-        units = _units(list(units_list)[::-1], ndim)
+        units = _units(list(units_list)[::-1], ndim, pad="")
     else:
-        units = tuple(str(unit or "") for _ in range(ndim))
-    axes = default_axes(ndim)
+        units = tuple(
+            (str(unit or "") if i in set(spatial_axes(axes or default_axes(ndim))) else "")
+            for i in range(ndim)
+        )
 
     if "offset" in attrs:
-        corner = np.asarray(_floats(attrs["offset"], ndim, f"{name}: offset"))[::-1]
+        corner = _floats(list(attrs["offset"])[::-1], ndim, f"{name}: offset", pad=0.0)
         translation = corner_to_centre(corner, voxel_size, axes)
+    elif key == "resolution":
+        translation = corner_to_centre((0.0,) * ndim, voxel_size, axes)  # funlib: a corner at 0
     else:
         # BigDataViewer: the downsampled voxel's centre is the centre of the block it covers
         translation = tuple(float(v) for v in (factors - 1) / 2 * base)
-    return _Resolved(None, units, tuple(float(v) for v in voxel_size), tuple(translation))
+    return _Resolved(axes, units, tuple(float(v) for v in voxel_size), tuple(translation), "n5")
 
 
 # --- precomputed -------------------------------------------------------------
@@ -469,6 +515,12 @@ def _precomputed(info: dict, scale_index: int, ndim: int) -> _Resolved:
     spatial_tr = [(o + 0.5) * r for o, r in zip(voxel_offset, resolution)]
     if ndim == 4:  # channel kept (more than one)
         return _Resolved(
-            ("c", "z", "y", "x"), ("", "nm", "nm", "nm"), (1.0, *resolution), (0.0, *spatial_tr)
+            ("c", "z", "y", "x"),
+            ("", "nm", "nm", "nm"),
+            (1.0, *resolution),
+            (0.0, *spatial_tr),
+            "precomputed",
         )
-    return _Resolved(("z", "y", "x"), ("nm", "nm", "nm"), tuple(resolution), tuple(spatial_tr))
+    return _Resolved(
+        ("z", "y", "x"), ("nm", "nm", "nm"), tuple(resolution), tuple(spatial_tr), "precomputed"
+    )

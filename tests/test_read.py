@@ -230,3 +230,60 @@ def test_chunks_covering(cube):
     assert set(vol.chunks_covering((1, 2, 3), (4, 6, 9))) == set(np.ndindex(2, 2, 2))
     assert list(vol.chunks_covering((3, 4, 5), (6, 8, 10))) == [(1, 1, 1)]
     assert list(vol.chunks_covering((20, 0, 0), (21, 1, 1))) == []
+
+
+def test_document_less_group_is_probed_and_levels_take_integers(tmp_path):
+    group = tmp_path / "bare"  # no .zgroup, no attributes.json: just s0 and s1
+    for name, shape in (("s0", (4, 4, 4)), ("s1", (2, 2, 2))):
+        write_zarr2(
+            group / name,
+            pattern(shape),
+            attrs={"resolution": [4, 4, 4] if name == "s0" else [8, 8, 8]},
+        )
+    node = wa.detect(str(group))
+    assert node.kind == "group" and node.format == "zarr2" and node.attrs == {}
+    assert wa.detect(str(tmp_path / "nowhere"), missing_ok=True) is None
+    assert wa.open_pyramid(str(group)).names == ["s0", "s1"]
+    assert wa.open(str(group), level=1).level_name == "s1"
+    assert wa.open_pyramid(str(group)).by_name(-1).voxel_size == (8.0, 8.0, 8.0)
+    assert tuple(wa.open_tensorstore(str(group), level=0).shape) == (4, 4, 4)
+
+
+def test_read_index_can_pin_axes_per_read(tmp_path):
+    data = pattern((3, 2, 4, 5, 6))
+    group = tmp_path / "tc5.zarr"
+    write_zarr3_group(group)
+    write_zarr3(group / "s0", data, dimension_names=list("tczyx"))
+    vol = wa.open(str(group / "s0"), units=None)
+    out = vol.read_index((0, 0, 0), (4, 5, 6), select={"t": 2, "c": 1})
+    np.testing.assert_array_equal(out, data[2, 1])
+    out, inside = vol.read_index((0, 0, 0), (4, 5, 8), select={"t": 0, "c": 0}, mask=True)
+    assert (
+        out.shape == inside.shape == (4, 5, 8)
+        and inside[..., :6].all()
+        and not inside[..., 6:].any()
+    )
+
+
+def test_base_voxel_size_rescales_every_level(tmp_path):
+    """BigStitcher writes OME scale and translation in level-0 voxels but labels them
+    micrometre; declaring level 0's true voxel size fixes every level."""
+    group = tmp_path / "bs.zarr"
+    datasets = [("s0", (1, 1, 1), (0, 0, 0)), ("s1", (2, 2, 2), (0.5, 0.5, 0.5))]
+    write_zarr2_group(
+        group, ome_multiscales("zyx", datasets, units={a: "micrometer" for a in "zyx"})
+    )
+    write_zarr2(group / "s0", pattern((8, 8, 8)))
+    write_zarr2(group / "s1", pattern((4, 4, 4)))
+    s1 = wa.open(
+        str(group / "s1"),
+        base_voxel_size=(1.0, 0.157, 0.157),
+        base_units="micrometer",
+        units="micrometer",
+    )
+    assert s1.voxel_size == pytest.approx((2.0, 0.314, 0.314))
+    assert s1.translation == pytest.approx((0.5, 0.0785, 0.0785))
+    assert s1.grid.units == ("micrometer",) * 3
+    assert wa.open(
+        str(group / "s0"), base_voxel_size=(1.0, 0.157, 0.157), units=None
+    ).voxel_size == pytest.approx((1.0, 0.157, 0.157))

@@ -25,6 +25,7 @@ def test_metadata_matches_fixture(tmp_path, case):
     assert list(meta.units) == expect["units"]
     assert meta.axes_named is expect["axes_named"]
     assert meta.shape == tuple(case["shape"])
+    assert meta.placed_by == expect["placed_by"]
     if "dtype" in expect:
         assert meta.dtype == np.dtype(expect["dtype"])
     for key in expect.get("attrs_include", []):
@@ -97,3 +98,27 @@ def test_unknown_unit_raises_only_when_converted(tmp_path):
     assert wa.open(str(group / "s0"), units=None).meta.units == ("furlong",) * 3
     with pytest.raises(ValueError, match="furlong"):
         wa.open(str(group / "s0"))
+
+
+def test_voxel_size_conflict_can_warn_instead(tmp_path, caplog):
+    group = tmp_path / "v.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (4, 4, 4), None)]))
+    write_zarr2(group / "s0", pattern((2, 2, 2)), attrs={"voxel_size": [8, 8, 8]})
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        vol = wa.open(str(group / "s0"), metadata_conflicts="warn")
+    assert vol.voxel_size == (4.0, 4.0, 4.0) and any(
+        "disagrees" in r.message for r in caplog.records
+    )
+
+
+def test_converting_a_unitless_axis_warns_once(tmp_path, caplog):
+    group = tmp_path / "nounit.zarr"
+    write_zarr2_group(group)
+    write_zarr2(
+        group / "s0", pattern((2, 2, 2)), attrs={"resolution": [4, 4, 4], "offset": [0, 0, 0]}
+    )
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        assert wa.open(str(group / "s0")).voxel_size == (4.0, 4.0, 4.0)
+        wa.open(str(group / "s0"))
+    assert sum("no unit stored" in r.message for r in caplog.records) == 1
+    assert wa.open(str(group / "s0"), units=None).meta.units == ("", "", "")

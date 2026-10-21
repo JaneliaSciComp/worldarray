@@ -107,3 +107,11 @@ def test_contexts_and_retry_timeouts():
         and r.timeout_for(16 << 30, remote=False) == 30.0
     )
     assert wa.Retry(timeout=7).timeout_for(10**12, remote=True) == 7.0
+
+
+def test_metadata_reads_carry_capped_retries():
+    spec = store.metadata_spec({"driver": "s3", "bucket": "b", "path": "p/"})
+    assert spec["context"]["s3_request_retries"] == store.METADATA_RETRIES
+    assert "context" not in store.metadata_spec({"driver": "file", "path": "/x/"})
+    assert wa.corner_to_centre((0, 0, 0, 0), (1, 2, 4, 8)) == (0.0, 1.0, 2.0, 4.0)
+    assert wa.default_axes(4) == ("c", "z", "y", "x")
