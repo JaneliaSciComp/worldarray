@@ -117,6 +117,7 @@ vol.ts             # tensorstore.TensorStore: C-order axes, origin 0, selected a
 vol.meta           # ArrayMeta in the store's own units
 vol.grid           # ArrayMeta in the requested units, every axis
 vol.shape, vol.dtype, vol.axes, vol.spatial, vol.level_name, vol.levels, vol.remote
+vol.path           # what the caller passed (a group, say); vol.level_path is the array actually opened
 vol.voxel_size     # tuple[float] in `units`, spatial axes, the array's order (zyx for a volume)
 vol.translation    # tuple[float] in `units`: the CENTRE of voxel 0        (OME-NGFF's word, OME-NGFF's meaning)
 vol.corner         # tuple[float] in `units`: translation - voxel_size / 2 (what funlib, daisy, Neuroglancer call the offset)

@@ -302,6 +302,13 @@ class WorldArray:
         return self._ref.name
 
     @property
+    def level_path(self) -> str:
+        """The path of the array actually opened: the level under a group, or ``path`` itself
+        for an array (``path`` stays what the caller passed). Writers and chunk-key code
+        want this one."""
+        return self._meta.path
+
+    @property
     def remote(self) -> bool:
         return is_remote(self._node.path)
 

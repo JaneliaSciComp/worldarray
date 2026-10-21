@@ -76,6 +76,7 @@ wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
 
 `WorldArray` has `ts`, `meta` (native units), `grid` (requested units, all axes), `shape`,
 `dtype`, `axes`, `spatial`, `voxel_size`, `translation`, `corner`, `levels`, `level_name`,
+`level_path` (the array actually opened; `path` is what you passed),
 `read_index(begin, end, padding=None, mask=False, retries=None, select=None)`,
 `read(box, voxel_size=None, padding=None, method=None, mask=False, retries=None, strict=False, anchor=None)`,
 `index_box(box)`, `chunks_covering(begin, end)` and `reopen(context=None, **overrides)`. A **box** is a `(begin, end)` pair of float tuples over the spatial

@@ -408,3 +408,9 @@ def test_base_voxel_size_on_a_unitless_n5_pyramid_warns_about_nothing(tmp_path, 
     assert s1.voxel_size == pytest.approx((1.0, 0.314, 0.314)) and s1.translation == pytest.approx(
         (0.0, 0.0785, 0.0785)
     )
+
+
+def test_level_path_is_the_opened_array(pyramid):
+    group, _ = pyramid
+    vol = wa.open(group, level="s1")
+    assert vol.path == group and vol.level_path.endswith("/s1") and vol.level_path == vol.meta.path
