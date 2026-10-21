@@ -81,7 +81,7 @@ def kvstore_specs(root: str) -> list[dict]:
     (anonymous without any), then the bucket's public https URL for credentials that are
     there but broken (``TENSORSTORE_GCS_HTTP_URL`` moves it). Anything else: one way. Each
     root ends in ``/`` because tensorstore concatenates keys literally."""
-    root = normalize_path(root) + "/"
+    root = normalize_path(root).rstrip("/") + "/"  # "/" stays "/", never "//"
     if not _SCHEME.match(root):
         return [{"driver": "file", "path": root}]
     spec = ts.KvStore.Spec(root).to_json()
@@ -242,6 +242,15 @@ class Node:
         if self.format == "n5":
             return dict(self.docs.get("attributes.json", {}) or {})
         return dict(self.docs.get("info", {}) or {})
+
+    @property
+    def ome_attrs(self) -> dict:
+        """``attrs`` with OME-NGFF 0.5's ``ome`` member unwrapped onto the top level, so
+        ``multiscales``, ``coordinateSystems``, ``coordinateTransformations`` and the rest
+        read the same for 0.4 and 0.5."""
+        attrs = self.attrs
+        ome = attrs.get("ome")
+        return {**attrs, **ome} if isinstance(ome, dict) else attrs
 
     @property
     def multiscales(self) -> list[dict]:

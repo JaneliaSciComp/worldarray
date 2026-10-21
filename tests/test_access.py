@@ -137,3 +137,10 @@ def test_s3_endpoint_service_variable_and_gcs_cache_key(monkeypatch):
     spec = '{"driver": "memory"}'
     first = store._metadata_kvstore(spec, "http://a.local")
     assert store._metadata_kvstore(spec, "http://b.local") is not first  # keyed on the variable too
+
+
+def test_paths_near_the_filesystem_root_do_not_break_the_kvstore():
+    assert store.kvstore_specs("/") == [{"driver": "file", "path": "/"}]
+    assert store.kvstore_specs("/tmp") == [{"driver": "file", "path": "/tmp/"}]
+    assert wa.detect("/", missing_ok=True) is None  # probes the root's keys without raising
+    assert store.parent("/tmp") == "/" and store.parent("/") is None

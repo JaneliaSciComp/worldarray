@@ -512,3 +512,26 @@ def test_precomputed_sN_path_means_scale_index(tmp_path):
     assert wa.open(str(pre / "s1")).voxel_size == (8.0, 8.0, 8.0)
     assert wa.open(str(pre / "8_8_8")).level_name == "8_8_8"
     assert tuple(wa.open_tensorstore(str(pre), level="s0").shape) == (4, 4, 4)
+
+
+def test_an_unlisted_array_under_a_pyramid_does_not_walk_further(tmp_path, caplog):
+    import logging
+
+    outer = tmp_path / "outer.zarr"
+    write_zarr2_group(outer, ome_multiscales("zyx", [("inner/s0", (4, 4, 4), (2, 2, 2))]))
+    inner = outer / "inner"
+    write_zarr2_group(
+        inner, ome_multiscales("zyx", [("s0", (8, 8, 8), (4, 4, 4))])
+    )  # its own pyramid
+    write_zarr2(inner / "s0", pattern((2, 2, 2)))
+    write_zarr2(inner / "s9", pattern((2, 2, 2)))  # listed by neither
+    assert wa.open(str(inner / "s0")).voxel_size == (
+        8.0,
+        8.0,
+        8.0,
+    )  # the parent wins over the grandparent
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        assert wa.open(str(inner / "s9"), units=None).meta.placed_by is None
+    assert any("list no dataset" in r.message for r in caplog.records)
+    node = wa.detect(str(outer))
+    assert node.ome_attrs["multiscales"] == node.multiscales

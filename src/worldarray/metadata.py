@@ -310,21 +310,26 @@ def _ome_hit(node: Node, group_attrs: dict, max_depth: int = 4) -> tuple[dict, d
     hit = _dataset_for(multiscales_of(group_attrs), name)
     if hit is not None:
         return hit
-    ancestor, rel = parent(node.path), name
-    for _ in range(max_depth - 1):
-        if ancestor is None or parent(ancestor) is None:
-            break
-        rel = f"{basename(ancestor)}/{rel}"
-        ancestor = parent(ancestor)
-        hit = _dataset_for(multiscales_of(_group_attrs_at(ancestor, node.format)), rel)
-        if hit is not None:
-            return hit
-    if multiscales_of(group_attrs):
+    if multiscales_of(group_attrs):  # the parent is a pyramid, just not ours: no walk
         logger.warning(
             "%s: the parent group's multiscales list no dataset named %r; the array is placed by its own attributes, or not at all",
             node.path,
             name,
         )
+        return None
+    ancestor, rel = parent(node.path), name
+    for _ in range(max_depth - 1):
+        up = parent(ancestor) if ancestor is not None else None
+        if up is None or up == "/":  # never probe the filesystem root or a bucket root's parent
+            break
+        rel = f"{basename(ancestor)}/{rel}"
+        ancestor = up
+        multiscales = multiscales_of(_group_attrs_at(ancestor, node.format))
+        hit = _dataset_for(multiscales, rel)
+        if hit is not None:
+            return hit
+        if multiscales:  # an ancestor pyramid that does not list us: stop here
+            break
     return None
 
 

@@ -56,7 +56,7 @@ def discover(node: Node) -> list[LevelRef]:
     if node.kind == "array":
         ancestor, rel = parent(node.path), basename(node.path)
         for _ in range(4):  # a dataset path may have more than one component ("seg/s0")
-            if ancestor is None:
+            if ancestor is None or ancestor == "/":
                 break
             group = detect(ancestor, missing_ok=True)
             if (
