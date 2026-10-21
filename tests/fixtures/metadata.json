@@ -1287,6 +1287,55 @@
         "axes_named": false,
         "placed_by": "funlib"
       }
+    },
+    {
+      "name": "n5_bigstitcher_resolution_with_downsampling_factors_is_bigdataviewer",
+      "format": "n5",
+      "shape": [
+        4,
+        6,
+        8
+      ],
+      "array": "s1",
+      "group_attrs": {
+        "resolution": [
+          0.157,
+          0.157,
+          1.0
+        ],
+        "multiScale": true
+      },
+      "attrs": {
+        "downsamplingFactors": [
+          2,
+          2,
+          1
+        ]
+      },
+      "expect": {
+        "voxel_size": [
+          1.0,
+          0.314,
+          0.314
+        ],
+        "translation": [
+          0,
+          0.0785,
+          0.0785
+        ],
+        "axes": [
+          "z",
+          "y",
+          "x"
+        ],
+        "units": [
+          "",
+          "",
+          ""
+        ],
+        "axes_named": false,
+        "placed_by": "n5"
+      }
     }
   ]
 }

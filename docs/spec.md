@@ -223,8 +223,8 @@ this document and that one differ, fix one of them.
    so `(z, y, x)` for a volume, `(c, z, y, x)` with channels, `(t, c, z, y, x)` for OME
    0.5. Nothing is reordered beyond that transposition; `select` pins non-spatial axes. A
    non-zero stored origin (precomputed `voxel_offset`) is moved to 0 in `.ts` and carried in
-   `translation`. A precomputed single channel is dropped; more than one is kept as a
-   leading `c` axis. Unnamed axes are called `("t", "c", "z", "y", "x")[-ndim:]` (chunkmirage's
+   `translation`. \1 Sharded stores (zarr v3 `sharding_indexed`, sharded precomputed) read like any
+   other through tensorstore; `chunk_shape` is the inner read chunk, not the shard. Unnamed axes are called `("t", "c", "z", "y", "x")[-ndim:]` (chunkmirage's
    default) with `axes_named` False, so a consumer can apply its own default instead.
 
 3. **Units are kept as stored and converted only on the axes a caller asks to convert**
@@ -262,9 +262,10 @@ this document and that one differ, fix one of them.
      `multiscales[].datasets[].transform` for this path; else `pixelResolution` (both the
      `{dimensions, unit}` form and a bare list) or `resolution`, from the array else the
      group, times the level's `downsamplingFactors`; plus `offset`; axes from the `axes`
-     attribute. These lists are x-first. Without an `offset`, a funlib `resolution` means a
-     corner at 0 (translation half a voxel), while a `pixelResolution` follows
-     BigDataViewer.
+     attribute. These lists are x-first. Without an `offset`, a level with `downsamplingFactors` follows
+     BigDataViewer whichever key gave the base (BigStitcher writes `resolution` and
+     `downsamplingFactors`), and a funlib `resolution` with no `downsamplingFactors` means a
+     corner at 0 (translation half a voxel); funlib never writes `downsamplingFactors`.
    - **Short lists.** A funlib, COSEM or N5 per-axis list shorter than the array (a 3-entry
      `voxel_size` on a `(c, z, y, x)` prediction, which funlib's `prepare_ds(num_channels=)`
      writes) covers the trailing axes; the leading axes get voxel size 1, translation 0,

@@ -181,7 +181,8 @@ class WorldArray:
         by the same per-axis factor, so stores whose metadata is in voxels of level 0 (as
         BigStitcher writes) or unitless (a BigDataViewer N5) can be placed correctly."""
         base = tuple(float(v) for v in base)
-        level0 = self.levels_pyramid.levels[0].meta if len(self.levels_pyramid) > 1 else self._meta
+        native = Pyramid(self.path, context=self.context, units=None, select=self._select)
+        level0 = native.levels[0].meta if len(native) > 1 else self._meta
         spatial = self._meta.spatial
         if len(base) != len(spatial):
             raise ValueError(

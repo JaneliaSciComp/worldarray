@@ -117,8 +117,8 @@ These are the rules the package exists to hold in one place.
 
 2. **Axis order is the store's C order; N5 and precomputed are transposed to it** on read,
    so `(z, y, x)` for a volume, `(c, z, y, x)` with channels, `(t, c, z, y, x)` for OME 0.5.
-   A precomputed single channel is dropped; a non-zero origin is moved to 0 in `.ts` and
-   carried in `translation`. Unnamed axes are called `("t", "c", "z", "y", "x")[-ndim:]`
+   \1 Sharded zarr v3 and sharded precomputed read like any other store;
+   `chunk_shape` is the inner read chunk. Unnamed axes are called `("t", "c", "z", "y", "x")[-ndim:]`
    and `axes_named` is False.
 
 3. **Units are kept as stored and converted only where asked.** Any unit string on any axis
@@ -138,8 +138,8 @@ These are the rules the package exists to hold in one place.
    `_ARRAY_DIMENSIONS` or `axis_names`. N5: the array's `transform`; else the group's
    `multiscales[].datasets[].transform` for this path; else `pixelResolution` (dict or bare
    list) or `resolution`, array else group, times `downsamplingFactors`, plus `offset`
-   (x-first lists; without `offset`, a `resolution` is a corner at 0 and a
-   `pixelResolution` follows BigDataViewer). Per-axis lists shorter than the array cover the
+   (x-first lists; without `offset`, a level with `downsamplingFactors` follows
+   BigDataViewer and a funlib `resolution` without them is a corner at 0). Per-axis lists shorter than the array cover the
    trailing axes (a 3-entry `voxel_size` on a `(c, z, y, x)` prediction); OME lists must
    match. precomputed: the scale's `resolution` and `voxel_offset`. An OME
    `translation` beside an `offset` equal to it, or half a voxel below it, passes silently;

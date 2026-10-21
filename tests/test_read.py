@@ -324,3 +324,87 @@ def test_nested_dataset_paths_find_the_multiscales_two_levels_up(tmp_path, caplo
     with caplog.at_level(logging.WARNING, logger="worldarray"):
         wa.open(str(group / "s7"), units=None)
     assert any("list no dataset" in r.message for r in caplog.records)
+
+
+def test_sharded_zarr3_and_sharded_precomputed_read_like_any_other(tmp_path):
+    import tensorstore as ts
+
+    data = pattern((64, 64, 64), "uint8")
+    z = tmp_path / "sharded.zarr"
+    spec = {
+        "driver": "zarr3",
+        "kvstore": {"driver": "file", "path": str(z) + "/"},
+        "metadata": {
+            "shape": [64, 64, 64],
+            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [32, 32, 32]}},
+            "data_type": "uint8",
+            "codecs": [
+                {
+                    "name": "sharding_indexed",
+                    "configuration": {
+                        "chunk_shape": [16, 16, 16],
+                        "codecs": [{"name": "bytes"}],
+                        "index_codecs": [{"name": "bytes"}, {"name": "crc32c"}],
+                    },
+                }
+            ],
+        },
+    }
+    ts.open(spec, create=True, delete_existing=True).result().write(data).result()
+    vol = wa.open(str(z), units=None)
+    assert vol.meta.chunk_shape == (16, 16, 16)  # the inner read chunk, not the shard
+    np.testing.assert_array_equal(vol.read_index((5, 6, 7), (40, 50, 60)), data[5:40, 6:50, 7:60])
+    assert set(vol.chunks_covering((0, 0, 0), (17, 1, 1))) == {(0, 0, 0), (1, 0, 0)}
+
+    pre = tmp_path / "sharded_pre"
+    spec = {
+        "driver": "neuroglancer_precomputed",
+        "kvstore": {"driver": "file", "path": str(pre) + "/"},
+        "multiscale_metadata": {"data_type": "uint8", "num_channels": 1, "type": "image"},
+        "scale_metadata": {
+            "size": [64, 64, 64],
+            "resolution": [4, 4, 4],
+            "voxel_offset": [0, 0, 0],
+            "chunk_size": [16, 16, 16],
+            "encoding": "raw",
+            "key": "s0",
+            "sharding": {
+                "@type": "neuroglancer_uint64_sharded_v1",
+                "preshift_bits": 0,
+                "hash": "identity",
+                "minishard_bits": 3,
+                "shard_bits": 3,
+                "minishard_index_encoding": "raw",
+                "data_encoding": "raw",
+            },
+        },
+    }
+    ts.open(spec, create=True, delete_existing=True).result().write(
+        np.ascontiguousarray(data.T)[..., None]
+    ).result()
+    vol = wa.open(str(pre / "s0"))
+    assert vol.voxel_size == (4.0, 4.0, 4.0) and vol.translation == (2.0, 2.0, 2.0)
+    np.testing.assert_array_equal(
+        vol.read(((20.0, 24.0, 28.0), (160.0, 200.0, 240.0))), data[5:40, 6:50, 7:60]
+    )
+
+
+def test_base_voxel_size_on_a_unitless_n5_pyramid_warns_about_nothing(tmp_path, caplog):
+    import logging
+
+    group = tmp_path / "bs.n5"
+    write_n5_group(group, {"resolution": [0.157, 0.157, 1.0]})
+    write_n5(group / "s0", pattern((4, 8, 8)), attrs={"downsamplingFactors": [1, 1, 1]})
+    write_n5(group / "s1", pattern((4, 4, 4)), attrs={"downsamplingFactors": [2, 2, 1]})
+    with caplog.at_level(logging.WARNING, logger="worldarray"):
+        s1 = wa.open(
+            str(group),
+            level=1,
+            base_voxel_size=(1.0, 0.157, 0.157),
+            base_units="micrometer",
+            units="micrometer",
+        )
+    assert not [r for r in caplog.records if "no unit" in r.message]
+    assert s1.voxel_size == pytest.approx((1.0, 0.314, 0.314)) and s1.translation == pytest.approx(
+        (0.0, 0.0785, 0.0785)
+    )
