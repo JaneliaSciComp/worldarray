@@ -414,3 +414,21 @@ def test_level_path_is_the_opened_array(pyramid):
     group, _ = pyramid
     vol = wa.open(group, level="s1")
     assert vol.path == group and vol.level_path.endswith("/s1") and vol.level_path == vol.meta.path
+    assert wa.open(vol.level_path).level_name == "s1"  # reopens exactly this level, by path alone
+
+
+def test_level_path_reopens_a_precomputed_scale(tmp_path):
+    data = pattern((4, 4, 4), "uint8")
+    pre = tmp_path / "pre"
+    write_precomputed(
+        pre,
+        [
+            {"data": data, "resolution": [4, 4, 4]},
+            {"data": data[::2, ::2, ::2], "resolution": [8, 8, 8]},
+        ],
+    )
+    coarse = wa.open(str(pre), level=1)
+    assert coarse.level_path == str(pre) + "/s1"
+    again = wa.open(coarse.level_path)
+    assert again.level_name == "s1" and again.voxel_size == (8.0, 8.0, 8.0)
+    np.testing.assert_array_equal(again.read_index((0, 0, 0), (2, 2, 2)), data[::2, ::2, ::2])
