@@ -1071,8 +1071,8 @@ over funlib geometry, by this spec's own assignment.
 13. **World boxes on blocks.** cellmap-flow reads its input at one voxel size by a world
    box grown by a context in nanometres and writes at another; `blocks` (0.3) gives index
    boxes on one grid. `Grid.blocks` could carry world boxes too (`b.box`, `b.read_box` as
-   `Box`, a context in world units). Two lines on cellmap-flow's side today; a candidate
-   for 0.4.
+   `Box`, a context in world units). Two lines on cellmap-flow's side today. Not planned
+   (2026-10-22): daisy does cellmap-flow's tiling and stays; reopen if cellmap-flow drops it.
 
 ## 8. Constraints for whoever builds on this
 
