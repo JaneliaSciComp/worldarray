@@ -150,3 +150,36 @@ def test_lenient_units_take_unknown_units_as_the_target(tmp_path, caplog):
     )
     assert "nanometer" in wa.units.TABLE["length"] and "second" in wa.units.TABLE["time"]
     assert wa.open(str(group / "s0"), units=None).meta.fill_value in (None, 0)
+
+
+def test_parent_group_funlib_attrs_place_an_attribute_less_array(tmp_path):
+    """funlib's keys on the parent group, the array carrying none, zarr and N5 alike
+    (mesh-n-bone's inputs): read as on the array, offset a corner."""
+    from conftest import write_n5, write_n5_group
+
+    for fmt in ("zarr2", "n5"):
+        root = tmp_path / f"vol.{fmt}"
+        if fmt == "zarr2":
+            write_zarr2_group(root, {"voxel_size": [1, 2, 3], "offset": [4, 4, 4]})
+            write_zarr2(root / "s0", pattern((4, 4, 4)))
+        else:
+            write_n5_group(root, {"voxel_size": [1, 2, 3], "offset": [4, 4, 4]})
+            write_n5(root / "s0", pattern((4, 4, 4)))
+        meta = wa.metadata(str(root / "s0"))
+        assert meta.voxel_size == (1.0, 2.0, 3.0), fmt
+        assert meta.translation == pytest.approx((4.5, 5.0, 5.5)), fmt
+        assert meta.placed_by == "funlib", fmt
+
+
+def test_n5_array_funlib_keys_are_c_order(tmp_path):
+    """``voxel_size``/``offset`` under funlib's names on an N5 array are not reversed, unlike
+    ``resolution`` and ``pixelResolution``, because zarr-python's N5 store leaves user
+    attributes alone."""
+    from conftest import write_n5
+
+    root = tmp_path / "vol.n5"
+    write_n5(root / "s0", pattern((4, 4, 4)), attrs={"voxel_size": [1, 2, 3], "offset": [4, 4, 4]})
+    meta = wa.metadata(str(root / "s0"))
+    assert meta.voxel_size == (1.0, 2.0, 3.0)
+    assert meta.translation == pytest.approx((4.5, 5.0, 5.5))
+    assert meta.placed_by == "funlib"

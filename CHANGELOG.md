@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.1 (2026-10-22)
+
+- funlib `voxel_size`/`offset` on the parent group place an array that carries none, for
+  zarr and N5 alike; funlib's keys on an N5 array are read in the array's C order, as
+  zarr-python's N5 store writes them (both from mesh-n-bone's review of its PR #48).
+- A precomputed path that names a scale is that scale under `level=0` or `"first"` too;
+  other levels warn and are ignored, as on an array path.
+- The GCE metadata guard is applied only off Google Cloud (decided from the DMI product
+  name and the `GCE_METADATA_*` variables), so metadata-server credentials keep working on
+  a Google VM.
+- `Pyramid.placements()`, `voxel_sizes()` and `translations()` read the group document when
+  the pyramid was opened through one of its level paths too; they used to open every level
+  from there, and a missing level made them raise.
+- **Placement change.** An N5 level with `downsamplingFactors` and no offset now sits with
+  its corner at the origin at every level, as Neuroglancer draws N5: translation
+  `f / 2 * base`. 0.1.0 followed BigDataViewer for `pixelResolution` pyramids, centring the
+  base's voxel 0 on the origin (`(f - 1) / 2 * base`, half a base voxel lower), while
+  placing `resolution` pyramids with the corner at the origin, so the two disagreed. Two
+  shared fixture cases move and are renamed: `n5_group_pixelresolution_and_downsampling_factors_corner_at_origin`
+  (translation 4, 4, 4) and `n5_bigstitcher_resolution_with_downsampling_factors_corner_at_origin`
+  (0.5, 0.157, 0.157).
+
 ## 0.1.0 (2026-10-21)
 
 - First version, built to `docs/spec.md`: open zarr v2, zarr v3, N5 and Neuroglancer

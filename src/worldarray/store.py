@@ -88,6 +88,19 @@ def join(base: str, *parts: str) -> str:
 # Access
 
 
+@functools.lru_cache(maxsize=1)
+def _on_google_cloud() -> bool:
+    """A Google VM or GKE node, decided with no network call: the environment names a
+    metadata host, or the machine's DMI product name says Google."""
+    if os.environ.get("GCE_METADATA_HOST") or os.environ.get("GCE_METADATA_ROOT"):
+        return True
+    try:
+        with open("/sys/class/dmi/id/product_name") as f:
+            return f.read().strip().startswith("Google")
+    except OSError:
+        return False
+
+
 def kvstore_specs(root: str) -> list[dict]:
     """The tensorstore kvstore specs that read the directory ``root``, in the order to try
     them. ``s3://``: anonymously, then AWS's default credentials (S3 refuses even a public
@@ -109,9 +122,10 @@ def kvstore_specs(root: str) -> list[dict]:
             extra["aws_region"] = region
         return [{**spec, **extra, "aws_credentials": {"type": t}} for t in ("anonymous", "default")]
     if spec["driver"] == "gcs":
-        if GUARD_GCE_METADATA:
+        if GUARD_GCE_METADATA and not _on_google_cloud():
             # off Google Cloud, tensorstore's probe of the GCE metadata server for credentials
-            # stalls every gs:// open for seconds; point it at a name that fails at once
+            # stalls every gs:// open for seconds; point it at a name that fails at once. On a
+            # Google machine the server is real and the credentials it serves must keep working
             os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
         public = (os.environ.get("TENSORSTORE_GCS_HTTP_URL") or GCS_PUBLIC_URL).rstrip("/")
         return [

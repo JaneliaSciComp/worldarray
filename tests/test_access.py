@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
 
@@ -192,3 +194,17 @@ def test_capped_context_can_leave_the_network_alone():
     spec = wa.capped_context_spec(concurrency=2, network=False)
     assert "s3_request_concurrency" not in spec and spec["file_io_concurrency"] == {"limit": 2}
     assert "s3_request_concurrency" in wa.capped_context_spec()
+
+
+def test_gce_guard_is_left_alone_on_a_google_machine(monkeypatch):
+    """Off Google Cloud the metadata probe is short-circuited; on a Google machine the
+    variable is left alone so the real metadata server's credentials keep working."""
+    monkeypatch.setenv("GCE_METADATA_ROOT", "remembered-for-restoration")
+    monkeypatch.delenv("GCE_METADATA_ROOT")
+    monkeypatch.delenv("GCE_METADATA_HOST", raising=False)
+    monkeypatch.setattr(store, "_on_google_cloud", lambda: True)
+    store.kvstore_specs("gs://bucket/vol")
+    assert "GCE_METADATA_ROOT" not in os.environ
+    monkeypatch.setattr(store, "_on_google_cloud", lambda: False)
+    store.kvstore_specs("gs://bucket/vol")
+    assert os.environ["GCE_METADATA_ROOT"] == "metadata.google.internal.invalid"
