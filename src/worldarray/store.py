@@ -77,10 +77,15 @@ GUARD_GCE_METADATA = True  # see kvstore_specs
 
 
 def basename(path: str) -> str:
+    """The last component of a path or URL (``s3://b/a/s0`` gives ``s0``); a trailing slash
+    is dropped first."""
     return normalize_path(path).rsplit("/", 1)[-1]
 
 
 def join(base: str, *parts: str) -> str:
+    """``base`` and ``parts`` joined by single slashes, keeping a URL's scheme
+    (``join("s3://b/a/", "s0")`` gives ``s3://b/a/s0``). Public, with ``parent`` and
+    ``basename``; like them it normalises ``base`` first (a local path made absolute)."""
     return "/".join([normalize_path(base).rstrip("/"), *(p.strip("/") for p in parts)])
 
 
