@@ -97,6 +97,11 @@ s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # place
   and only two answers to "it exists": raise, or adopt an identical array after checking;
   whole-unit writes from many processes with no coordination; `add_level` as metadata plus
   an empty array; chunk keys for every format. Nothing is ever deleted or overwritten.
+- **Plans outputs and blocks** (0.3): a store-less `Grid` with the same geometry as an
+  array, so an output is planned, cut into blocks and only then created; `blocks` tiling an
+  array or a box into write boxes with context-grown read boxes, in C order, as plain
+  picklable records a cluster job takes by id; the anisotropy-aware pyramid schedule.
+  Nothing is scheduled or run.
 
 ## The placement rule
 
@@ -143,6 +148,14 @@ wa.ome_multiscales(axes, units, levels, version="0.5", type=None) ; wa.level_pla
 wa.level_shape(shape, factors, origin=0) ; wa.chunk_key(index, format, ...) ; wa.parse_chunk_key(key, format, ...)
 wa.ensure_group_entry(group_path, name, voxel_size, translation, axes, units="nanometer")   # list an array you made yourself
 wa.units.ome_name("nm") -> "nanometer" ; wa.write.codecs_of(path) -> (codecs, shards)
+
+# grids and blocks (0.3)
+g = wa.Grid(shape, voxel_size, translation, axes=None, units="nanometer", chunks=None, shards=None)   # or Grid.from_meta(meta, voxel_size=)
+wa.create(path, grid=g, dtype="uint64")
+for b in wa.blocks(shape, block_shape, context=0, box=None, clip=True):   # also vol.blocks() and g.blocks()
+    b.begin, b.end, b.read_begin, b.read_end, b.inner, b.at_end, b.id    # plain records; blocks[id] is O(1)
+wa.level_factors(voxel_size, ratio=1.5, max_levels=None, stop_shape=None, shape=None)
+wa.units.abbreviation("nanometer") ; wa.store.join(path, "s0") ; wa.store.parent(path) ; wa.store.basename(path)
 ```
 
 `WorldArray`: `ts`, `meta`, `grid`, `shape`, `dtype`, `axes`, `voxel_size`, `translation`,

@@ -77,6 +77,27 @@ def factor(
     return a[1] / b[1]
 
 
+# The OME short form of each unit, by its full name; every spelling of a unit reaches its
+# entry through the table above, so "nanometre", "nm" and "Nanometers" agree.
+_SHORT = {
+    "picometer": "pm", "angstrom": "Å", "nanometer": "nm", "micrometer": "µm",
+    "millimeter": "mm", "centimeter": "cm", "meter": "m",
+    "nanosecond": "ns", "microsecond": "µs", "millisecond": "ms", "second": "s",
+    "minute": "min", "hour": "h", "day": "d",
+}  # fmt: skip
+_SHORT_BY_SIZE = {_lookup(name): short for name, short in _SHORT.items()}
+
+
+def abbreviation(unit: str) -> str:
+    """The OME short form of a unit: ``"nm"`` for any spelling of nanometre the table knows,
+    ``"µm"`` (U+00B5) for any spelling of micrometre, ``"Å"``, ``"s"``, ``"min"`` and so
+    on. A unit the table does not know (``""``, ``"pixel"``) is a ``ValueError``."""
+    found = _lookup(unit) if unit else None
+    if found is None or found not in _SHORT_BY_SIZE:
+        raise ValueError(f"unknown unit {unit!r}")
+    return _SHORT_BY_SIZE[found]
+
+
 # OME-NGFF's name for each unit the table knows, by (kind, size): every spelling of a unit
 # reaches its entry through the table above, so "nanometre", "nm" and "Nanometers" agree.
 # The American spelling is OME's.
