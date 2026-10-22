@@ -699,3 +699,26 @@ def test_callables_see_the_array_without_pinned_axes_and_empty_groups_say_so(tmp
     write_zarr2_group(empty)
     with pytest.raises(ValueError, match="no levels found"):
         wa.metadata(str(empty), level="first", open=False)
+
+
+def test_precomputed_scale_path_is_that_scale_under_level_first(tmp_path):
+    """A path naming a scale is that scale, as an array path is that array; ``level=0`` and
+    ``"first"`` are silently it and any other level warns (mesh-n-bone's review)."""
+    from conftest import pattern
+
+    pre = tmp_path / "pc"
+    data = pattern((8, 8, 8))
+    write_precomputed(
+        pre,
+        [
+            {"data": data, "resolution": [4, 4, 4], "key": "4nm"},
+            {"data": data[::2, ::2, ::2], "resolution": [8, 8, 8], "key": "8nm"},
+        ],
+    )
+    for level in (None, 0, "first"):
+        vol = wa.open(str(pre / "8nm"), level=level)
+        assert (vol.level_name, vol.voxel_size) == ("8nm", (8.0, 8.0, 8.0)), level
+    light = wa.metadata(str(pre / "8nm"), level="first", open=False)
+    assert light.voxel_size == (8.0, 8.0, 8.0)
+    with pytest.warns(UserWarning, match="names a precomputed scale"):
+        assert wa.open(str(pre / "8nm"), level="4nm").level_name == "8nm"

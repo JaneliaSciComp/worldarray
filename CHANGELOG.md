@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 (2026-10-22)
+
+- funlib `voxel_size`/`offset` on the parent group place an array that carries none, for
+  zarr and N5 alike; funlib's keys on an N5 array are read in the array's C order, as
+  zarr-python's N5 store writes them (both from mesh-n-bone's review of its PR #48).
+- A precomputed path that names a scale is that scale under `level=0` or `"first"` too;
+  other levels warn and are ignored, as on an array path.
+- The GCE metadata guard is applied only off Google Cloud (decided from the DMI product
+  name and the `GCE_METADATA_*` variables), so metadata-server credentials keep working on
+  a Google VM.
+
 ## 0.1.0 (2026-10-21)
 
 - First version, built to `docs/spec.md`: open zarr v2, zarr v3, N5 and Neuroglancer

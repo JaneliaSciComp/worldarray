@@ -415,6 +415,11 @@ def _zarr(
         found = _ome(hit[0], hit[1], ndim, node.path)
     if found.voxel_size is None:
         found = _array_attrs(attrs, ndim, node.path)
+        if found.voxel_size is None and _has_funlib_keys(group_attrs):
+            # funlib's keys on the parent group, the array carrying none (mesh-n-bone's inputs)
+            axes = found.axes
+            found = _array_attrs(_funlib_subset(group_attrs), ndim, node.path)
+            found.axes = found.axes or axes
     else:
         _check_against_attrs(attrs, found, ndim, node.path, conflicts)
     if found.axes is None:
@@ -501,6 +506,21 @@ def _unpack_sequence(transforms: list[dict]) -> list[dict]:
     return out
 
 
+_FUNLIB_KEYS = ("voxel_size", "resolution", "offset", "units", "axis_names")
+
+
+def _has_funlib_keys(attrs: dict) -> bool:
+    return any(
+        isinstance(attrs.get(k), (list, tuple)) for k in ("voxel_size", "resolution", "offset")
+    )
+
+
+def _funlib_subset(attrs: dict) -> dict:
+    """Only funlib's keys of a group's attributes, so a group-level ``transform`` or ``scale``
+    (which mean other things on a group) is not taken for the array's placement."""
+    return {k: attrs[k] for k in _FUNLIB_KEYS if k in attrs}
+
+
 def _array_attrs(attrs: dict, ndim: int, path: str) -> _Resolved:
     """funlib (``resolution``/``voxel_size``, ``offset``, ``units``, ``axis_names``) or COSEM
     (``transform``) attributes on the array itself, C order. An ``offset`` with no voxel
@@ -581,8 +601,9 @@ def _check_against_attrs(
 
 def _n5(attrs: dict, group_attrs: dict, node: Node, ndim: int) -> _Resolved:
     """COSEM ``transform`` on the array; else the group's ``multiscales[].datasets[].transform``
-    for this path; else ``pixelResolution``/``resolution`` (array, else group) times the
-    level's ``downsamplingFactors``, plus ``offset``. Lists other than ``transform`` are
+    for this path; else funlib's ``voxel_size``/``offset`` (array, else group), C order; else
+    ``pixelResolution``/``resolution`` (array, else group) times the level's
+    ``downsamplingFactors``, plus ``offset``. Lists other than ``transform`` and funlib's are
     x-first and reversed to C order here. Without an ``offset``: a level with ``downsamplingFactors`` follows
     BigDataViewer, ``(f - 1) / 2`` full-resolution voxels on, whichever key gave the base
     (BigStitcher writes ``resolution``); a funlib ``resolution`` with no
@@ -596,6 +617,13 @@ def _n5(attrs: dict, group_attrs: dict, node: Node, ndim: int) -> _Resolved:
         return _cosem_transform(hit[1]["transform"], ndim, name)
 
     axes = _axes(list(attrs.get("axes", group_attrs.get("axes", [])) or [])[::-1], ndim)
+    for source in (attrs, group_attrs):
+        if isinstance(source.get("voxel_size"), (list, tuple)):
+            # funlib's own key names, which zarr-python's N5 store leaves in the array's C
+            # order (unlike resolution and pixelResolution, x-first); offset is a corner
+            found = _array_attrs(_funlib_subset(source), ndim, name)
+            found.axes = found.axes or axes
+            return found
     unit: str | None = None
     base, key = None, None
     for source in (attrs, group_attrs):

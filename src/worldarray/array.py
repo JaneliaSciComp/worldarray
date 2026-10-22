@@ -145,11 +145,17 @@ class WorldArray:
     # --- construction helpers -------------------------------------------------
 
     def _choose_level(self, node: Node, level, voxel_size, level_mode, on_mismatch) -> LevelRef:
-        if level == "first":
-            level = 0
-        if node.format == "precomputed" and node.scale_key is not None and level is None:
+        if node.format == "precomputed" and node.scale_key is not None:
+            # a path naming a scale is that scale, as an array path is that array
+            if level not in (None, 0, "first"):
+                warnings.warn(
+                    f"{self.path} names a precomputed scale; level={level!r} is ignored",
+                    stacklevel=3,
+                )
             index = precomputed_scale_index(node.docs["info"], node.scale_key)
             return LevelRef(node.scale_key, node.path, index)
+        if level == "first":
+            level = 0
         if node.kind == "array":
             if level is not None and level != 0:  # "first" (already 0) and 0 mean "this array"
                 warnings.warn(f"{self.path} is an array; level={level!r} is ignored", stacklevel=3)
@@ -867,7 +873,9 @@ def metadata(
     if level == "first":
         level = 0
     if node.format == "precomputed" and (level is not None or node.scale_key is not None):
-        wanted = node.scale_key if level is None else level
+        wanted = (
+            node.scale_key if node.scale_key is not None else level
+        )  # a scale path is that scale
         meta = read_meta_light(node, scale_index=precomputed_scale_index(node.docs["info"], wanted))
     elif node.kind == "group":
         refs = discover(node)

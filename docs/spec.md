@@ -284,10 +284,13 @@ this document and that one differ, fix one of them.
      `sequence`; ignore the multiscale-level transforms (they lead to other systems, which
      chunkmirage's `scene://` applies itself) and any other transform type. Else the array's
      own `resolution` / `voxel_size`, `offset`, `units`, `axis_names` (funlib) or `transform`
-     (COSEM), C order; else tensorstore's `dimension_units` attribute (zarr v3). Axes from
+     (COSEM), C order; else the same funlib keys on the parent group when the array carries
+     none (mesh-n-bone's inputs); else tensorstore's `dimension_units` attribute (zarr v3). Axes from
      OME `axes`, `dimension_names` (zarr v3), `_ARRAY_DIMENSIONS` (xarray) or `axis_names`.
    - N5: the array's `transform` (COSEM; C order unless `ordering: "F"`); else the parent's
-     `multiscales[].datasets[].transform` for this path; else `pixelResolution` (both the
+     `multiscales[].datasets[].transform` for this path; else funlib's `voxel_size` and
+     `offset` (array, else group), which zarr-python's N5 store leaves in the array's C
+     order, read by the zarr funlib rule above; else `pixelResolution` (both the
      `{dimensions, unit}` form and a bare list) or `resolution`, from the array else the
      group, times the level's `downsamplingFactors`; plus `offset`; axes from the `axes`
      attribute. These lists are x-first. Without an `offset`, a level with `downsamplingFactors` follows
@@ -326,8 +329,11 @@ this document and that one differ, fix one of them.
    that answers anything but a document (a server root's 301) ends the search for a
    multiscales entry quietly. Off Google Cloud, `GCE_METADATA_ROOT` is pointed at a name that
    fails at once before the first `gs://` open, because tensorstore's probe of the GCE
-   metadata server otherwise stalls every open for seconds (`store.GUARD_GCE_METADATA`
-   turns this off). A `precomputed://` prefix is accepted and
+   metadata server otherwise stalls every open for seconds; "off Google Cloud" is decided
+   with no network call, from the machine's DMI product name and the `GCE_METADATA_HOST` and
+   `GCE_METADATA_ROOT` variables, and on a Google machine the variable is left alone so the
+   credentials the real metadata server issues keep working (`store.GUARD_GCE_METADATA`
+   turns the guard off). A `precomputed://` prefix is accepted and
    dropped. The `.n5` or `.zarr` suffix is never used to decide the format. A zarr v2
    compressor carrying members tensorstore rejects (the `checksum` newer numcodecs writes
    for zstd) is opened without them. Access: a path with no scheme is a local file; `s3://`
@@ -386,7 +392,8 @@ this document and that one differ, fix one of them.
    axes, finer on a tie), `resample` (the level to resample from). Voxel sizes compare as
    floats with `rtol 1e-6`, so 10.48 is not 10. A group path without `level` or
    `voxel_size` raises with the level list; a level name that does not exist raises with
-   the list; an array path with `level` warns and ignores it. When no level has the
+   the list; an array path, or a precomputed path naming a scale, is that array or scale
+   under `level=0` or `"first"` silently and warns and ignores any other `level`. When no level has the
    requested `voxel_size`, `on_mismatch` decides: `"error"` raises with the list;
    `"resample"` reads the level `level_mode` picks and resamples (Behaviour 4); `"relabel"`
    reads that level voxel for voxel and reports `voxel_size` as the requested size with
@@ -510,7 +517,10 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
   fallback; detection ignores the directory suffix and finds a precomputed scale key.
 
 Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed through
-`s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; `read_index`
+`s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; funlib keys on
+the parent group of an attribute-less zarr and N5 array, and funlib `voxel_size`/`offset` on
+an N5 array in C order; a precomputed path naming a scale kept under `level="first"`; the
+GCE guard left alone on a Google machine; `read_index`
 with `select`; `base_voxel_size` rescaling a BigStitcher-style pyramid; `AWS_ENDPOINT_URL`,
 `AWS_ENDPOINT_URL_S3` and the region reaching the S3 specs and the GCS redirect keying the
 kvstore cache; an array path kept under `voxel_size`; relabel keeping the corner; a

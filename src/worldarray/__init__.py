@@ -17,7 +17,7 @@ from .placement import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
 from .store import Node, detect, list_chunk_keys
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "ArrayMeta",
