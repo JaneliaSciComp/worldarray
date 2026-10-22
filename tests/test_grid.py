@@ -334,3 +334,52 @@ def test_path_helpers_are_url_aware(tmp_path):
     local = s.join(str(tmp_path), "vol.zarr")
     assert local == f"{tmp_path}/vol.zarr"
     assert s.parent(local) == str(tmp_path) and s.basename(local) == "vol.zarr"
+
+
+# --- the WorldArray side of 0.3 (wired with the 0.2 write module) ------------------------
+
+
+def test_array_blocks_default_to_write_units_and_write_chunk_fills_them(tmp_path):
+    vol = wa.create(
+        str(tmp_path / "s.zarr/s0"),
+        (20, 16, 16),
+        "uint8",
+        (1, 1, 1),
+        (0.5,) * 3,
+        chunks=(4, 4, 4),
+        shards=(8, 8, 8),
+    )
+    bl = vol.blocks()
+    assert bl.count == 3 * 2 * 2 and bl[0].end == (8, 8, 8) and bl[len(bl) - 1].end == (20, 16, 16)
+    vol.write_chunk((1, 1, 1), np.full((8, 8, 8), 2, np.uint8))  # a middle unit
+    vol.write_chunk((2, 0, 0), np.full((4, 8, 8), 3, np.uint8))  # the clipped last unit on z
+    assert sorted(vol.list_chunks()) == [(1, 1, 1), (2, 0, 0)]
+    assert int(vol.read_index((16, 0, 0), (20, 8, 8)).sum()) == 3 * 4 * 64
+    with pytest.raises(ValueError, match="data has shape"):
+        vol.write_chunk((2, 0, 0), np.zeros((8, 8, 8), np.uint8))
+    with pytest.raises(ValueError, match="no write unit"):
+        vol.write_chunk((3, 0, 0), np.zeros((4, 8, 8), np.uint8))
+    grown = vol.blocks(context=2, clip=False)[0]
+    assert grown.read_begin == (-2, -2, -2) and grown.inner == (slice(2, 10),) * 3
+
+
+def test_create_from_a_grid_reports_the_grid(tmp_path):
+    g = wa.Grid((16, 16, 16), (8, 8, 8), (4, 4, 4), chunks=(4, 4, 4), shards=(8, 8, 8))
+    vol = wa.create(str(tmp_path / "g.zarr/s0"), grid=g, dtype="uint16")
+    planned, made = g.meta("uint16"), vol.meta
+    for field in (
+        "shape",
+        "dtype",
+        "chunk_shape",
+        "shard_shape",
+        "axes",
+        "units",
+        "voxel_size",
+        "translation",
+    ):
+        assert getattr(planned, field) == getattr(made, field), field
+    assert vol.box == g.box and list(vol.blocks()) == list(g.blocks())
+    with pytest.raises(ValueError, match="not both"):
+        wa.create(str(tmp_path / "h.zarr/s0"), (16, 16, 16), grid=g, dtype="uint16")
+    with pytest.raises(ValueError, match="needs shape"):
+        wa.create(str(tmp_path / "i.zarr/s0"), dtype="uint16", chunks=(4, 4, 4))

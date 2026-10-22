@@ -723,24 +723,38 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
 17. **Blocks tile, context grows, nothing runs.** `blocks(shape, block_shape, context, box,
     clip)` yields, in C order, blocks whose write boxes `[begin, end)` partition `[0,
     shape)`, or `box` (a voxel box, the grid anchored at its begin) when given, with no
-    overlap and no gap, the last block on an axis clipped. A block's read box is its write
-    box grown by `context` on each side, where `context` is one int, one per axis, or a
-    `(before, after)` pair per axis, clipped to the array when `clip=True` (the default;
-    cellmap-analyze's `create_block` edge rule) and left unclipped when `clip=False` for a
-    padded `read_index`. `len(blocks)`, `blocks[b.id]`, `blocks.index_of(b.begin)` and
+    overlap and no gap, the last block on an axis clipped to the box. `box` may reach past
+    the array on any side (a ROI rounded outward to a factor multiple, mesh-n-bone's halo
+    mode): the write boxes tile it exactly, outside the array too. A block's read box is
+    its write box grown by `context` on each side, where `context` is one int, one per
+    axis, or a `(before, after)` pair per axis, clipped to the **array** (never to `box`,
+    never a write box) when `clip=True` (the default; cellmap-analyze's `create_block` edge
+    rule) and left unclipped when `clip=False` for a padded `read_index` (its
+    `neg_with_edge_pos` mode, which reads past the array for fill). A block also carries
+    `at_start` and `at_end` per axis, whether it is the first or last block on that axis,
+    so a caller adds context at the array's far faces itself, and `inner`, the slices of
+    the write box inside the read box, correct also when `clip=False` lets `read_begin`
+    go below 0. `len(blocks)`, `blocks[b.id]` (O(1)), `blocks.index_of(b.begin)` and
     `b.index` agree. `vol.blocks()` defaults `block_shape` to `write_shape`, so default
     blocks are aligned writes. Nothing is scheduled: the iterable and its blocks are plain,
-    picklable records. `write_chunk(index, data)` writes the unit at `index` whole;
-    `data.shape` must equal that unit's clipped shape.
+    picklable records, and the iterable pickles without its blocks, so a worker takes an
+    id. One grid per call: a consumer that writes several levels from one block derives
+    the per-level boxes itself (mesh-n-bone's direct mode, two lines). `write_chunk(index,
+    data)` writes the unit at `index` whole; `data.shape` must equal that unit's clipped
+    shape.
 
 18. **A `Grid` is a `WorldArray` without a store.** `Grid(shape, voxel_size, translation,
     axes, units, chunks, shards)` answers `box`, `corner`, `index_box`, `chunks_covering`,
     `write_shape` and `blocks` exactly as a `WorldArray` of those facts does, and
-    `g.meta(dtype)` equals `wa.create(path, grid=g, dtype=dtype).meta`, so a pipeline plans
+    `g.meta(dtype)` agrees with `wa.create(path, grid=g, dtype=dtype).meta` in every
+    field a grid has: shape, dtype, chunk and shard shape, axes, units, voxel size and
+    translation (a grid has no path, format, documents or fill value), so a pipeline plans
     its output before anything exists. `Grid.from_meta(meta, voxel_size=t)` is Behaviour
     4's target grid over that array: anchored at its corner with `ceil(n * s / t)` voxels,
-    so a `read(voxel_size=t)` of the source fills it exactly; this is the output grid
-    cellmap-analyze's commands compute today in the integer frame.
+    so a `read(voxel_size=t)` of the source fills it exactly, and its `box` is the target
+    grid's extent, which may reach past the source's own `box` by less than one target
+    voxel; this is the output grid cellmap-analyze's commands compute today in the integer
+    frame.
 
 19. **Schedules and helpers.** `level_factors(voxel_size, ratio, max_levels, stop_shape,
     shape)` returns per level the per-axis factors, 2 on every axis whose current voxel size
@@ -968,11 +982,12 @@ over funlib geometry, by this spec's own assignment.
    attributes? If so, should the package offer `funlib_attrs(voxel_size, translation, axes,
    units)`, writing `offset` as the corner, funlib's meaning, for `create(attrs=)`, or do
    the repos keep writing their own?
-6. **The block iterator's shape** (Behaviour 17) is written from cellmap-analyze's
-   `create_block` (directional context, the edge rule, a fourth axis) and mesh-n-bone's
-   super-chunk grids (factor-aligned strides per level) without either session confirming
-   it. Confirm with both before 0.3 is built. mesh-n-bone's direct mode, where one task
-   writes several levels at once, may need per-level grids that `blocks` does not give.
+6. **The block iterator's shape** (Behaviour 17). Resolved 2026-10-22: both sessions
+   confirmed it. mesh-n-bone asked that `box` may reach past the array and that `clip`
+   clips read boxes only, and derives its per-level boxes from one grid itself;
+   cellmap-analyze asked for `at_start`/`at_end` per axis and `inner`, and confirmed that
+   `(before, after)` pairs cover its context modes and that `clip=False` with a padded
+   `read_index` is its edge-reading mode. All are in Behaviour 17.
 7. **Sidecar attributes.** registration-station's `fs` and `fix_origin_um` duplicate the OME
    scale and translation, and its `y0`, `y1`, `y0_core`, `y1_core`, `feather_vox` part
    attributes encode placement. With `ArrayMeta` round-tripping, are they still wanted, or

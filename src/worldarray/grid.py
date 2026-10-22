@@ -441,6 +441,7 @@ class Grid:
             format=None,
             path="",
             placed_by="ome",
+            shard_shape=self.shards,
         )
 
 

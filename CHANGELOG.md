@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+Grids and blocks, built to spec draft 3 (Behaviours 17 to 19). Nothing on the read or
+write side changes.
+
+- `blocks(shape, block_shape, context=0, box=None, clip=True)`: the array (or a voxel
+  box, which may reach past the array) cut into write boxes that tile it with no overlap
+  and no gap, each with a read box grown by `context` (one int, one per axis, or
+  `(before, after)` pairs) and clipped to the array when `clip`; C order, `len`,
+  `blocks[id]` in O(1), `index_of(begin)`; a `Block` carries `index`, `id`, `begin`,
+  `end`, `read_begin`, `read_end`, `at_start` and `at_end` per axis and `inner`, the write
+  box's slices inside the read box. Plain picklable records; nothing is scheduled.
+  `vol.blocks()` defaults the block to `write_shape`, so default blocks are aligned writes.
+  `vol.write_chunk(index, data)` writes one whole unit.
+- `Grid(shape, voxel_size, translation, axes, units, chunks, shards)`: a `WorldArray`
+  without a store, with `box`, `corner`, `index_box`, `chunks_covering`, `write_shape`,
+  `blocks` and `meta(dtype)`; `Grid.from_meta(meta, voxel_size=)` is an existing array's
+  grid or the resample target grid over it. `create(path, grid=g, dtype=)` creates from it.
+- `level_factors(voxel_size, ratio=1.5, ...)`: the anisotropy-aware pyramid schedule
+  mesh-n-bone and cellmap-analyze share, per level.
+- `units.abbreviation`, and `store.join`, `store.parent`, `store.basename` as public
+  URL-aware path helpers.
+
 ## 0.2.0 (unreleased)
 
 Metadata and placed creation, built to spec draft 3 (Behaviours 10 to 16). Nothing on the

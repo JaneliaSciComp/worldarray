@@ -549,6 +549,34 @@ class WorldArray:
                 )
         self.write_index(begin, end, data, partial=partial)
 
+    def blocks(self, block_shape=None, context=0, box=None, clip: bool = True):
+        """The array cut into blocks (Behaviour 17): write boxes tiling the stored grid (or a
+        voxel ``box``) with ``block_shape`` (default ``write_shape``, so the default blocks are
+        aligned writes), read boxes grown by ``context`` and clipped to the array when
+        ``clip``. Plain records, nothing scheduled."""
+        from .grid import blocks as _blocks
+
+        return _blocks(
+            self._grid.shape,
+            self.write_shape if block_shape is None else block_shape,
+            context=context,
+            box=box,
+            clip=clip,
+        )
+
+    def write_chunk(self, index: Sequence[int], data: np.ndarray) -> None:
+        """Write the whole write unit at ``index`` on the storage grid (the shard of a sharded
+        array); ``data`` has that unit's shape, clipped at the array's end."""
+        unit, shape = self.write_shape, self._grid.shape
+        index = tuple(int(i) for i in index)
+        if len(index) != len(shape):
+            raise ValueError(f"{self.path}: index needs one entry per axis of {shape}")
+        begin = tuple(i * u for i, u in zip(index, unit))
+        if any(i < 0 or b >= n for i, b, n in zip(index, begin, shape)):
+            raise ValueError(f"{self.path}: no write unit at {index}")
+        end = tuple(min(b + u, n) for b, u, n in zip(begin, unit, shape))
+        self.write_index(begin, end, data)
+
     def read_index(
         self,
         begin: Sequence[int],
@@ -1049,11 +1077,12 @@ class Pyramid:
 
 def create(
     path: str,
-    shape: Sequence[int],
-    dtype,
-    voxel_size,
-    translation,
+    shape: Sequence[int] | None = None,
+    dtype=None,
+    voxel_size=None,
+    translation=None,
     *,
+    grid=None,
     axes: Sequence[str] | None = None,
     units: Units = "nanometer",
     chunks: Sequence[int] | None = None,
@@ -1077,6 +1106,19 @@ def create(
     raises ``FileExistsError``; with ``"adopt"`` an identical array (shape, dtype, chunks,
     shards, placement) is opened for writing and a different one raises ``ValueError``
     naming every difference. Returns a writable ``WorldArray``."""
+    if grid is not None:
+        # a Grid planned the output (Behaviour 18): its facts are the array's, chunks and
+        # shards overridable; the placement arguments must not also be given
+        if any(v is not None for v in (shape, voxel_size, translation, axes)):
+            raise ValueError("pass grid= or shape, voxel_size, translation and axes, not both")
+        shape, voxel_size, translation = grid.shape, grid.voxel_size, grid.translation
+        axes, units = grid.axes, grid.units
+        chunks = grid.chunks if chunks is None else chunks
+        shards = grid.shards if shards is None else shards
+    if shape is None or dtype is None or voxel_size is None or translation is None:
+        raise ValueError(
+            "create needs shape, dtype, voxel_size and translation, or grid= and dtype"
+        )
     if chunks is None:
         raise ValueError("chunks is required: the package never picks a chunk shape")
     ndim = len(shape)
