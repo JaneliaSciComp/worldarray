@@ -10,6 +10,9 @@
 - The GCE metadata guard is applied only off Google Cloud (decided from the DMI product
   name and the `GCE_METADATA_*` variables), so metadata-server credentials keep working on
   a Google VM.
+- `Pyramid.placements()`, `voxel_sizes()` and `translations()` read the group document when
+  the pyramid was opened through one of its level paths too; they used to open every level
+  from there, and a missing level made them raise.
 
 ## 0.1.0 (2026-10-21)
 

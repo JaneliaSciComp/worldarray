@@ -144,7 +144,8 @@ pyr.metas() ; pyr.level_meta("s1")   # ArrayMeta per level from the documents al
                     #   array's inner chunk), fill and placement, with no tensorstore opened
 pyr.placements()    # (name, spatial voxel size, spatial translation) per level from the group's own document
 pyr.voxel_sizes() ; pyr.translations()   #   where it lists the levels (OME-NGFF, COSEM N5, precomputed), so
-                    #   choosing or placing a level opens nothing; else by opening each level
+                    #   choosing or placing a level opens nothing, whether the pyramid was opened by its
+                    #   group path or by one of its level paths; else by opening each level
 
 wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False: from the documents alone
 wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
@@ -520,7 +521,8 @@ Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed 
 `s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; funlib keys on
 the parent group of an attribute-less zarr and N5 array, and funlib `voxel_size`/`offset` on
 an N5 array in C order; a precomputed path naming a scale kept under `level="first"`; the
-GCE guard left alone on a Google machine; `read_index`
+GCE guard left alone on a Google machine; a pyramid opened through one of its level paths
+placing every level from the group document while one level's array is missing; `read_index`
 with `select`; `base_voxel_size` rescaling a BigStitcher-style pyramid; `AWS_ENDPOINT_URL`,
 `AWS_ENDPOINT_URL_S3` and the region reaching the S3 specs and the GCS redirect keying the
 kvstore cache; an array path kept under `voxel_size`; relabel keeping the corner; a

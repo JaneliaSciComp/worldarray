@@ -26,7 +26,7 @@ from . import resample as _resample
 from . import units as U
 from .context import shared_context
 from .geometry import Box, index_range, is_aligned
-from .levels import LevelRef, Mode, discover, same_voxel_size, select_level
+from .levels import LevelRef, Mode, discover, discover_group, same_voxel_size, select_level
 from .placement import ArrayMeta, light_levels, read_meta, read_meta_light
 from .retry import Retry, read_with_retries
 from .store import Node, detect, is_remote, open_array, precomputed_scale_index
@@ -749,7 +749,7 @@ class Pyramid:
         self._select = select or {}
         self._kwargs = kwargs
         self._node = _node if _node is not None else detect(path)
-        self._refs = discover(self._node)
+        self._group, self._refs = discover_group(self._node)  # the node listing the levels
         if not self._refs:
             raise ValueError(
                 f"{path}: no levels found (no multiscales datasets, no s0, no precomputed scales)"
@@ -801,9 +801,8 @@ class Pyramid:
         COSEM N5, precomputed), else by opening each level."""
         if self._light is None:
             space, _ = _unit_targets(self.units)
-            group = self._node if self._node.kind == "group" else None
-            if group is None and self._refs and self._refs[0].path != self._node.path:
-                group = detect(self._refs[0].path.rsplit("/", 1)[0], missing_ok=True)
+            # the group the levels were discovered from, whichever path opened the pyramid
+            group = self._group
             light = light_levels(group, self.names, space) if group is not None else None
             if light is None:
                 light = [

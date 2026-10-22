@@ -48,8 +48,16 @@ def _probe_levels(path: str) -> list[str]:
 def discover(node: Node) -> list[LevelRef]:
     """The levels of a group node, or of the group an array node belongs to (just the array
     itself when its parent is not a multiscale group)."""
+    return discover_group(node)[1]
+
+
+def discover_group(node: Node) -> tuple[Node | None, list[LevelRef]]:
+    """``discover`` plus the node whose document lists those levels: the group itself, the
+    ancestor an array path belongs to, the precomputed ``info`` node; None for an array
+    standing alone, so a ``Pyramid`` opened through a level path still reads placements
+    from the group document instead of opening every level."""
     if node.format == "precomputed":
-        return [
+        return node, [
             LevelRef(str(s.get("key", i)), node.path, i)
             for i, s in enumerate(node.docs["info"]["scales"])
         ]
@@ -67,14 +75,14 @@ def discover(node: Node) -> list[LevelRef]:
                 and group.kind == "group"
                 and rel in _group_multiscale_paths(group)
             ):
-                return discover(group)
+                return discover_group(group)
             if parent(ancestor) is None:
                 break
             rel = f"{basename(ancestor)}/{rel}"
             ancestor = parent(ancestor)
-        return [LevelRef(basename(node.path), node.path)]
+        return None, [LevelRef(basename(node.path), node.path)]
     names = _group_multiscale_paths(node) or _probe_levels(node.path)
-    return [LevelRef(name, join(node.path, name)) for name in names]
+    return node, [LevelRef(name, join(node.path, name)) for name in names]
 
 
 def _spatial_voxel_size(level) -> np.ndarray:

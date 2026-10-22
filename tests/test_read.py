@@ -722,3 +722,18 @@ def test_precomputed_scale_path_is_that_scale_under_level_first(tmp_path):
     assert light.voxel_size == (8.0, 8.0, 8.0)
     with pytest.warns(UserWarning, match="names a precomputed scale"):
         assert wa.open(str(pre / "8nm"), level="4nm").level_name == "8nm"
+
+
+def test_pyramid_opened_through_a_level_path_places_from_the_group_document(pyramid):
+    """``placements`` reads the group document whichever path opened the pyramid, so a
+    level whose array is gone is still placed and nothing is opened (mesh-n-bone's review)."""
+    import shutil
+
+    group, _ = pyramid
+    expected = wa.open_pyramid(group).placements()
+    shutil.rmtree(f"{group}/s2")
+    pyr = wa.open_pyramid(f"{group}/s0")
+    assert pyr.names == ["s0", "s1", "s2"]
+    assert pyr.placements() == expected
+    assert pyr.voxel_sizes()[-1] == ("s2", (16.0, 16.0, 16.0))
+    assert pyr.translations()[-1] == ("s2", (8.0, 8.0, 8.0))
