@@ -340,8 +340,22 @@ class WorldArray:
     def box(self) -> Box:
         """The array's extent on the spatial axes as a world box, ``[corner, corner + shape *
         voxel_size)``: what funlib calls the array's roi. ``Box.from_index`` gives the same
-        over every axis."""
+        over every axis. With a resample target it is the extent of the target voxels that
+        ``shape`` counts, which may reach past the stored data by less than one target voxel,
+        so ``read(box)`` returns ``shape``."""
         sp = self._grid.spatial
+        if self._target is not None:
+            begin, end = [], []
+            for k, axis in enumerate(sp):
+                first, last = _resample.target_range(
+                    self._grid.shape[axis],
+                    self._grid.voxel_size[axis],
+                    self._target[k],
+                    self._origins()[k],
+                )
+                begin.append(self.anchor[k] + first * self._target[k])
+                end.append(self.anchor[k] + last * self._target[k])
+            return Box(tuple(begin), tuple(end))
         return Box.from_index(
             (0,) * len(sp),
             tuple(self._grid.shape[i] for i in sp),

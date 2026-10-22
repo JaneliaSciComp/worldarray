@@ -213,7 +213,8 @@ window and a spatial box at once); anything with `.begin` and `.end`, or `.offse
 `shift`, `snap(voxel_size, translation, mode="grow" | "shrink" | "closest")` to a grid's
 voxel corners, `to_index` (the centre rule) and `Box.from_index`; `vol.box` is the array's
 own extent on the spatial axes, `[corner, corner + shape * voxel_size)`, what funlib calls
-the array's roi. So `vol.read(vol.box.intersect(roi).snap(vol.voxel_size, vol.translation))`
+the array's roi; with a resample target, the target voxels `shape` counts, so `read(vol.box)`
+returns `shape` and equals `Grid.from_meta(meta, voxel_size=t).box`. So `vol.read(vol.box.intersect(roi).snap(vol.voxel_size, vol.translation))`
 is the migration of a clipped, snapped Roi read, without funlib.
 
 There is no `offset` attribute anywhere in this API, because that word means the corner in

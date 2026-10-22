@@ -5,6 +5,11 @@
 - `source_voxel_size` reports the stored level's voxel size under `on_mismatch="relabel"`,
   as the spec says; it reported the relabelled size (cellmap-flow's report). Reads,
   `voxel_size`, `translation` and `corner` are unchanged.
+- `box` of an array opened with a resample target is the extent of the target voxels
+  `shape` counts, as the spec's `[corner, corner + shape * voxel_size)` says and as
+  `Grid.from_meta(meta, voxel_size=t).box` already was; it was the stored data's extent, so
+  `read(box)` could return fewer voxels than `shape` (cellmap-flow's 7 voxels of 8 nm at
+  24 nm: box ended at 56 nm, now 72). No voxel moves.
 
 ## 0.3.0 (2026-10-22)
 

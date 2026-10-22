@@ -153,14 +153,22 @@ def apply_axis(block: np.ndarray, axis: int, plan: AxisPlan) -> np.ndarray:
     raise ValueError(plan.kind)
 
 
+def target_range(n: int, s: float, t: float, origin: float = 0.0) -> tuple[int, int]:
+    """``[first, last)``: the target voxels of size ``t`` that overlap ``n`` source voxels of
+    size ``s``, indexed on a target grid whose voxel 0 corner sits ``origin`` source voxels
+    from the source corner."""
+    ratio = t / s
+    first = int(np.floor(snap_integral(-origin / ratio)))
+    last = int(np.ceil(snap_integral((n - origin) / ratio)))
+    return first, max(last, first)
+
+
 def target_shape(n: int, s: float, t: float, origin: float = 0.0) -> int:
     """How many target voxels of size ``t`` cover ``n`` source voxels of size ``s``, counting
     from a target grid whose voxel 0 corner sits ``origin`` source voxels from the source
     corner: the first and last target voxels that overlap the data, inclusive."""
-    ratio = t / s
-    first = np.floor(snap_integral(-origin / ratio))
-    last = np.ceil(snap_integral((n - origin) / ratio))
-    return int(max(last - first, 0))
+    first, last = target_range(n, s, t, origin)
+    return last - first
 
 
 def resample(
