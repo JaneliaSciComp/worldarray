@@ -550,6 +550,13 @@ def test_relabel_rescales_everything_by_the_ratio(tmp_path):
         and vol.translation == (20.0, 20.0, 20.0)
         and vol.corner == (16.0, 16.0, 16.0)
     )
+    assert vol.source_voxel_size == (4.0, 4.0, 4.0)  # what the level is (cellmap-flow's report)
+    resampled = wa.open(str(group / "s0"), voxel_size=(8, 8, 8), on_mismatch="resample")
+    assert resampled.source_voxel_size == (4.0, 4.0, 4.0) and resampled.voxel_size == (
+        8.0,
+        8.0,
+        8.0,
+    )
 
 
 def test_post_transform_runs_after_resampling_and_before_padding(tmp_path):

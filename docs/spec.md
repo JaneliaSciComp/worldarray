@@ -149,7 +149,8 @@ vol.meta           # ArrayMeta in the store's own units
 vol.grid           # ArrayMeta in the requested units, every axis
 vol.shape, vol.dtype, vol.axes, vol.spatial, vol.level_name, vol.levels, vol.remote
                    # shape is the stored shape, or with a resample target the target voxels covering the data
-vol.source_voxel_size, vol.resampled   # the stored level's voxel size; whether reads resample to a target
+vol.source_voxel_size, vol.resampled   # the stored level's voxel size, also under resample and relabel; whether reads
+                                       #   resample to a target
 vol.list_chunks()  # the chunk indices that exist in storage, by listing keys (zarr v2/v3, N5, unsharded precomputed)
 vol.path           # what the caller passed (a group, say); vol.level_path is the array actually opened
 vol.voxel_size     # tuple[float] in `units`, spatial axes, the array's order (zyx for a volume)
@@ -549,8 +550,8 @@ this document and that one differ, fix one of them.
    reads that level voxel for voxel and reports `voxel_size` as the requested size with
    **voxel `i` staying voxel `i`**: every world quantity, the translation and the corner
    included, scales by the ratio of the sizes (cellmap-flow's rule, which chunkmirage's
-   server relies on), so a box of `m` requested voxels returns `m` stored voxels of the
-   level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
+   server relies on), so a box of `m` requested voxels returns `m` stored voxels of the level,
+   and `source_voxel_size` still reports the level's own size; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
    more). `relabel` and `nearest` are different things and both exist: one is a grid
    policy, the other a resampling kernel. `level` also takes a position, `0` or `"first"`
    for the first listed level. The pyramid an array belongs to is found through

@@ -139,6 +139,8 @@ class WorldArray:
             self._meta = self._rescaled_to_base(base_voxel_size, base_units)
         space, time = _unit_targets(units)
         self._grid = self._meta.in_units(space=space, time=time, strict=strict_units)
+        # the stored level's spatial voxel size, before any relabel renames the grid
+        self._stored_voxel_size = tuple(self._grid.voxel_size[i] for i in self._grid.spatial)
 
         self._target: tuple[float, ...] | None = None
         if voxel_size is not None:
@@ -299,8 +301,9 @@ class WorldArray:
 
     @property
     def source_voxel_size(self) -> tuple[float, ...]:
-        """The stored level's voxel size on the spatial axes, in ``units``."""
-        return self._source_voxel_size()
+        """The stored level's voxel size on the spatial axes, in ``units``: what the level
+        is, whether reads resample it or ``on_mismatch="relabel"`` renames its grid."""
+        return self._stored_voxel_size
 
     @property
     def resampled(self) -> bool:

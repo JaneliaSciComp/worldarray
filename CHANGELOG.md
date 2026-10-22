@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (unreleased)
+
+- `source_voxel_size` reports the stored level's voxel size under `on_mismatch="relabel"`,
+  as the spec says; it reported the relabelled size (cellmap-flow's report). Reads,
+  `voxel_size`, `translation` and `corner` are unchanged.
+
 ## 0.3.0 (2026-10-22)
 
 Grids and blocks, built to spec draft 3 (Behaviours 17 to 19). Nothing on the read or
