@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-10-22)
 
 Metadata and placed creation, built to spec draft 3 (Behaviours 10 to 16). Nothing on the
 read side changes.
