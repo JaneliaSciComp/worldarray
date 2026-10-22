@@ -205,6 +205,13 @@ def _read_key(spec: dict, key: str) -> bytes | None:
     return None if result.state == "missing" else bytes(result.value)
 
 
+def _write_key(spec: dict, key: str, data: bytes) -> None:
+    kv = _metadata_kvstore(
+        json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL")
+    )
+    kv.write(key, data).result()
+
+
 class Location:
     """A directory (local or a URL) and the ways in to it."""
 
@@ -218,6 +225,14 @@ class Location:
     def read_json(self, key: str) -> dict | None:
         data = self.read(key)
         return None if data is None else json.loads(data)
+
+    def write(self, key: str, data: bytes) -> None:
+        """One document under this location (the write side's group documents and
+        ``.zattrs``); the same ways in as a read, an anonymous S3 way refused and skipped."""
+        with_access(self.specs, lambda spec: _write_key(spec, key, data))
+
+    def write_json(self, key: str, doc: dict) -> None:
+        self.write(key, (json.dumps(doc, indent=2) + "\n").encode())
 
     def read_many(self, keys: Sequence[str]) -> dict[str, bytes | None]:
         """All of ``keys`` under one way in. A bucket with listing off answers a refusal for a
@@ -387,16 +402,22 @@ def open_array(
     context: ts.Context,
     scale_index: int | None = None,
     squeeze_channel: bool = True,
+    write: bool = False,
+    store_fill: bool = False,
 ) -> ts.TensorStore:
     """The tensorstore of an array node (or one scale of a precomputed node), in C order
     with its origin at 0: N5 and precomputed are transposed, a precomputed ``voxel_offset``
     is moved to 0 (and carried in the metadata as the translation), and a precomputed
-    single channel is dropped."""
+    single channel is dropped. ``write`` opens it for writing as well (``mode="r+"``);
+    ``store_fill`` then stores write units equal to the fill value instead of leaving them
+    absent (a per-open setting of tensorstore's, not metadata)."""
     if node.kind != "array" and node.format != "precomputed":
         raise ValueError(f"{node.path} is a {node.format} group, not an array")
 
     def attempt(kvstore: dict) -> ts.TensorStore:
         spec: dict[str, Any] = {"driver": _DRIVER[node.format], "kvstore": kvstore}
+        if write:
+            spec["store_data_equal_to_fill_value"] = bool(store_fill)
         if node.format == "zarr2":
             spec["metadata"] = cleaned_zarray(node.docs[".zarray"])
             spec["assume_metadata"] = True
@@ -412,7 +433,7 @@ def open_array(
             spec["assume_metadata"] = True
         if node.format == "precomputed" and scale_index is not None:
             spec["scale_index"] = scale_index
-        return ts.open(spec, read=True, context=context).result()
+        return ts.open(spec, read=True, write=write, context=context).result()
 
     store = with_access(kvstore_specs(node.path), attempt)
     if node.format in ("n5", "precomputed"):

@@ -21,7 +21,10 @@ resampled when no level matches, fast enough for a model server or a thousand cl
 workers, with retries for flaky object stores and thread caps for shared hosts. No one
 package did all of that, so every tool wrote its own reader, and the readers drifted apart. worldarray is that reader, written once, with the rules stated and tested.
 
-Its dependencies are `tensorstore` and `numpy`. It is read-only in this version. The
+Its dependencies are `tensorstore` and `numpy`. Since 0.2 it also writes the one thing
+every tool wrote for itself and got wrong in its own way: the OME-NGFF metadata of a placed
+array or pyramid level, and the array itself, created once and filled by aligned writes
+from any number of jobs. It never deletes, overwrites or downsamples. The
 [specification](https://janeliascicomp.github.io/worldarray/spec/) is the contract it is
 built to; every rule below is a test.
 
@@ -56,6 +59,13 @@ vol.read_index((0, 0, 0), (64, 64, 64), padding=0)
 
 pyr = wa.open_pyramid(path)             # every level, opened on first use
 pyr.select((16, 16, 16), mode="floor")  # the level to read at 16 nm
+
+# writing: a placed level, its OME-NGFF group document written for it (zarr v3 + OME 0.5 here)
+out = wa.create("out.zarr/s0", shape=(512, 512, 512), dtype="uint64",
+                voxel_size=(8, 8, 8), translation=(4, 4, 4), chunks=(64, 64, 64))
+out.write_index((0, 0, 0), (64, 64, 64), block)       # whole chunks only: many jobs, no locks
+out.write(box, block)                                  # or by world box
+s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # placed and sized; you fill it
 ```
 
 ## What it does
@@ -80,6 +90,12 @@ pyr.select((16, 16, 16), mode="floor")  # the level to read at 16 nm
   cancelled future on timeout.
 - **Carries the geometry**: `Box` with `intersect`, `union`, `contains`, `grow`, `shift`,
   `snap` to a grid, and the voxel indices a world box selects.
+- **Writes placed arrays** (0.2): the OME-NGFF 0.4 or 0.5 document from voxel size, centre
+  translation, axes and units, with each level's placement explicit or derived from
+  factors and an origin; `create` with the group's format, explicit chunks and codecs, and
+  only two answers to "it exists": raise, or adopt an identical array after checking;
+  whole-unit writes from many processes with no coordination; `add_level` as metadata plus
+  an empty array; chunk keys for every format. Nothing is ever deleted or overwritten.
 
 ## The placement rule
 
@@ -93,7 +109,7 @@ moved half a voxel on reading:
 | OME-NGFF `translation` | centre | as is |
 | COSEM `transform.translate` | centre | as is |
 | `offset` beside `resolution` / `voxel_size` (`offset` missing: 0) | corner | `offset + voxel_size / 2` |
-| N5 `pixelResolution` or `resolution` with `downsamplingFactors f`, no offset | BigDataViewer | `(f - 1) / 2 * base` |
+| N5 `pixelResolution` or `resolution` with `downsamplingFactors f`, no offset | corner at the origin at every level, as Neuroglancer draws N5 | `f / 2 * base` |
 | precomputed `voxel_offset` | corner | `(voxel_offset + 1/2) * resolution` |
 | nothing | a plain array | voxels of 1, corner at the origin |
 
@@ -117,13 +133,22 @@ wa.open_tensorstore(path, level=None, context=None)
 wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
 wa.list_chunk_keys(path, separator=".")        # chunk indices from keys alone, no metadata needed
 wa.Box ; wa.units.TABLE
+
+# writing (0.2)
+wa.create(path, shape, dtype, voxel_size, translation, *, axes=None, units="nanometer", chunks=..., shards=None,
+          fill_value=0, codecs="zstd", format=None, attrs=None, group_attrs=None, exists="error", store_fill=False) -> WorldArray
+wa.open(path, mode="r+") ; wa.open_pyramid(path, mode="r+").add_level(name, factors=, origin=0, ...)
+wa.ome_multiscales(axes, units, levels, version="0.5") ; wa.level_placement(voxel_size, translation, factors, origin=0)
+wa.level_shape(shape, factors, origin=0) ; wa.chunk_key(index, format, ...) ; wa.parse_chunk_key(key, format, ...)
 ```
 
 `WorldArray`: `ts`, `meta`, `grid`, `shape`, `dtype`, `axes`, `voxel_size`, `translation`,
-`corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `resampled`;
+`corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `resampled`,
+`writable`, `write_shape`;
 `read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, post_transform=, select=, strict=)`,
 `read_index(begin, end, padding=, mask=, select=, transform=)`, `index_box(box)`,
-`chunks_covering(begin, end)`, `list_chunks()`, `reopen(context=)`.
+`chunks_covering(begin, end, write=)`, `list_chunks()`, `chunk_key(index)`, `parse_chunk_key(key)`,
+`write_index(begin, end, data, partial=)`, `write(box, data, partial=)`, `reopen(context=)`.
 
 A box is a `(begin, end)` pair of floats in your units, half-open per axis, over the
 spatial axes or every axis; any object with `.begin`/`.end` or `.offset`/`.shape` also

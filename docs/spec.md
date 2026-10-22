@@ -275,10 +275,13 @@ vol = wa.create(
                           #   shards, placement within rtol 1e-6) is opened for writing; a different one raises naming each
                           #   difference. There is no third value
     store_fill=False,     # True stores write units equal to fill_value instead of leaving them absent
+    separator=None,       # zarr v2 dimension_separator, zarr v3 chunk-key separator; the format's default when None
+    axis_types=None,      # as ome_multiscales
     context=None, retries=None,
 ) -> WorldArray           # writable; every read-side property and method as before
 
-vol = wa.open(path, mode="r+", ...)   # an existing array for writing; vol.writable; the metadata rules of mode "r" unchanged
+vol = wa.open(path, mode="r+", store_fill=False, ...)   # an existing array for writing; vol.writable; the metadata
+                                                        #   rules of mode "r" unchanged; a handle pickles by its arguments
 vol.write_index(begin, end, data, partial=False)   # whole write units only (Behaviour 13) unless partial
 vol.write(box, data, partial=False)                # a world box by Behaviour 2, then write_index; no padding, no resampling
 vol.write_shape                                    # the unit one writer may own: the shard shape when sharded, else the chunk shape

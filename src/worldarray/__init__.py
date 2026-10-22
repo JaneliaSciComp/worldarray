@@ -8,26 +8,33 @@ contract; the README is its first five sections.
 
 from __future__ import annotations
 
-from . import units
-from .array import Pyramid, WorldArray, metadata, open, open_pyramid, open_tensorstore
+from . import store, units, write
+from .array import Pyramid, WorldArray, create, metadata, open, open_pyramid, open_tensorstore
 from .context import capped_context, capped_context_spec, shared_context
 from .geometry import Box, index_range
 from .levels import select_level
 from .placement import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
 from .store import Node, detect, list_chunk_keys
+from .write import chunk_key, level_placement, level_shape, ome_multiscales, parse_chunk_key
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "ArrayMeta",
     "Box",
     "Node",
+    "chunk_key",
     "corner_to_centre",
+    "create",
     "default_axes",
     "detect",
     "index_range",
+    "level_placement",
+    "level_shape",
     "list_chunk_keys",
+    "ome_multiscales",
+    "parse_chunk_key",
     "Pyramid",
     "Retry",
     "WorldArray",
@@ -39,5 +46,7 @@ __all__ = [
     "open_tensorstore",
     "select_level",
     "shared_context",
+    "store",
     "units",
+    "write",
 ]

@@ -55,6 +55,7 @@ class ArrayMeta:
     group_attrs: dict = field(default_factory=dict)
     placed_by: str | None = None  # which rule gave voxel_size and translation; None: nothing did
     fill_value: object = None  # the store's fill value, as tensorstore reports it
+    shard_shape: tuple[int, ...] | None = None  # a sharded zarr v3 array's shard; None otherwise
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "dtype", np.dtype(self.dtype))
@@ -62,6 +63,10 @@ class ArrayMeta:
         for name in ("chunk_shape", "axes", "units", "voxel_size", "translation"):
             if len(getattr(self, name)) != n:
                 raise ValueError(f"{name} must have length {n}, got {getattr(self, name)}")
+        if self.shard_shape is not None:
+            if len(self.shard_shape) != n:
+                raise ValueError(f"shard_shape must have length {n}, got {self.shard_shape}")
+            object.__setattr__(self, "shard_shape", tuple(int(s) for s in self.shard_shape))
         object.__setattr__(self, "voxel_size", tuple(float(v) for v in self.voxel_size))
         object.__setattr__(self, "translation", tuple(float(v) for v in self.translation))
 
@@ -135,7 +140,13 @@ class ArrayMeta:
             units=pick(self.units),
             voxel_size=pick(self.voxel_size),
             translation=pick(self.translation),
+            shard_shape=pick(self.shard_shape) if self.shard_shape is not None else None,
         )
+
+    @property
+    def write_shape(self) -> tuple[int, ...]:
+        """The unit one writer may own: the shard shape when sharded, else the chunk shape."""
+        return self.shard_shape if self.shard_shape is not None else self.chunk_shape
 
 
 def spatial_axes(axes: tuple[str, ...]) -> tuple[int, ...]:
@@ -189,14 +200,17 @@ def read_meta(
     ``conflicts``: what a per-array ``voxel_size`` that disagrees with the OME scale does,
     ``"error"`` (cellmap-analyze's choice, catches stale attributes) or ``"warn"`` (a server
     that would rather show the image)."""
+    read_chunk = tuple(int(c) for c in store.chunk_layout.read_chunk.shape)
+    write_chunk = tuple(int(c) for c in store.chunk_layout.write_chunk.shape)
     return _assemble(
         node,
         tuple(int(s) for s in store.shape),
         store.dtype.numpy_dtype,
-        tuple(int(c) for c in store.chunk_layout.read_chunk.shape),
+        read_chunk,
         _fill_value(store),
         scale_index=scale_index,
         conflicts=conflicts,
+        shard_shape=write_chunk if write_chunk != read_chunk else None,
     )
 
 
@@ -207,23 +221,40 @@ def read_meta_light(
     dtype, chunks and fill value from ``.zarray``, ``zarr.json`` (the inner chunk of a
     sharded array), ``attributes.json`` or ``info``. For listing a pyramid's levels cheaply;
     a precomputed single channel is dropped as ``open_array`` drops it."""
-    shape, dtype, chunk_shape, fill = _dims_from_docs(node, scale_index)
+    shape, dtype, chunk_shape, fill, shard = _dims_from_docs(node, scale_index)
     return _assemble(
-        node, shape, dtype, chunk_shape, fill, scale_index=scale_index, conflicts=conflicts
+        node,
+        shape,
+        dtype,
+        chunk_shape,
+        fill,
+        scale_index=scale_index,
+        conflicts=conflicts,
+        shard_shape=shard,
     )
 
 
 def _dims_from_docs(node: Node, scale_index: int | None):
+    """``(shape, dtype, chunk_shape, fill_value, shard_shape)`` from the documents: the inner
+    chunk and the shard of a sharded zarr v3 array, N5 and precomputed in C order, a
+    precomputed single channel dropped."""
     if node.format == "zarr2":
         d = node.docs[".zarray"]
-        return tuple(d["shape"]), np.dtype(d["dtype"]), tuple(d["chunks"]), d.get("fill_value")
+        return (
+            tuple(d["shape"]),
+            np.dtype(d["dtype"]),
+            tuple(d["chunks"]),
+            d.get("fill_value"),
+            None,
+        )
     if node.format == "zarr3":
         d = node.docs["zarr.json"]
-        chunks = tuple(d["chunk_grid"]["configuration"]["chunk_shape"])
+        grid = tuple(d["chunk_grid"]["configuration"]["chunk_shape"])
+        chunks, shard = grid, None
         for codec in d.get("codecs", []) or []:
             if codec.get("name") == "sharding_indexed":
-                chunks = tuple(codec["configuration"]["chunk_shape"])
-        return tuple(d["shape"]), np.dtype(d["data_type"]), chunks, d.get("fill_value")
+                chunks, shard = tuple(codec["configuration"]["chunk_shape"]), grid
+        return tuple(d["shape"]), np.dtype(d["data_type"]), chunks, d.get("fill_value"), shard
     if node.format == "n5":
         d = node.docs["attributes.json"]
         return (
@@ -231,14 +262,15 @@ def _dims_from_docs(node: Node, scale_index: int | None):
             np.dtype(d["dataType"]),
             tuple(d["blockSize"])[::-1],
             None,
+            None,
         )
     info = node.docs["info"]
     scale = info["scales"][scale_index or 0]
     size, chunk = tuple(scale["size"])[::-1], tuple(scale["chunk_sizes"][0])[::-1]
     channels = int(info.get("num_channels", 1))
     if channels > 1:
-        return (channels, *size), np.dtype(info["data_type"]), (channels, *chunk), None
-    return size, np.dtype(info["data_type"]), chunk, None
+        return (channels, *size), np.dtype(info["data_type"]), (channels, *chunk), None, None
+    return size, np.dtype(info["data_type"]), chunk, None, None
 
 
 def _assemble(
@@ -250,6 +282,7 @@ def _assemble(
     *,
     scale_index: int | None,
     conflicts: str,
+    shard_shape: tuple[int, ...] | None = None,
 ) -> ArrayMeta:
     if conflicts not in ("error", "warn"):
         raise ValueError("conflicts is 'error' or 'warn'")
@@ -289,6 +322,7 @@ def _assemble(
         group_attrs=group_attrs,
         placed_by=found.placed_by if found.voxel_size is not None else None,
         fill_value=fill_value,
+        shard_shape=shard_shape,
     )
 
 

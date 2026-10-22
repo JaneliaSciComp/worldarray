@@ -1,14 +1,37 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (unreleased)
 
-- Specification only, no code change: `docs/spec.md` draft 3 adds the contract for 0.2
-  (metadata and placed creation: the OME 0.4/0.5 document builder, the level rule, chunk
-  keys, `create`, opening for write, aligned writes, `add_level`; Behaviours 10 to 16) and
-  0.3 (grids and blocks: `Grid`, `blocks`, `write_chunk`, `level_factors`, public path
-  helpers; Behaviours 17 to 19), written from the five writer sessions' answers and a
-  census of the I/O code the five repos still carry. The package stays read-only until
-  0.2 ships.
+Metadata and placed creation, built to spec draft 3 (Behaviours 10 to 16). Nothing on the
+read side changes.
+
+- `ome_multiscales(axes, units, levels, version)` builds the complete OME-NGFF 0.4 or 0.5
+  group document with one explicit placement per level; `level_placement` and
+  `level_shape` derive a level from factors and an origin (Convention 1's rule inverted,
+  so a level built from a ROI origin is placed from it). Expected documents are pinned in
+  `tests/fixtures/write.json`, shared with chunkmirage's TypeScript builder.
+- `create(path, shape, dtype, voxel_size, translation, chunks=..., ...)` writes the group
+  document (made when absent, else its one dataset entry added or replaced, every other
+  attribute kept) and then the array, as zarr v2 with OME 0.4 or zarr v3 with OME 0.5
+  following the group's format. `chunks` is required, codecs are explicit with a zstd
+  level 3 default, shards are a zarr v3 option. `exists` is `"error"` or `"adopt"` (an
+  identical array is opened for writing, a different one raises naming every difference,
+  a creation lost to another process is adopted after a short backoff). Nothing is ever
+  deleted, truncated or overwritten. Write units equal to the fill value are not stored
+  unless `store_fill=True`.
+- `open(path, mode="r+")` opens an existing array for writing; a `WorldArray` pickles by
+  its arguments and reopens in the receiving process.
+- `write_index(begin, end, data)` writes whole write units only (the shard when sharded,
+  else the chunk; the clipped last unit allowed), so writers in different processes need
+  no coordination; `partial=True` does tensorstore's read-modify-write. `write(box, data)`
+  maps a world box by the centre rule first. No cast, no padding, no resampling on write.
+- `open_pyramid(path, mode="r+").add_level(name, factors=, origin=)` creates a level's
+  entry and empty array, placed and sized from the level below with its dtype, chunks,
+  shards, codecs and fill value copied; the downsampling itself stays with the caller.
+- `chunk_key` and `parse_chunk_key` for zarr v2, zarr v3 (both encodings, sharded arrays
+  keyed by shard), N5 and precomputed, as free functions and on `WorldArray`;
+  `list_chunks` uses the same parser. `write_shape`, `ArrayMeta.shard_shape`,
+  `chunks_covering(write=True)`.
 ## 0.1.1 (2026-10-22)
 
 - funlib `voxel_size`/`offset` on the parent group place an array that carries none, for

@@ -1,0 +1,875 @@
+{
+  "_comment": "ome_multiscales(axes, units, levels, version) -> expected group attributes (Behaviour 10). Levels are (path, voxel_size, translation) over the space axes or every axis; translation is voxel 0's centre, written always. Compare after JSON normalisation. Shared with chunkmirage's TypeScript builder.",
+  "cases": [
+    {
+      "name": "zyx_ome_04",
+      "axes": [
+        "z",
+        "y",
+        "x"
+      ],
+      "units": "nanometer",
+      "levels": [
+        [
+          "s0",
+          [
+            8,
+            8,
+            8
+          ],
+          [
+            4,
+            4,
+            4
+          ]
+        ],
+        [
+          "s1",
+          [
+            16,
+            16,
+            16
+          ],
+          [
+            8,
+            8,
+            8
+          ]
+        ]
+      ],
+      "version": "0.4",
+      "expect": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "name": "",
+            "axes": [
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "nanometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      8.0,
+                      8.0,
+                      8.0
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      4.0,
+                      4.0,
+                      4.0
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "s1",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      16.0,
+                      16.0,
+                      16.0
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      8.0,
+                      8.0,
+                      8.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "zyx_ome_05",
+      "axes": [
+        "z",
+        "y",
+        "x"
+      ],
+      "units": "nanometer",
+      "levels": [
+        [
+          "s0",
+          [
+            8,
+            8,
+            8
+          ],
+          [
+            4,
+            4,
+            4
+          ]
+        ],
+        [
+          "s1",
+          [
+            16,
+            16,
+            16
+          ],
+          [
+            8,
+            8,
+            8
+          ]
+        ]
+      ],
+      "version": "0.5",
+      "expect": {
+        "ome": {
+          "version": "0.5",
+          "multiscales": [
+            {
+              "name": "",
+              "axes": [
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "nanometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "nanometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "nanometer"
+                }
+              ],
+              "datasets": [
+                {
+                  "path": "s0",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        8.0,
+                        8.0,
+                        8.0
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        4.0,
+                        4.0,
+                        4.0
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "path": "s1",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        16.0,
+                        16.0,
+                        16.0
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        8.0,
+                        8.0,
+                        8.0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "czyx_ome_04",
+      "axes": [
+        "c",
+        "z",
+        "y",
+        "x"
+      ],
+      "units": "nanometer",
+      "levels": [
+        [
+          "s0",
+          [
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ]
+      ],
+      "version": "0.4",
+      "expect": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "name": "",
+            "axes": [
+              {
+                "name": "c",
+                "type": "channel"
+              },
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "nanometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      1.0,
+                      4.0,
+                      4.0,
+                      4.0
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      0.0,
+                      2.0,
+                      2.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "czyx_ome_05",
+      "axes": [
+        "c",
+        "z",
+        "y",
+        "x"
+      ],
+      "units": "nanometer",
+      "levels": [
+        [
+          "s0",
+          [
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ]
+      ],
+      "version": "0.5",
+      "expect": {
+        "ome": {
+          "version": "0.5",
+          "multiscales": [
+            {
+              "name": "",
+              "axes": [
+                {
+                  "name": "c",
+                  "type": "channel"
+                },
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "nanometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "nanometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "nanometer"
+                }
+              ],
+              "datasets": [
+                {
+                  "path": "s0",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        1.0,
+                        4.0,
+                        4.0,
+                        4.0
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        0.0,
+                        2.0,
+                        2.0,
+                        2.0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "tczyx_ome_04",
+      "axes": [
+        "t",
+        "c",
+        "z",
+        "y",
+        "x"
+      ],
+      "units": {
+        "space": "micrometer",
+        "time": "second"
+      },
+      "levels": [
+        [
+          "s0",
+          [
+            1,
+            1,
+            0.5,
+            0.1,
+            0.1
+          ],
+          [
+            0,
+            0,
+            0.25,
+            0.05,
+            0.05
+          ]
+        ],
+        [
+          "s1",
+          [
+            1,
+            1,
+            0.5,
+            0.2,
+            0.2
+          ],
+          [
+            0,
+            0,
+            0.25,
+            0.1,
+            0.1
+          ]
+        ]
+      ],
+      "version": "0.4",
+      "expect": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "name": "",
+            "axes": [
+              {
+                "name": "t",
+                "type": "time",
+                "unit": "second"
+              },
+              {
+                "name": "c",
+                "type": "channel"
+              },
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "micrometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "micrometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "micrometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      1.0,
+                      1.0,
+                      0.5,
+                      0.1,
+                      0.1
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      0.0,
+                      0.0,
+                      0.25,
+                      0.05,
+                      0.05
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "s1",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      1.0,
+                      1.0,
+                      0.5,
+                      0.2,
+                      0.2
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      0.0,
+                      0.0,
+                      0.25,
+                      0.1,
+                      0.1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "tczyx_ome_05",
+      "axes": [
+        "t",
+        "c",
+        "z",
+        "y",
+        "x"
+      ],
+      "units": {
+        "space": "micrometer",
+        "time": "second"
+      },
+      "levels": [
+        [
+          "s0",
+          [
+            1,
+            1,
+            0.5,
+            0.1,
+            0.1
+          ],
+          [
+            0,
+            0,
+            0.25,
+            0.05,
+            0.05
+          ]
+        ],
+        [
+          "s1",
+          [
+            1,
+            1,
+            0.5,
+            0.2,
+            0.2
+          ],
+          [
+            0,
+            0,
+            0.25,
+            0.1,
+            0.1
+          ]
+        ]
+      ],
+      "version": "0.5",
+      "expect": {
+        "ome": {
+          "version": "0.5",
+          "multiscales": [
+            {
+              "name": "",
+              "axes": [
+                {
+                  "name": "t",
+                  "type": "time",
+                  "unit": "second"
+                },
+                {
+                  "name": "c",
+                  "type": "channel"
+                },
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "micrometer"
+                }
+              ],
+              "datasets": [
+                {
+                  "path": "s0",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        1.0,
+                        1.0,
+                        0.5,
+                        0.1,
+                        0.1
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        0.0,
+                        0.0,
+                        0.25,
+                        0.05,
+                        0.05
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "path": "s1",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        1.0,
+                        1.0,
+                        0.5,
+                        0.2,
+                        0.2
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        0.0,
+                        0.0,
+                        0.25,
+                        0.1,
+                        0.1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "non_whole_factor_ome_04",
+      "axes": [
+        "z",
+        "y",
+        "x"
+      ],
+      "units": "nanometer",
+      "levels": [
+        [
+          "s0",
+          [
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ],
+        [
+          "s1",
+          [
+            10.48,
+            10.48,
+            10.48
+          ],
+          [
+            3.7,
+            3.7,
+            3.7
+          ]
+        ]
+      ],
+      "version": "0.4",
+      "expect": {
+        "multiscales": [
+          {
+            "version": "0.4",
+            "name": "",
+            "axes": [
+              {
+                "name": "z",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "y",
+                "type": "space",
+                "unit": "nanometer"
+              },
+              {
+                "name": "x",
+                "type": "space",
+                "unit": "nanometer"
+              }
+            ],
+            "datasets": [
+              {
+                "path": "s0",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      4.0,
+                      4.0,
+                      4.0
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      2.0,
+                      2.0,
+                      2.0
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "s1",
+                "coordinateTransformations": [
+                  {
+                    "type": "scale",
+                    "scale": [
+                      10.48,
+                      10.48,
+                      10.48
+                    ]
+                  },
+                  {
+                    "type": "translation",
+                    "translation": [
+                      3.7,
+                      3.7,
+                      3.7
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "non_whole_factor_ome_05",
+      "axes": [
+        "z",
+        "y",
+        "x"
+      ],
+      "units": "nanometer",
+      "levels": [
+        [
+          "s0",
+          [
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ],
+        [
+          "s1",
+          [
+            10.48,
+            10.48,
+            10.48
+          ],
+          [
+            3.7,
+            3.7,
+            3.7
+          ]
+        ]
+      ],
+      "version": "0.5",
+      "expect": {
+        "ome": {
+          "version": "0.5",
+          "multiscales": [
+            {
+              "name": "",
+              "axes": [
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "nanometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "nanometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "nanometer"
+                }
+              ],
+              "datasets": [
+                {
+                  "path": "s0",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        4.0,
+                        4.0,
+                        4.0
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        2.0,
+                        2.0,
+                        2.0
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "path": "s1",
+                  "coordinateTransformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        10.48,
+                        10.48,
+                        10.48
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        3.7,
+                        3.7,
+                        3.7
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
