@@ -992,3 +992,12 @@ Branch off `main`, draft PRs, no "Test plan" section in PR bodies, never add Cla
 author or committer, `/nrs/cellmap/data` is read-only, no cluster jobs, few behavioural
 tests, minimal reusable code. The README is sections 1 to 5 of this file; a behaviour that
 is not stated here is not implemented without adding the statement first.
+
+Versioning. Every consumer pins a floating range and its CI installs the newest version in
+it, so a change in where any voxel sits is a **minor** release, never a patch: 0.1.1 moved
+offset-less N5 pyramids by half a base voxel as a patch, and cellmap-flow's CI was red on
+every open PR within the hour until it pinned 0.1.1. A patch release reads more stores or
+reads them faster and places nothing differently; a minor release may move voxels or add
+API, and its changelog entry starts with **Placement change** when it does; nothing before
+1.0 promises more. Consumers that cannot absorb a move between CI runs pin
+`>=0.x,<0.(x+1)`.
