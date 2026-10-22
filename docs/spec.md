@@ -242,20 +242,30 @@ read side, so a read-only consumer sees no change.
 ```python
 doc = wa.ome_multiscales(
     axes,                 # axis names in the array's C order: ("z","y","x"), ("c","z","y","x"), ("t","c","z","y","x")
-    units,                # per axis ("nanometer"; "" on a channel axis) or by kind {"space": "nanometer", "time": "second"}
+        units,                # per axis ("nanometer"; "" on a channel axis) or by kind {"space": "nanometer", "time": "second"};
+                          #   written in OME's names ("nm" -> "nanometer", wa.units.ome_name), an unknown unit as given
     levels,               # [("s0", voxel_size, translation), ...]: one explicit placement per level over the spatial axes
                           #   (or every axis). Never derived here: levels in the wild carry their own translations and
                           #   non-whole factors (chunkmirage's pyramids)
     version="0.5",        # "0.5" (zarr v3: attributes["ome"]) | "0.4" (zarr v2: attributes["multiscales"])
     axis_types=None,      # per axis "space" | "time" | "channel"; default from the name (z y x space, t time, c channel)
-    name="", metadata=None,
+        name="", metadata=None, type=None,   # the multiscale's own fields; `type` (the downsampling method) written when given
 ) -> dict                 # the complete group attributes to write; `wa.metadata` reads them back exactly (Behaviour 10)
 
 wa.level_placement(voxel_size, translation, factors, origin=0) -> (voxel_size, translation)
                           # the level whose voxel j covers source voxels origin + j f .. origin + (j + 1) f - 1 on each axis:
                           #   (voxel_size * f, translation + voxel_size * (origin + (f - 1) / 2)). Convention 1's BigDataViewer
                           #   rule inverted, and the centre Behaviour 4's block mean produces
-wa.level_shape(shape, factors, origin=0) -> shape    # ceil((n - origin) / f) per axis
+wa.level_shape(shape, factors, origin=0) -> shape    # ceil((n - origin) / f) per axis, the quotient snapped to a whole
+                                                     #   number within 1e-6 first (0.3 / 0.1 is a factor of 3)
+wa.units.ome_name(unit) -> str   # OME's name for any spelling the unit table knows ("nanometer" for "nm"); unknown raises
+wa.ensure_group_entry(group_path, name, voxel_size, translation, axes, units="nanometer", axis_types=None,
+                      group_attrs=None, format=None)   # list an array the package did not create (a symlinked s0, a level
+                          #   filled before it is listed): the group document's entry for `name` added or replaced, the
+                          #   document and missing ancestors created, nothing written when the entry already says the same
+                          #   (Behaviour 12). `create` and `add_level` call this
+wa.write.codecs_of(path_or_node) -> (codecs, shards)   # an array's codecs in its format's dialect and its shard shape, for
+                          #   a mirror created like it (cellmap-flow's sync)
 
 vol = wa.create(
     path,                 # ".../vol.zarr/s0": the last component is the level, its parent the multiscale group, made if absent
@@ -267,13 +277,15 @@ vol = wa.create(
     fill_value=0,
     codecs="zstd",        # "zstd" (level 3, which is what zarr-python's default `zstd(level=0)` means) | "none" | the format's
                           #   own JSON: a zarr v2 `compressor` dict or a zarr v3 `codecs` list
-    format=None,          # "zarr3" | "zarr2"; default the group's format when a group document exists, else "zarr3".
+        format=None,          # "zarr3" | "zarr2"; default the nearest existing ancestor group's format, else "zarr3"; missing
+                          #   ancestors up to the ".zarr" root get bare group documents (Behaviour 11).
                           #   OME 0.5 goes with v3 and 0.4 with v2, always
     attrs=None,           # extra array attributes, merged into the array's own
     group_attrs=None,     # extra group attributes, merged; no one else's key is dropped or rewritten (Behaviour 12)
     exists="error",       # "error": anything already at `path` raises | "adopt": an identical array (shape, dtype, chunks,
                           #   shards, placement within rtol 1e-6) is opened for writing; a different one raises naming each
-                          #   difference. There is no third value
+                                                    #   difference. There is no third value. An adopt writes no group document when the entry
+                          #   already says the same (Behaviour 12)
     store_fill=False,     # True stores write units equal to fill_value instead of leaving them absent
     separator=None,       # zarr v2 dimension_separator, zarr v3 chunk-key separator; the format's default when None
     axis_types=None,      # as ome_multiscales
@@ -281,7 +293,8 @@ vol = wa.create(
 ) -> WorldArray           # writable; every read-side property and method as before
 
 vol = wa.open(path, mode="r+", store_fill=False, ...)   # an existing array for writing; vol.writable; the metadata
-                                                        #   rules of mode "r" unchanged; a handle pickles by its arguments
+                                                                                                                #   rules of mode "r" unchanged; a handle pickles by its arguments
+                                                        #   and its context's spec (Behaviour 11)
 vol.write_index(begin, end, data, partial=False)   # whole write units only (Behaviour 13) unless partial
 vol.write(box, data, partial=False)                # a world box by Behaviour 2, then write_index; no padding, no resampling
 vol.write_shape                                    # the unit one writer may own: the shard shape when sharded, else the chunk shape
@@ -628,7 +641,16 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     for OME 0.4 and 0.5, for `(z, y, x)`, `(c, z, y, x)` and `(t, c, z, y, x)`, and for
     levels with non-whole factors and their own translations (chunkmirage's case). The
     documents equal the expected documents in `tests/fixtures/write.json` after JSON
-    normalisation, so chunkmirage's TypeScript builder can be held to the same output.
+        normalisation, so chunkmirage's TypeScript builder can be held to the same output; each
+    case also carries its resolved per-axis units and types, and the call with those gives
+    the same document, so the TypeScript side need not reimplement the broadcasting. Units
+    are written in OME's names: any spelling the unit table knows (`"nm"`, `"µm"`,
+    `"nanometre"`) becomes `"nanometer"`, `"micrometer"` and so on (`wa.units.ome_name`),
+    and a unit the table does not know is written as given, Convention 3's welcome kept.
+    The multiscale's `name`, `metadata` and `type` are written when given. `level_shape`
+    snaps the quotient `(n - origin) / f` to a whole number within `1e-6` before the
+    ceiling, so a factor that is a ratio of float voxel sizes (`0.3 / 0.1 =
+    2.9999999999999996`, chunkmirage's case) gives 3 voxels for 9, not 4.
     `level_placement` and `level_shape` invert Convention 1's BigDataViewer rule and agree
     with Behaviour 4: the level a block mean by factor `f` from source voxel `origin`
     produces has voxel 0 centred at `translation + voxel_size * (origin + (f - 1) / 2)`,
@@ -641,10 +663,16 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     this order, the group document (created when absent; when present, read, the dataset
     entry for this level added or replaced with the datasets kept in order of voxel size,
     everything else kept as it was) and then the array with its chunks, shards, codecs,
-    fill value, dimension names and `attrs`. The format follows the group: a `.zgroup`
-    means zarr v2 and OME 0.4, a `zarr.json` means zarr v3 and OME 0.5, `format` decides
-    only when no group document exists, and a `format` that contradicts an existing group
-    raises `ValueError` rather than mixing versions. `chunks` is required (alignment is the
+        fill value, dimension names and `attrs`. The format follows the container: walking up
+    from the level's parent, the nearest existing node decides, a `.zgroup` group meaning
+    zarr v2 and OME 0.4, a `zarr.json` group zarr v3 and OME 0.5, an array, an N5 or a
+    precomputed node a `ValueError`; a `format` that contradicts it raises rather than
+    mixing versions. When no ancestor exists, the walk ends at the nearest ancestor named
+    `*.zarr`, the store root, `format` or zarr v3 decides, and every missing group from
+    that root down to the level's parent gets a document, bare above the parent, so
+    zarr-python browses the hierarchy and a level made in a zarr v2 container is zarr v2
+    (cellmap-analyze's `prepare_ds`, cellmap-flow's `box_n` groups); with no `.zarr`
+    ancestor either, only the parent gets a document. `chunks` is required (alignment is the
     whole safety argument, so the package never picks a chunk shape); `shards` that are not
     a whole number of chunks on every axis raise. `codecs` defaults to zstd level 3 in the
     format's own dialect, what zarr-python's default `zstd(level=0)` means, so
@@ -660,21 +688,35 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     absent, is re-read with backoff, 5 attempts at `0.5 s * attempt`, and then treated as an
     adopt (registration-station's `shared_array`, written because metadata appears late on
     NRS). The package deletes, truncates and follows no symlink, ever; a caller that wants a
-    fresh array removes the old one with its own code first. Write units whose values all
+        fresh array removes the old one with its own code first. Write units whose values all
     equal `fill_value` are not stored unless `store_fill=True`, so chunk presence stays the
-    signal cellmap-flow's trainer and manifest read. `create` returns a writable
-    `WorldArray`; `wa.open(path, mode="r+")` opens an existing one with every rule of
-    Conventions 3 to 5 unchanged, and a handle pickles by its arguments, so each worker
-    process opens its own cheaply (mesh-n-bone's per-process cache).
+    signal cellmap-flow's trainer and manifest read; a stored unit written so loses its
+    key, as zarr-python's `write_empty_chunks=False` does, the one key a write may remove
+    being the one it replaces. `create` returns a writable `WorldArray`;
+    `wa.open(path, mode="r+")` opens an existing one with every rule of Conventions 3 to 5
+    unchanged, and a handle pickles by its arguments and its context's spec, so each worker
+    process opens its own cheaply, on the shared context when the handle had one, else on
+    a context rebuilt once per process from the same spec, so a capped context stays
+    capped (mesh-n-bone's per-process cache and thread caps).
 
 12. **Group attributes belong to everyone.** The package rewrites only the `multiscales`
     list (0.4) or `ome.multiscales` (0.5), and within it only the dataset entry whose `path`
     is the level being created or added; other multiscales, other datasets and every other
     key of the group and of the array (`fs`, a registry record, `y0`/`y1`, anything) come
-    back unchanged. The group's attributes before and after a `create` differ in that one
-    entry. Rewriting a group document is a read-modify-write with no lock, so `create` and
-    `add_level` on one group are called from one process at a time, the coordinator, never
-    from block jobs; the docstrings say so.
+        back unchanged. The group's attributes before and after a `create` differ in that one
+    entry, and not at all when the entry already says the same: adopting an identical array
+    (placement within rtol 1e-6) reads the document, compares and writes nothing, so
+    registration-station's twenty block jobs calling `create(exists="adopt")` on one output
+    write the document in the first creation only. Rewriting a group document is a
+    read-modify-write with no lock, so `create` and `add_level` of different levels in one
+    group are called from one process at a time, the coordinator, never from block jobs;
+    the docstrings say so. After a write the document is read again and, when this level's
+    entry is missing because another process's write landed in between, merged and written
+    again, up to 5 times, then `RuntimeError`: a lost update becomes a repair or an error
+    where the store shows it, never a misplaced level. `ensure_group_entry` is this listing
+    step on its own, public, for an array the package did not create (mesh-n-bone's
+    symlinked `s0`) or one listed only after it is filled; it follows the same rules,
+    ancestors included.
 
 13. **Aligned writes need no coordination.** `write_index(begin, end, data)` requires
     `data.shape == end - begin`, `data.dtype == vol.dtype` (no silent cast; `ValueError`),
@@ -848,7 +890,14 @@ sizing from factors and origin, inserting in order, replacing a same-named entry
 dtype, chunks and codecs, writing no data; `chunk_key` and `parse_chunk_key` round trips
 for zarr v2 with `.` and `/`, zarr v3 `default` with both separators and `v2`, N5,
 precomputed with a `voxel_offset` and a clipped last chunk, and sharded zarr v3, with
-`list_chunk_keys` agreeing; `write_shape` on sharded and unsharded arrays.
+`list_chunk_keys` agreeing; `write_shape` on sharded and unsharded arrays; units written in
+OME's names and an unknown unit as given, `type` when given, `level_shape` on a float-noise
+factor; missing ancestor documents down from the `.zarr` root and none above it, the nearest
+ancestor's format followed and a contradiction refused, an array in the way refused; an
+adopt writing no document and a changed placement writing one; a lost entry written again
+and the error after the attempts; `ensure_group_entry` on a foreign array, idempotent; a
+pickled handle keeping a capped context's spec and sharing the shared one; `codecs_of` by
+path; an all-fill write removing its own key.
 
 Grids (0.3): `blocks` partitioning with and without a box, `context` as an int, per axis
 and as before/after pairs, clipping on and off, `len`, `blocks[id]` and `index_of`;
@@ -988,21 +1037,42 @@ over funlib geometry, by this spec's own assignment.
    cellmap-analyze asked for `at_start`/`at_end` per axis and `inner`, and confirmed that
    `(before, after)` pairs cover its context modes and that `clip=False` with a padded
    `read_index` is its edge-reading mode. All are in Behaviour 17.
-7. **Sidecar attributes.** registration-station's `fs` and `fix_origin_um` duplicate the OME
-   scale and translation, and its `y0`, `y1`, `y0_core`, `y1_core`, `feather_vox` part
-   attributes encode placement. With `ArrayMeta` round-tripping, are they still wanted, or
-   does Behaviour 12's merge rule simply carry them?
+7. **Sidecar attributes.** Resolved 2026-10-22: registration-station keeps `fs` and
+   `fix_origin_um` on the group through `group_attrs` and the part attributes (`y0`, `y1`,
+   `y0_core`, `y1_core`, `feather_vox`) on the array through `attrs`, all known at creation;
+   merge-on-create carries them and no attribute-update call is wanted.
 8. **Creation on NRS.** The adopt-with-backoff numbers in Behaviour 11 (5 attempts, 0.5 s
    times the attempt) are registration-station's and are tested here only against a fake
    store. Validate from two LSF jobs on the cluster before anyone relies on them.
-9. **The codec default.** zstd level 3 reproduces three writer repos' outputs; cellmap-flow's
-   blockwise outputs are blosc lz4 through funlib and would change compression unless its
-   subclass passes `codecs`. Decide whether it pins blosc or accepts zstd.
+9. **The codec default.** Resolved 2026-10-22: cellmap-flow pins blosc explicitly (lz4
+   level 5 for blockwise outputs, zstd level 3 for annotation volumes) as zarr v2 compressor
+   dicts; cellmap-analyze, mesh-n-bone and registration-station take the zstd default, which
+   cellmap-analyze checked byte for byte against zarr-python's. No shortcut name is wanted.
 10. **Sharding.** Nobody writes shards today. registration-station wants them because a
    2.4 GB chunk makes Neuroglancer decompress a whole band for one slice; mesh-n-bone would
    take them as an opt-in for v3 sources; cellmap-analyze would size blocks to shards. 0.2
-   offers `shards=` at creation and `write_shape` for planners and nothing more; whether
-   that is enough is learned from the first repo that uses it.
+      offers `shards=` at creation and `write_shape` for planners and nothing more; whether
+   that is enough is learned from the first repo that uses it. registration-station checked
+   that a shard larger than the array is accepted and that band writes on shard edges,
+   the clipped last band included, go through.
+11. **Listing after filling.** cellmap-analyze's #90 creates a level's array, fills it, and
+   lists it last, so a crashed job never leaves a half-filled level listed. `create` and
+   `add_level` list first. `ensure_group_entry` is the listing step, but a level created
+   unlisted has its placement nowhere until it is listed, so a `create(listed=False)`
+   handle, and its pickles, would carry the placement from its arguments alone. Decide
+   whether that is worth having, or whether an unlisted level should describe itself on
+   the array (open question 5's funlib attributes, or an OME-shaped array attribute).
+12. **Per-open object-store credentials.** cellmap-flow's MinIO writers open with a
+   per-session key, secret and endpoint while the same process reads public S3
+   anonymously. tensorstore 0.1.85's `aws_credentials` takes no inline key and secret, and
+   its endpoint and profile settings are process-wide through the environment, so those
+   three writers stay on zarr-python and s3fs. Revisit when tensorstore takes static
+   credentials per open.
+13. **World boxes on blocks.** cellmap-flow reads its input at one voxel size by a world
+   box grown by a context in nanometres and writes at another; `blocks` (0.3) gives index
+   boxes on one grid. `Grid.blocks` could carry world boxes too (`b.box`, `b.read_box` as
+   `Box`, a context in world units). Two lines on cellmap-flow's side today; a candidate
+   for 0.4.
 
 ## 8. Constraints for whoever builds on this
 

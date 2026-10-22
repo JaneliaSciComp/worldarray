@@ -19,7 +19,14 @@ from .levels import select_level
 from .placement import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
 from .store import Node, detect, list_chunk_keys
-from .write import chunk_key, level_placement, level_shape, ome_multiscales, parse_chunk_key
+from .write import (
+    chunk_key,
+    ensure_group_entry,
+    level_placement,
+    level_shape,
+    ome_multiscales,
+    parse_chunk_key,
+)
 
 __version__ = "0.3.0"
 
@@ -35,6 +42,7 @@ __all__ = [
     "create",
     "default_axes",
     "detect",
+    "ensure_group_entry",
     "grid",
     "index_range",
     "level_factors",

@@ -16,6 +16,7 @@ writable ``WorldArray`` and does the adopt check.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
@@ -26,17 +27,22 @@ from typing import Any
 import numpy as np
 import tensorstore as ts
 
+from .geometry import snap_integral
 from .placement import spatial_axes
 from .store import (
     _DRIVER,
     Location,
     Node,
+    basename,
     detect,
     is_refused,
+    is_root,
     kvstore_specs,
     normalize_path,
+    parent,
     with_access,
 )
+from .units import ome_name
 
 logger = logging.getLogger(__name__)
 
@@ -134,15 +140,20 @@ def ome_multiscales(
     axis_types: Sequence[str | None] | None = None,
     name: str = "",
     metadata: dict | None = None,
+    type: str | None = None,
 ) -> dict:
     """The complete group attributes of an OME-NGFF multiscale group: ``{"multiscales":
     [...]}`` for 0.4 (zarr v2), ``{"ome": {"version": "0.5", "multiscales": [...]}}`` for
     0.5 (zarr v3). ``levels`` are ``(path, voxel_size, translation)`` with the placement
     explicit per level, over the space axes or every axis; ``translation`` is voxel 0's
-    centre and is written always."""
+    centre and is written always. Units are written in OME's names: any spelling the unit
+    table knows (``"nm"``, ``"µm"``, ``"nanometre"``) becomes ``"nanometer"``,
+    ``"micrometer"``, ...; a unit it does not know is written as given. ``type`` (the
+    downsampling method, OME's optional field), ``name`` and ``metadata`` are the
+    multiscale's own."""
     axes = tuple(str(a) for a in axes)
     kinds = axis_kinds(axes, axis_types)
-    unit_list = axis_units(units, axes, kinds)
+    unit_list = tuple(ome_unit(u) for u in axis_units(units, axes, kinds))
     axis_docs = []
     for a, k, u in zip(axes, kinds, unit_list):
         doc: dict[str, Any] = {"name": a}
@@ -153,6 +164,8 @@ def ome_multiscales(
         axis_docs.append(doc)
     datasets = [dataset_entry(path, vs, tr, kinds) for path, vs, tr in levels]
     multiscale: dict[str, Any] = {"name": name, "axes": axis_docs, "datasets": datasets}
+    if type is not None:
+        multiscale["type"] = str(type)
     if metadata:
         multiscale["metadata"] = dict(metadata)
     if version == "0.4":
@@ -160,6 +173,15 @@ def ome_multiscales(
     if version == "0.5":
         return {"ome": {"version": "0.5", "multiscales": [multiscale]}}
     raise ValueError(f"OME version {version!r}; the package writes 0.4 (zarr v2) or 0.5 (zarr v3)")
+
+
+def ome_unit(unit: str) -> str:
+    """``unit`` in OME's name when the unit table knows it, else as given (``""`` stays
+    ``""``, ``"pixel"`` stays ``"pixel"``: Convention 3 welcomes unknown units)."""
+    try:
+        return ome_name(unit) if unit else ""
+    except ValueError:
+        return unit
 
 
 def dataset_entry(path: str, voxel_size, translation, kinds: Sequence[str | None]) -> dict:
@@ -194,11 +216,16 @@ def level_placement(
 
 def level_shape(shape, factors, origin=0) -> tuple[int, ...]:
     """``ceil((n - origin) / f)`` per axis: the voxels of a level that covers source voxels
-    from ``origin`` on."""
+    from ``origin`` on. The quotient is snapped to a whole number within ``1e-6`` first
+    (Convention 3), so a factor that is a ratio of float voxel sizes, ``0.3 / 0.1 =
+    2.9999999999999996``, gives 3 voxels for 9, not 4."""
     shape = tuple(int(n) for n in shape)
     f = _broadcast(factors, len(shape), "factors")
     o = _broadcast(origin, len(shape), "origin")
-    return tuple(max(0, int(math.ceil((n - oi) / fi))) for n, fi, oi in zip(shape, f, o))
+    return tuple(
+        max(0, int(math.ceil(float(snap_integral((n - oi) / fi)))))
+        for n, fi, oi in zip(shape, f, o)
+    )
 
 
 def expand_spatial(values, spatial: Sequence[int], ndim: int, fill) -> tuple:
@@ -347,9 +374,12 @@ def codec_metadata(codecs, format: str) -> dict:
     )
 
 
-def codecs_of(node: Node) -> tuple[Any, tuple[int, ...] | None]:
+def codecs_of(node: Node | str) -> tuple[Any, tuple[int, ...] | None]:
     """An existing array's codecs in its format's dialect, and its shard shape (None when
-    unsharded): what ``add_level`` copies from the level below."""
+    unsharded): what ``add_level`` copies from the level below, and what a mirror of an
+    array passes to ``create(codecs=, shards=)`` (cellmap-flow's sync). A path is detected."""
+    if isinstance(node, str):
+        node = detect(node)
     if node.format == "zarr2":
         return node.docs[".zarray"].get("compressor"), None
     if node.format == "zarr3":
@@ -449,17 +479,46 @@ def merged_group_attrs(
             raise ValueError(
                 f"the group's axis units are {existing_units}; the level's are {wanted_units}"
             )
-        datasets = [d for d in ms.get("datasets", []) if str(d.get("path", "")).strip("/") != name]
-        datasets.append(dataset_entry(name, voxel_size, translation, kinds))
-        ms["datasets"] = sorted(datasets, key=_dataset_fineness)
-        multiscales[0] = ms
-        if slot == "ome":
-            merged["ome"] = {**container, "multiscales": multiscales}
-        else:
-            merged["multiscales"] = multiscales
+        wanted = dataset_entry(name, voxel_size, translation, kinds)
+        current = [d for d in ms.get("datasets", []) if str(d.get("path", "")).strip("/") == name]
+        if not (len(current) == 1 and same_entry(current[0], wanted)):
+            others = [d for d in ms.get("datasets", []) if d not in current]
+            ms["datasets"] = sorted([*others, wanted], key=_dataset_fineness)
+            multiscales[0] = ms
+            if slot == "ome":
+                merged["ome"] = {**container, "multiscales": multiscales}
+            else:
+                merged["multiscales"] = multiscales
     if group_attrs:
         merged.update(group_attrs)
     return merged
+
+
+def _entry_placement(dataset: dict) -> tuple[list[float], list[float] | None]:
+    scale: list[float] = []
+    translation: list[float] | None = None
+    for t in dataset.get("coordinateTransformations", []) or []:
+        if t.get("type") == "scale":
+            scale = [float(v) for v in t["scale"]]
+        elif t.get("type") == "translation":
+            translation = [float(v) for v in t["translation"]]
+    return scale, translation
+
+
+def same_entry(a: dict, b: dict, rtol: float = 1e-6) -> bool:
+    """Two dataset entries that say the same: same path, same scale and translation within
+    ``rtol`` (a missing translation is zeros). What lets an adopt write nothing."""
+    if str(a.get("path", "")).strip("/") != str(b.get("path", "")).strip("/"):
+        return False
+    sa, ta = _entry_placement(a)
+    sb, tb = _entry_placement(b)
+    if len(sa) != len(sb) or not sa:
+        return False
+    ta = ta if ta is not None else [0.0] * len(sa)
+    tb = tb if tb is not None else [0.0] * len(sb)
+    return bool(
+        np.allclose(sa, sb, rtol=rtol, atol=0.0) and np.allclose(ta, tb, rtol=rtol, atol=1e-9)
+    )
 
 
 def _dataset_fineness(dataset: dict) -> float:
@@ -473,46 +532,86 @@ def _dataset_fineness(dataset: dict) -> float:
 # Creation (Behaviour 11)
 
 
-def group_node(group_path: str, format: str | None) -> tuple[Node | None, str]:
-    """The group at ``group_path`` and the format to write: the group's own when it exists,
-    else ``format``, else zarr v3. A contradicting ``format``, a parent that is an array, or
-    an N5 or precomputed parent raise."""
-    gnode = detect(group_path, missing_ok=True)
-    if gnode is None:
-        return None, format or "zarr3"
-    if gnode.kind != "group":
-        raise ValueError(f"{group_path} is an array; a level's parent must be a group")
-    if gnode.format not in ("zarr2", "zarr3"):
-        raise ValueError(
-            f"{group_path} is {gnode.format}; the package writes zarr v2 and v3 groups only"
-        )
-    if format is not None and format != gnode.format:
-        raise ValueError(
-            f"{group_path} is a {gnode.format} group; format={format!r} would mix zarr versions"
-        )
-    return gnode, gnode.format
+def group_format(group_path: str, format: str | None) -> tuple[str, list[str]]:
+    """The format to write at ``group_path`` and the ancestors lacking a group document,
+    outermost first, ``group_path`` itself included when it has none. The walk goes up from
+    ``group_path`` until a node exists: a zarr v2 or v3 group decides the format (a
+    contradicting ``format`` raises; an array, an N5 or a precomputed node raise). When no
+    ancestor exists the walk ends at the nearest ancestor named ``*.zarr``, the store root,
+    and ``format`` or zarr v3 decides; with no such ancestor either, only ``group_path``
+    gets a document (Behaviour 11; cellmap-analyze's and cellmap-flow's containers)."""
+    group_path = normalize_path(group_path)
+    missing: list[str] = []
+    p: str | None = group_path
+    while p is not None and not is_root(p):
+        gnode = detect(p, missing_ok=True)
+        if gnode is not None:
+            if gnode.kind != "group":
+                raise ValueError(f"{p} is an array; a level's parent must be a group")
+            if gnode.format not in ("zarr2", "zarr3"):
+                raise ValueError(
+                    f"{p} is {gnode.format}; the package writes zarr v2 and v3 groups only"
+                )
+            if format is not None and format != gnode.format:
+                raise ValueError(
+                    f"{p} is a {gnode.format} group; format={format!r} would mix zarr versions"
+                )
+            return gnode.format, missing[::-1]
+        missing.append(p)
+        if basename(p).endswith(".zarr"):
+            return format or "zarr3", missing[::-1]
+        p = parent(p)
+    return format or "zarr3", [group_path]
+
+
+def write_bare_group(path: str, format: str) -> None:
+    """A group document with no attributes: what a missing ancestor gets."""
+    loc = Location(path)
+    if format == "zarr3":
+        loc.write_json("zarr.json", {"zarr_format": 3, "node_type": "group"})
+    else:
+        loc.write_json(".zgroup", {"zarr_format": 2})
 
 
 def ensure_group_entry(
     group_path: str,
-    format: str,
     name: str,
     voxel_size,
     translation,
     axes: Sequence[str],
-    units,
+    units="nanometer",
     axis_types: Sequence[str | None] | None = None,
     group_attrs: dict | None = None,
+    format: str | None = None,
 ) -> None:
-    """Add or replace the dataset entry for ``name`` in the group document at ``group_path``
-    (creating the document when absent), touching nothing else. A read-modify-write with no
-    lock: one process at a time."""
+    """List the level ``name`` in the group document at ``group_path``: its dataset entry
+    added, or replaced when it says something else, nothing else touched; the document, and
+    any missing ancestor's up to the ``.zarr`` root, created when absent (``format`` as in
+    ``create``). An entry that already says the same, placement within rtol 1e-6, leaves
+    the document unwritten, so adopting an existing array writes nothing. The write is a
+    read-modify-write with no lock, re-read afterwards: an entry lost to another process's
+    concurrent write is written again, ``RACE_ATTEMPTS`` times, then ``RuntimeError``
+    (Behaviour 12). Public for an array the package did not create: mesh-n-bone's symlinked
+    ``s0``, a level filled before it is listed."""
+    group_path = normalize_path(group_path)
+    fmt, missing = group_format(group_path, format)
+    for p in missing:
+        if p != group_path:
+            write_bare_group(p, fmt)
     loc = Location(group_path)
-    attrs, raw = read_group_attrs(loc, format)
-    merged = merged_group_attrs(
-        attrs, format, name, voxel_size, translation, axes, units, axis_types, group_attrs
+    for _ in range(RACE_ATTEMPTS):
+        attrs, raw = read_group_attrs(loc, fmt)
+        merged = merged_group_attrs(
+            attrs, fmt, name, voxel_size, translation, axes, units, axis_types, group_attrs
+        )
+        if json.loads(json.dumps(merged)) == attrs:
+            return  # the group already says this
+        write_group_attrs(loc, fmt, merged, raw)
+    raise RuntimeError(
+        f"{group_path}: the dataset entry for {name!r} was lost {RACE_ATTEMPTS} times to another "
+        "process writing the group document; create and add_level on one group belong to one "
+        "process (Behaviour 12)"
     )
-    write_group_attrs(loc, format, merged, raw)
 
 
 def array_spec(
@@ -640,7 +739,7 @@ def create_array(
     vs = per_axis(voxel_size, kinds, 1.0, f"{path}: voxel_size")
     tr = per_axis(translation, kinds, 0.0, f"{path}: translation")
 
-    gnode, fmt = group_node(group_path, format)
+    fmt, _missing = group_format(group_path, format)
     if fmt == "zarr2" and shards is not None:
         raise ValueError("shards are zarr v3 only")
     if detect(path, missing_ok=True) is not None:
@@ -650,8 +749,8 @@ def create_array(
             )
         return path, fmt, True
 
-    # the group document first (Behaviour 11), then the array
-    ensure_group_entry(group_path, fmt, name, vs, tr, axes, units, axis_types, group_attrs)
+    # the group documents first (Behaviour 11), then the array
+    ensure_group_entry(group_path, name, vs, tr, axes, units, axis_types, group_attrs, format=fmt)
 
     def attempt(kvstore: dict) -> ts.TensorStore:
         spec = array_spec(

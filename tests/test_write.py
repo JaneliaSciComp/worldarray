@@ -19,6 +19,7 @@ from conftest import (
     write_precomputed,
     write_zarr2,
     write_zarr2_group,
+    write_zarr3,
     write_zarr3_group,
 )
 
@@ -28,12 +29,51 @@ WRITE_CASES = json.loads((FIXTURES / "write.json").read_text())["cases"]
 # --- Behaviour 10: documents round-trip -------------------------------------------------
 
 
+def _fixture_call(case, units, axis_types):
+    return wa.ome_multiscales(
+        case["axes"],
+        units,
+        [tuple(lvl) for lvl in case["levels"]],
+        version=case["version"],
+        axis_types=axis_types,
+        name=case.get("multiscale_name", ""),
+        metadata=case.get("metadata"),
+        type=case.get("multiscale_type"),
+    )
+
+
 @pytest.mark.parametrize("case", WRITE_CASES, ids=[c["name"] for c in WRITE_CASES])
 def test_ome_multiscales_matches_the_fixture(case):
-    doc = wa.ome_multiscales(
-        case["axes"], case["units"], [tuple(lvl) for lvl in case["levels"]], version=case["version"]
-    )
+    """The broadcast inputs and their resolved per-axis form give the pinned document."""
+    doc = _fixture_call(case, case["units"], case.get("axis_types"))
     assert json.loads(json.dumps(doc)) == case["expect"]
+    resolved = case["resolved"]
+    per_axis = _fixture_call(case, resolved["axis_units"], resolved["axis_types"])
+    assert json.loads(json.dumps(per_axis)) == case["expect"]
+
+
+def test_units_are_written_in_ome_names_and_unknown_ones_as_given():
+    for spelling in ("nm", "nanometre", "Nanometers", "nanometer"):
+        assert wa.units.ome_name(spelling) == "nanometer"
+    assert wa.units.ome_name("um") == wa.units.ome_name("\u00b5m") == "micrometer"
+    assert wa.units.ome_name("s") == "second"
+    with pytest.raises(ValueError, match="unknown unit"):
+        wa.units.ome_name("pixel")
+    doc = wa.ome_multiscales(("z", "y", "x"), "pixel", [("s0", (1, 1, 1), (0.5,) * 3)])
+    assert [a["unit"] for a in doc["ome"]["multiscales"][0]["axes"]] == ["pixel"] * 3
+    doc = wa.ome_multiscales(("z", "y", "x"), "nm", [("s0", (1, 1, 1), (0.5,) * 3)], type="mean")
+    ms = doc["ome"]["multiscales"][0]
+    assert [a["unit"] for a in ms["axes"]] == ["nanometer"] * 3 and ms["type"] == "mean"
+    plain = wa.ome_multiscales(("z", "y", "x"), "nm", [("s0", (1, 1, 1), (0.5,) * 3)])
+    assert "type" not in plain["ome"]["multiscales"][0]
+
+
+def test_level_shape_absorbs_float_factor_noise():
+    f = 0.3 / 0.1  # 2.9999999999999996, chunkmirage's ratio of float voxel sizes
+    assert wa.level_shape((9, 9, 9), f) == (3, 3, 3)
+    assert wa.level_shape((10, 9, 8), 3) == (4, 3, 3)
+    assert wa.level_shape((9, 9, 9), f, origin=3) == (2, 2, 2)
+    assert wa.level_shape((9,), (9 + 1e-9,)) == (1,)
 
 
 @pytest.mark.parametrize("fmt", ["zarr2", "zarr3"])
@@ -517,3 +557,198 @@ def test_write_shape_is_the_shard_when_sharded(tmp_path):
     assert ts.open(
         {"driver": "zarr3", "kvstore": {"driver": "file", "path": vol.level_path + "/"}}
     ).result().shape == (16, 16, 16)
+
+
+# --- Behaviours 11 and 12 as the consumer sessions found them (2026-10-22 review) --------
+
+
+def _group_doc(path, fmt):
+    return json.loads((path / ("zarr.json" if fmt == "zarr3" else ".zgroup")).read_text())
+
+
+def test_create_writes_missing_ancestor_groups_up_to_the_zarr_root(tmp_path):
+    """cellmap-analyze's hierarchy: every group from the container down has a document."""
+    root = tmp_path / "a.zarr"
+    wa.create(str(root / "sub/mito/s0"), (8, 8, 8), "uint8", (8, 8, 8), (4, 4, 4), chunks=(8, 8, 8))
+    for group in (root, root / "sub", root / "sub/mito"):
+        doc = _group_doc(group, "zarr3")
+        assert doc["zarr_format"] == 3 and doc["node_type"] == "group"
+        assert wa.detect(str(group)).kind == "group"
+    assert "attributes" not in _group_doc(root, "zarr3")  # bare: nothing invented above the level
+    assert "ome" in _group_doc(root / "sub/mito", "zarr3")["attributes"]
+    assert not (tmp_path / "zarr.json").exists() and not (tmp_path / ".zgroup").exists()
+    assert wa.open_pyramid(str(root / "sub/mito")).names == ["s0"]
+    # zarr v2 asked for: .zgroup at every missing ancestor
+    v2 = tmp_path / "b.zarr"
+    wa.create(
+        str(v2 / "mito/s0"),
+        (8, 8, 8),
+        "uint8",
+        (8, 8, 8),
+        (4, 4, 4),
+        chunks=(8, 8, 8),
+        format="zarr2",
+    )
+    assert _group_doc(v2, "zarr2") == {"zarr_format": 2} and _group_doc(v2 / "mito", "zarr2") == {
+        "zarr_format": 2
+    }
+    assert "multiscales" in json.loads((v2 / "mito/.zattrs").read_text())
+    assert not (v2 / ".zattrs").exists()
+
+
+def test_create_follows_the_nearest_existing_ancestors_format(tmp_path):
+    """A v2 container gets v2 levels and OME 0.4 even when the level's own parent is absent."""
+    root = tmp_path / "c.zarr"
+    write_zarr2_group(root, {"owner": "cellmap-analyze"})
+    vol = wa.create(
+        str(root / "mito/s0"), (8, 8, 8), "uint8", (8, 8, 8), (4, 4, 4), chunks=(8, 8, 8)
+    )
+    assert vol.meta.format == "zarr2"
+    assert (root / "mito/.zgroup").exists() and (root / "mito/s0/.zarray").exists()
+    assert "multiscales" in json.loads((root / "mito/.zattrs").read_text())
+    assert json.loads((root / ".zattrs").read_text()) == {"owner": "cellmap-analyze"}  # untouched
+    with pytest.raises(ValueError, match="mix zarr versions"):
+        wa.create(
+            str(root / "er/s0"),
+            (8, 8, 8),
+            "uint8",
+            (8, 8, 8),
+            (4, 4, 4),
+            chunks=(8, 8, 8),
+            format="zarr3",
+        )
+    assert not (root / "er").exists()
+    # an array in the way raises, and no document is written above a container with no .zarr name
+    with pytest.raises(ValueError, match="is an array"):
+        wa.create(
+            str(root / "mito/s0/deeper/s0"),
+            (8, 8, 8),
+            "uint8",
+            (8, 8, 8),
+            (4, 4, 4),
+            chunks=(8, 8, 8),
+        )
+    wa.create(
+        str(tmp_path / "out/sub/s0"), (8, 8, 8), "uint8", (8, 8, 8), (4, 4, 4), chunks=(8, 8, 8)
+    )
+    assert (tmp_path / "out/sub/zarr.json").exists() and not (tmp_path / "out/zarr.json").exists()
+
+
+def test_adopting_an_identical_array_writes_no_group_document(tmp_path, monkeypatch):
+    """registration-station's 20 block jobs each call create on one output: only the first
+    creation writes; the adopts read, compare and leave the document alone."""
+    path = str(tmp_path / "shared.zarr/0")
+    wa.create(
+        path,
+        (8, 8, 8),
+        "float32",
+        (0.5, 0.5, 0.5),
+        (0.25,) * 3,
+        chunks=(4, 4, 4),
+        group_attrs={"fs": 2},
+    )
+    real, writes = wa.write.write_group_attrs, []
+
+    def counting(loc, fmt, attrs, raw):
+        writes.append(attrs)
+        return real(loc, fmt, attrs, raw)
+
+    monkeypatch.setattr(wa.write, "write_group_attrs", counting)
+    for _ in range(3):
+        vol = wa.create(
+            path,
+            (8, 8, 8),
+            "float32",
+            (0.5, 0.5, 0.5),
+            (0.25 + 1e-9,) * 3,
+            chunks=(4, 4, 4),
+            exists="adopt",
+            group_attrs={"fs": 2},
+        )
+        assert vol.writable
+    assert writes == []
+    # a different translation for the same level is a replacement, written once
+    wa.ensure_group_entry(
+        str(tmp_path / "shared.zarr"), "0", (0.5, 0.5, 0.5), (1.25,) * 3, ("z", "y", "x")
+    )
+    assert len(writes) == 1 and wa.open(path).translation == (1.25, 1.25, 1.25)
+
+
+def test_a_group_entry_lost_to_a_concurrent_writer_is_written_again(tmp_path, monkeypatch):
+    group = tmp_path / "parts.zarr"
+    wa.create(str(group / "c000"), (4, 4, 4), "float32", (1, 1, 1), (0.5,) * 3, chunks=(4, 4, 4))
+    before = json.loads((group / "zarr.json").read_text())
+    real, calls = wa.write.write_group_attrs, {"n": 0}
+
+    def racing(loc, fmt, attrs, raw):
+        calls["n"] += 1
+        real(loc, fmt, attrs, raw)
+        if calls["n"] == 1:  # another process's older document lands after ours
+            (group / "zarr.json").write_text(json.dumps(before))
+
+    monkeypatch.setattr(wa.write, "write_group_attrs", racing)
+    wa.ensure_group_entry(str(group), "c001", (1, 1, 1), (4.5, 0.5, 0.5), ("z", "y", "x"))
+    assert calls["n"] == 2 and wa.open_pyramid(str(group)).names == ["c000", "c001"]
+
+    def always_lost(loc, fmt, attrs, raw):
+        real(loc, fmt, attrs, raw)
+        (group / "zarr.json").write_text(json.dumps(before))
+
+    monkeypatch.setattr(wa.write, "write_group_attrs", always_lost)
+    monkeypatch.setattr(wa.write, "RACE_ATTEMPTS", 2)
+    with pytest.raises(RuntimeError, match="lost 2 times"):
+        wa.ensure_group_entry(str(group), "c002", (1, 1, 1), (8.5, 0.5, 0.5), ("z", "y", "x"))
+
+
+def test_ensure_group_entry_lists_an_array_the_package_did_not_create(tmp_path, monkeypatch):
+    """mesh-n-bone's symlinked s0, cellmap-analyze's level listed after it is filled."""
+    group = tmp_path / "pyr.zarr"
+    write_zarr3(group / "s0", pattern((8, 8, 8), np.uint8), chunks=(4, 4, 4))
+    assert wa.detect(str(group), missing_ok=True) is not None  # a group by its s0, with no document
+    wa.ensure_group_entry(str(group), "s0", (8, 8, 8), (4, 4, 4), ("z", "y", "x"))
+    assert wa.open_pyramid(str(group)).names == ["s0"]
+    assert wa.open(str(group / "s0")).translation == (4.0, 4.0, 4.0)
+    assert wa.open(str(group / "s0")).meta.units == ("nanometer",) * 3
+    writes = []
+    monkeypatch.setattr(wa.write, "write_group_attrs", lambda *a: writes.append(a))
+    wa.ensure_group_entry(str(group), "s0", (8, 8, 8), (4, 4, 4), ("z", "y", "x"))
+    assert writes == []
+    with pytest.raises(ValueError, match="mix zarr versions"):
+        wa.ensure_group_entry(
+            str(group), "s1", (16, 16, 16), (8, 8, 8), ("z", "y", "x"), format="zarr2"
+        )
+
+
+def test_a_pickled_handle_keeps_its_context(tmp_path):
+    path = str(tmp_path / "vol.zarr/s0")
+    wa.create(path, (8, 8, 8), "uint16", (4, 4, 4), (2, 2, 2), chunks=(4, 4, 4))
+    capped = wa.open(path, mode="r+", context=wa.capped_context(concurrency=2))
+    again = pickle.loads(pickle.dumps(capped))
+    assert again.context.spec.to_json() == capped.context.spec.to_json()
+    assert again.context is not wa.shared_context(0)
+    assert (
+        pickle.loads(pickle.dumps(capped)).context is again.context
+    )  # one rebuilt context per spec
+    shared = pickle.loads(pickle.dumps(wa.open(path)))
+    assert shared.context is wa.shared_context(0)
+
+
+def test_codecs_of_a_path_and_the_fill_write_that_removes_a_key(tmp_path):
+    path = str(tmp_path / "vol.zarr/s0")
+    vol = wa.create(
+        path,
+        (8, 8, 8),
+        "uint8",
+        (4, 4, 4),
+        (2, 2, 2),
+        chunks=(4, 4, 4),
+        format="zarr2",
+        codecs={"id": "blosc", "cname": "lz4", "clevel": 5, "shuffle": 1},
+    )
+    codecs, shards = wa.write.codecs_of(path)
+    assert codecs["id"] == "blosc" and codecs["cname"] == "lz4" and shards is None
+    vol.write_index((0, 0, 0), (4, 4, 4), np.ones((4, 4, 4), np.uint8))
+    assert vol.list_chunks() == [(0, 0, 0)]
+    vol.write_index((0, 0, 0), (4, 4, 4), np.zeros((4, 4, 4), np.uint8))
+    assert vol.list_chunks() == []  # the one key a write may remove: its own, now all fill
+    assert int(vol.read_index((0, 0, 0), (4, 4, 4)).sum()) == 0
