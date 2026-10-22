@@ -13,7 +13,6 @@ the public attributes ``path``, ``units``, ``context``, ``padding``, ``method``,
 from __future__ import annotations
 
 import logging
-import re
 import warnings
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import replace
@@ -24,12 +23,20 @@ import tensorstore as ts
 
 from . import resample as _resample
 from . import units as U
-from .context import shared_context
+from . import write as _write
+from .context import from_recipe, recipe_of, shared_context
 from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, discover_group, same_voxel_size, select_level
-from .placement import ArrayMeta, light_levels, read_meta, read_meta_light
+from .placement import (
+    ArrayMeta,
+    _dims_from_docs,
+    default_axes,
+    light_levels,
+    read_meta,
+    read_meta_light,
+)
 from .retry import Retry, read_with_retries
-from .store import Node, detect, is_remote, open_array, precomputed_scale_index
+from .store import Node, detect, is_remote, join, open_array, precomputed_scale_index
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +80,18 @@ class WorldArray:
         anchor: Sequence[float] | None = None,
         transform: Transform | None = None,
         strict_units: bool = True,
+        mode: str = "r",
+        store_fill: bool = False,
         _ref: LevelRef | None = None,
         _node: Node | None = None,
     ):
         if on_mismatch not in ("error", "resample", "relabel", "keep"):
             raise ValueError("on_mismatch is 'error', 'resample', 'relabel' or 'keep'")
+        if mode not in ("r", "r+"):
+            raise ValueError("mode is 'r' (read) or 'r+' (read and write)")
         self.path = path
+        self._mode = mode
+        self._store_fill = bool(store_fill)
         self.padding = padding
         self.method = method
         self.units = units
@@ -96,6 +109,8 @@ class WorldArray:
             base_units=base_units,
             anchor=anchor,
             strict_units=strict_units,
+            mode=mode,
+            store_fill=store_fill,
         )
         self._anchor = tuple(float(a) for a in anchor) if anchor is not None else None
 
@@ -109,7 +124,13 @@ class WorldArray:
             node if (ref.scale_index is not None or ref.path == node.path) else detect(ref.path)
         )
         self._node = node_for_level
-        self._store = open_array(node_for_level, context=self.context, scale_index=ref.scale_index)
+        self._store = open_array(
+            node_for_level,
+            context=self.context,
+            scale_index=ref.scale_index,
+            write=mode == "r+",
+            store_fill=store_fill,
+        )
         self._meta = read_meta(
             node_for_level, self._store, scale_index=ref.scale_index, conflicts=metadata_conflicts
         )
@@ -354,6 +375,17 @@ class WorldArray:
     def remote(self) -> bool:
         return is_remote(self._node.path)
 
+    @property
+    def writable(self) -> bool:
+        """Opened with ``mode="r+"`` (or by ``create``): ``write_index`` and ``write`` work."""
+        return self._mode == "r+"
+
+    @property
+    def write_shape(self) -> tuple[int, ...]:
+        """The unit one writer may own: the shard shape when sharded, else the chunk shape
+        (Behaviour 16)."""
+        return self._meta.write_shape
+
     def __repr__(self) -> str:
         return (
             f"WorldArray({self.path!r}, level={self.level_name!r}, shape={self.shape}, dtype={self.dtype}, "
@@ -376,13 +408,30 @@ class WorldArray:
             self.path, context=context if context is not None else self.context, **opts
         )
 
+    def __reduce__(self):
+        """A handle pickles by its arguments and its context's recipe, and reopens in the
+        receiving process (Behaviour 11): a worker opens its own store, cheaply, on a shared
+        context when the handle had one, else on a context rebuilt from the same spec, so a
+        capped context stays capped."""
+        opts = {
+            **self._opts,
+            "padding": self.padding,
+            "method": self.method,
+            "select": self._select,
+            "units": self.units,
+            "retries": self.retries,
+            "transform": self.transform,
+        }
+        return (_reopen, (self.path, opts, recipe_of(self.context)))
+
     # --- index space ------------------------------------------------------------
 
     def chunks_covering(
-        self, begin: Sequence[int], end: Sequence[int]
+        self, begin: Sequence[int], end: Sequence[int], write: bool = False
     ) -> Iterator[tuple[int, ...]]:
-        """The chunk indices a voxel box touches, clipped to the array."""
-        cs = self._meta.chunk_shape
+        """The chunk indices a voxel box touches, clipped to the array; ``write=True`` on the
+        write-unit grid (the shard grid of a sharded array)."""
+        cs = self.write_shape if write else self._meta.chunk_shape
         first = [max(0, int(b)) // c for b, c in zip(begin, cs)]
         last = [(min(int(e), n) - 1) // c for e, n, c in zip(end, self._grid.shape, cs)]
         if any(hi < lo for lo, hi in zip(first, last)):
@@ -390,49 +439,117 @@ class WorldArray:
         for idx in np.ndindex(*[hi - lo + 1 for lo, hi in zip(first, last)]):
             yield tuple(int(i + lo) for i, lo in zip(idx, first))
 
-    def list_chunks(self) -> list[tuple[int, ...]]:
-        """The chunk indices that exist in storage (C order, the storage grid), by listing the
-        array's keys: zarr v2 and v3, N5, and unsharded precomputed. For a sharded zarr v3
-        array the storage grid is the shard grid. Works on any kvstore, URLs included."""
+    def _key_params(self) -> dict:
+        """The facts ``chunk_key`` and ``parse_chunk_key`` need, from the array's documents:
+        the storage grid of the whole array (a sharded array's shards; a selected axis is
+        still a key component), the separator and encoding, a precomputed scale's origin."""
         node = self._node
-        kv = ts.KvStore.open(self._store.kvstore.spec()).result()
-        keys = [k.decode() if isinstance(k, bytes) else str(k) for k in kv.list().result()]
+        shape, _dtype, chunks, _fill, shard = _dims_from_docs(
+            node, self._ref.scale_index if self._ref.scale_index is not None else None
+        )
+        params: dict[str, Any] = {
+            "format": node.format,
+            "chunk_shape": shard or chunks,
+            "shape": shape,
+        }
         if node.format == "zarr2":
-            sep = node.docs.get(".zarray", {}).get("dimension_separator", ".")
-            pattern = re.compile(r"^\d+(?:" + re.escape(sep) + r"\d+)*$")
-            found = [tuple(int(p) for p in k.split(sep)) for k in keys if pattern.match(k)]
+            params["separator"] = node.docs.get(".zarray", {}).get("dimension_separator", ".")
         elif node.format == "zarr3":
             enc = node.docs.get("zarr.json", {}).get("chunk_key_encoding", {}) or {}
-            sep = (enc.get("configuration") or {}).get("separator", "/")
-            prefix = "c" if enc.get("name", "default") == "default" else ""
-            found = []
-            for k in keys:
-                parts = k.split(sep)
-                if prefix and (not parts or parts[0] != prefix):
-                    continue
-                parts = parts[1:] if prefix else parts
-                if parts and all(p.isdigit() for p in parts):
-                    found.append(tuple(int(p) for p in parts))
-        elif node.format == "n5":
-            found = [
-                tuple(int(p) for p in k.split("/"))[::-1]
-                for k in keys
-                if k and all(p.isdigit() for p in k.split("/"))
-            ]
-        else:  # precomputed, unsharded: "x0-x1_y0-y1_z0-z1"
+            params["encoding"] = enc.get("name", "default")
+            params["separator"] = (enc.get("configuration") or {}).get("separator")
+        elif node.format == "precomputed":
             scale = node.docs["info"]["scales"][self._ref.scale_index or 0]
             if "sharding" in scale:
-                raise NotImplementedError(
-                    "list_chunks: sharded precomputed stores list shards, not chunks"
+                raise NotImplementedError("chunk keys of a sharded precomputed store name shards")
+            spatial = tuple(scale["size"])[::-1]
+            params["chunk_shape"] = tuple(scale["chunk_sizes"][0])[::-1]
+            params["shape"] = spatial
+            params["origin"] = tuple(int(o) for o in scale.get("voxel_offset", [0, 0, 0]))[::-1]
+        return params
+
+    def chunk_key(self, index: Sequence[int]) -> str:
+        """The storage key, relative to the array, of the write unit at ``index`` on the
+        storage grid (Behaviour 15). A precomputed array's key names the spatial chunk only."""
+        return _write.chunk_key(index, **self._key_params())
+
+    def parse_chunk_key(self, key: str) -> tuple[int, ...] | None:
+        """``chunk_key`` inverted; None for a key that is not a chunk."""
+        return _write.parse_chunk_key(key, **self._key_params())
+
+    def list_chunks(self) -> list[tuple[int, ...]]:
+        """The chunk indices that exist in storage (C order, the storage grid), by listing the
+        array's keys with ``parse_chunk_key``: zarr v2 and v3 (a sharded array lists its
+        shards), N5, and unsharded precomputed. Works on any kvstore, URLs included."""
+        params = self._key_params()
+        kv = ts.KvStore.open(self._store.kvstore.spec()).result()
+        keys = [k.decode() if isinstance(k, bytes) else str(k) for k in kv.list().result()]
+        found = set()
+        for k in keys:
+            idx = _write.parse_chunk_key(
+                k.rsplit("/", 1)[-1] if params["format"] == "precomputed" else k, **params
+            )
+            if idx is not None:
+                found.add(idx)
+        return sorted(found)
+
+    # --- writing (Behaviour 13) ----------------------------------------------------
+
+    def write_index(
+        self, begin: Sequence[int], end: Sequence[int], data: np.ndarray, partial: bool = False
+    ) -> None:
+        """Write ``data`` over the voxel box ``[begin, end)`` of the stored grid. The box must
+        be a union of whole write units (every bound a multiple of ``write_shape`` on its axis,
+        or the array's end), so writers in different processes need no coordination; a
+        unit written whole is one put. ``partial=True`` lifts the check and does tensorstore's
+        read-modify-write of the touched units, unsafe while anything else writes the same
+        unit. No cast, no padding, no resampling; the write commits before returning."""
+        if not self.writable:
+            raise ValueError(
+                f"{self.path} was opened read-only; open it with mode='r+' or create it"
+            )
+        if self._target is not None:
+            raise ValueError(
+                f"{self.path}: no resampling on write; open the array without voxel_size="
+            )
+        begin, end = tuple(int(b) for b in begin), tuple(int(e) for e in end)
+        data = np.asarray(data)
+        shape = self._grid.shape
+        if len(begin) != len(shape) or len(end) != len(shape):
+            raise ValueError(f"{self.path}: begin and end need one entry per axis of {shape}")
+        wanted = tuple(e - b for b, e in zip(begin, end))
+        if data.shape != wanted:
+            raise ValueError(f"{self.path}: data has shape {data.shape}; the box is {wanted}")
+        if data.dtype != self.dtype:
+            raise ValueError(
+                f"{self.path}: data is {data.dtype}, the array {self.dtype}; nothing is cast on write"
+            )
+        for axis, (b, e, n) in enumerate(zip(begin, end, shape)):
+            if b < 0 or e > n or e <= b:
+                raise ValueError(
+                    f"{self.path}: write [{b}, {e}) on axis {axis} ({self.axes[axis]}) lies outside the array of {n}"
                 )
-            chunk = scale["chunk_sizes"][0]
-            found = []
-            for k in keys:
-                m = re.fullmatch(r"(\d+)-\d+_(\d+)-\d+_(\d+)-\d+", k.rsplit("/", 1)[-1])
-                if m:
-                    starts = [int(m.group(i)) for i in (1, 2, 3)]
-                    found.append(tuple(s // c for s, c in zip(starts, chunk))[::-1])
-        return sorted(set(found))
+        if not partial:
+            for axis, (b, e, u, n) in enumerate(zip(begin, end, self.write_shape, shape)):
+                if b % u != 0 or (e % u != 0 and e != n):
+                    raise ValueError(
+                        f"{self.path}: write [{b}, {e}) on axis {axis} ({self.axes[axis]}) is not whole write "
+                        f"units of {u}; align the box to write_shape {self.write_shape} or pass partial=True"
+                    )
+        self._store[tuple(slice(b, e) for b, e in zip(begin, end))].write(data).result()
+
+    def write(self, box, data: np.ndarray, partial: bool = False) -> None:
+        """Write ``data`` over a world box: the voxels Behaviour 2's centre rule selects, then
+        ``write_index``. A box reaching outside the array raises; nothing is padded or
+        resampled on write."""
+        begin, end = self.index_box(box)
+        for axis, (b, e, n) in enumerate(zip(begin, end, self._grid.shape)):
+            if b < 0 or e > n:
+                raise ValueError(
+                    f"{self.path}: the box reaches outside the array on axis {axis} ({self.axes[axis]}): "
+                    f"voxels [{b}, {e}) of {n}; nothing is padded on write"
+                )
+        self.write_index(begin, end, data, partial=partial)
 
     def read_index(
         self,
@@ -740,14 +857,18 @@ class Pyramid:
         context: ts.Context | None = None,
         units: Units = "nanometer",
         select: dict[str, int] | None = None,
+        mode: str = "r",
         _node: Node | None = None,
         **kwargs,
     ):
+        if mode not in ("r", "r+"):
+            raise ValueError("mode is 'r' (read) or 'r+' (read and write)")
         self.path = path
         self.context = context if context is not None else shared_context(0)
         self.units = units
         self._select = select or {}
-        self._kwargs = kwargs
+        self._mode = mode
+        self._kwargs = {**kwargs, "mode": mode}
         self._node = _node if _node is not None else detect(path)
         self._group, self._refs = discover_group(self._node)  # the node listing the levels
         if not self._refs:
@@ -833,6 +954,83 @@ class Pyramid:
         """``(name, spatial translation)`` per level; see ``placements``."""
         return [(name, tr) for name, _, tr in self.placements()]
 
+    def add_level(
+        self,
+        name: str,
+        factors=None,
+        origin=0,
+        *,
+        voxel_size=None,
+        translation=None,
+        shape=None,
+        dtype=None,
+        chunks=None,
+        shards=None,
+        codecs=None,
+        fill_value=None,
+        attrs: dict | None = None,
+        exists: str = "error",
+        from_level: str | int | None = None,
+    ) -> WorldArray:
+        """A new level's dataset entry and its empty array (Behaviour 14). Placement by
+        ``level_placement`` over ``from_level`` (the finest listed when None) from ``factors``
+        and ``origin``, unless ``voxel_size`` and ``translation`` are given; shape by
+        ``level_shape`` unless given; dtype, chunks, shards, codecs and fill value copied from
+        that level unless given. Writes no voxel data. One process at a time."""
+        if self._mode != "r+":
+            raise ValueError(f"{self.path}: open the pyramid with mode='r+' to add a level")
+        group = self._group
+        if group is None or group.kind != "group" or group.format not in ("zarr2", "zarr3"):
+            raise ValueError(f"{self.path}: add_level needs an OME zarr group (v2 or v3)")
+        base_ref = self._ref(from_level if from_level is not None else 0)
+        base_node = detect(base_ref.path)
+        base = read_meta_light(base_node, conflicts=self._kwargs.get("metadata_conflicts", "error"))
+        ndim, spatial = base.ndim, base.spatial
+        if voxel_size is None or translation is None:
+            if factors is None:
+                raise ValueError("pass factors (and origin), or voxel_size and translation")
+            f = _write.expand_spatial(
+                (factors,) * len(spatial) if np.isscalar(factors) else factors, spatial, ndim, 1
+            )
+            o = _write.expand_spatial(
+                (origin,) * len(spatial) if np.isscalar(origin) else origin, spatial, ndim, 0
+            )
+            vs, tr = _write.level_placement(base.voxel_size, base.translation, f, o)
+            if shape is None:
+                shape = _write.level_shape(base.shape, f, o)
+        else:
+            vs = _write.expand_spatial(voxel_size, spatial, ndim, 1.0)
+            tr = _write.expand_spatial(translation, spatial, ndim, 0.0)
+            if shape is None:
+                raise ValueError("pass shape when placing a level by voxel_size and translation")
+        base_codecs, base_shards = _write.codecs_of(base_node)
+        if codecs is None:
+            codecs = base_codecs if base_codecs is not None else "none"
+        if shards is None:
+            shards = base_shards
+        vol = create(
+            join(group.path, name),
+            shape,
+            base.dtype if dtype is None else dtype,
+            vs,
+            tr,
+            axes=base.axes,
+            units=base.units,
+            chunks=base.chunk_shape if chunks is None else chunks,
+            shards=shards,
+            fill_value=(base.fill_value if base.fill_value is not None else 0)
+            if fill_value is None
+            else fill_value,
+            codecs=codecs,
+            format=group.format,
+            attrs=attrs,
+            exists=exists,
+            context=self.context,
+        )
+        self._group, self._refs = discover_group(detect(group.path))
+        self._light, self._levels = None, {}
+        return vol
+
     def _select_ref(self, voxel_size, mode: Mode = "floor") -> LevelRef:
         name, _ = select_level(self.voxel_sizes(), voxel_size, mode)
         return self._ref(name)
@@ -849,6 +1047,127 @@ class Pyramid:
 
 # ---------------------------------------------------------------------------
 # Functions
+
+
+def create(
+    path: str,
+    shape: Sequence[int],
+    dtype,
+    voxel_size,
+    translation,
+    *,
+    axes: Sequence[str] | None = None,
+    units: Units = "nanometer",
+    chunks: Sequence[int] | None = None,
+    shards: Sequence[int] | None = None,
+    fill_value=0,
+    codecs="zstd",
+    format: str | None = None,
+    attrs: dict | None = None,
+    group_attrs: dict | None = None,
+    exists: str = "error",
+    store_fill: bool = False,
+    separator: str | None = None,
+    axis_types: Sequence[str | None] | None = None,
+    context: ts.Context | None = None,
+    retries: Retry | None = None,
+) -> WorldArray:
+    """Create a placed level: the group document (made when absent, else its one dataset
+    entry added or replaced) and then the array, as OME-NGFF zarr v2 (OME 0.4) or v3 (OME
+    0.5) following the group's format (Behaviours 11 and 12). ``chunks`` is required.
+    Nothing is ever deleted or overwritten: with ``exists="error"`` anything at ``path``
+    raises ``FileExistsError``; with ``"adopt"`` an identical array (shape, dtype, chunks,
+    shards, placement) is opened for writing and a different one raises ``ValueError``
+    naming every difference. Returns a writable ``WorldArray``."""
+    if chunks is None:
+        raise ValueError("chunks is required: the package never picks a chunk shape")
+    ndim = len(shape)
+    axes = tuple(str(a) for a in axes) if axes is not None else default_axes(ndim)
+    context = context if context is not None else shared_context(0)
+    kinds = _write.axis_kinds(axes, axis_types)
+    vs = _write.per_axis(voxel_size, kinds, 1.0, f"{path}: voxel_size")
+    tr = _write.per_axis(translation, kinds, 0.0, f"{path}: translation")
+    vol_units: Units = units if isinstance(units, (str, dict)) or units is None else None
+
+    def adopt(normalized: str, fmt: str) -> WorldArray:
+        vol = WorldArray(
+            normalized,
+            mode="r+",
+            units=None,
+            context=context,
+            retries=retries,
+            store_fill=store_fill,
+        )
+        diffs = _write.differences(
+            vol.meta,
+            shape=shape,
+            dtype=dtype,
+            chunks=chunks,
+            shards=shards,
+            voxel_size=vs,
+            translation=tr,
+        )
+        if diffs:
+            raise ValueError(
+                f"{normalized} exists and differs from what was asked for; the package never "
+                "overwrites:\n  " + "\n  ".join(diffs)
+            )
+        group_path = normalized.rsplit("/", 1)[0]
+        _write.ensure_group_entry(
+            group_path,
+            normalized.rsplit("/", 1)[-1],
+            vs,
+            tr,
+            axes,
+            units,
+            axis_types,
+            group_attrs,
+            format=fmt,
+        )
+        return WorldArray(
+            normalized,
+            mode="r+",
+            units=vol_units,
+            context=context,
+            retries=retries,
+            store_fill=store_fill,
+        )
+
+    normalized, fmt, adopted = _write.create_array(
+        path,
+        shape,
+        dtype,
+        vs,
+        tr,
+        axes=axes,
+        units=units,
+        chunks=chunks,
+        shards=shards,
+        fill_value=fill_value,
+        codecs=codecs,
+        format=format,
+        attrs=attrs,
+        group_attrs=group_attrs,
+        exists=exists,
+        store_fill=store_fill,
+        separator=separator,
+        axis_types=axis_types,
+        context=context,
+    )
+    if adopted:
+        return adopt(normalized, fmt)
+    return WorldArray(
+        normalized,
+        mode="r+",
+        units=vol_units,
+        context=context,
+        retries=retries,
+        store_fill=store_fill,
+    )
+
+
+def _reopen(path: str, opts: dict, recipe=None) -> WorldArray:
+    return WorldArray(path, context=from_recipe(recipe), **opts)
 
 
 def open(path: str, **kwargs) -> WorldArray:  # noqa: A001
@@ -939,4 +1258,13 @@ def open_tensorstore(
     return open_array(node, context=context)
 
 
-__all__ = ["Pyramid", "WorldArray", "metadata", "open", "open_pyramid", "open_tensorstore", "U"]
+__all__ = [
+    "Pyramid",
+    "WorldArray",
+    "create",
+    "metadata",
+    "open",
+    "open_pyramid",
+    "open_tensorstore",
+    "U",
+]

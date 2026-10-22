@@ -1,6 +1,6 @@
 [project]
 name = "worldarray"
-version = "0.1.1"
+version = "0.2.0"
 description = "Read zarr, N5 and Neuroglancer precomputed volumes in world coordinates through tensorstore: correct voxel placement, pyramid levels, padded region reads, resampling. numpy + tensorstore only."
 readme = "README.md"
 license = { file = "LICENSE" }
