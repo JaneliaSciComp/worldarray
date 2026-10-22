@@ -8,10 +8,11 @@ contract; the README is its first five sections.
 
 from __future__ import annotations
 
-from . import units
+from . import store, units
 from .array import Pyramid, WorldArray, metadata, open, open_pyramid, open_tensorstore
 from .context import capped_context, capped_context_spec, shared_context
 from .geometry import Box, index_range
+from .grid import Block, Grid, blocks, level_factors
 from .levels import select_level
 from .placement import ArrayMeta, corner_to_centre, default_axes
 from .retry import Retry
@@ -21,12 +22,16 @@ __version__ = "0.1.1"
 
 __all__ = [
     "ArrayMeta",
+    "Block",
     "Box",
+    "Grid",
     "Node",
+    "blocks",
     "corner_to_centre",
     "default_axes",
     "detect",
     "index_range",
+    "level_factors",
     "list_chunk_keys",
     "Pyramid",
     "Retry",
@@ -39,5 +44,6 @@ __all__ = [
     "open_tensorstore",
     "select_level",
     "shared_context",
+    "store",
     "units",
 ]
