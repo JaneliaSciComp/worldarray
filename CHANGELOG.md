@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Specification only, no code change: `docs/spec.md` draft 3 adds the contract for 0.2
+  (metadata and placed creation: the OME 0.4/0.5 document builder, the level rule, chunk
+  keys, `create`, opening for write, aligned writes, `add_level`; Behaviours 10 to 16) and
+  0.3 (grids and blocks: `Grid`, `blocks`, `write_chunk`, `level_factors`, public path
+  helpers; Behaviours 17 to 19), written from the five writer sessions' answers and a
+  census of the I/O code the five repos still carry. The package stays read-only until
+  0.2 ships.
 ## 0.1.1 (2026-10-22)
 
 - funlib `voxel_size`/`offset` on the parent group place an array that carries none, for
