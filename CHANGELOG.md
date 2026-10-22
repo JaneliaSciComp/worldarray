@@ -13,6 +13,14 @@
 - `Pyramid.placements()`, `voxel_sizes()` and `translations()` read the group document when
   the pyramid was opened through one of its level paths too; they used to open every level
   from there, and a missing level made them raise.
+- **Placement change.** An N5 level with `downsamplingFactors` and no offset now sits with
+  its corner at the origin at every level, as Neuroglancer draws N5: translation
+  `f / 2 * base`. 0.1.0 followed BigDataViewer for `pixelResolution` pyramids, centring the
+  base's voxel 0 on the origin (`(f - 1) / 2 * base`, half a base voxel lower), while
+  placing `resolution` pyramids with the corner at the origin, so the two disagreed. Two
+  shared fixture cases move and are renamed: `n5_group_pixelresolution_and_downsampling_factors_corner_at_origin`
+  (translation 4, 4, 4) and `n5_bigstitcher_resolution_with_downsampling_factors_corner_at_origin`
+  (0.5, 0.157, 0.157).
 
 ## 0.1.0 (2026-10-21)
 

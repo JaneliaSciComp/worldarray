@@ -4,8 +4,8 @@ The rule everything else rests on: a **translation is the centre of voxel 0** (O
 COSEM ``transform``, CF coordinates, Neuroglancer's own zarr reader). Formats that store
 voxel 0's corner are moved half a voxel along the spatial axes on reading: precomputed's
 ``voxel_offset`` and funlib's ``offset`` (0 when only a ``resolution`` is given). N5 levels
-with ``pixelResolution`` and ``downsamplingFactors`` and no offset follow BigDataViewer: a
-downsampled voxel's centre is the centre of the block it covers (spec, Conventions 1 and 4).
+with ``downsamplingFactors`` and no offset keep their corner at the origin at every level,
+as Neuroglancer draws N5: translation ``f / 2 * base`` (spec, Conventions 1 and 4).
 
 Per-axis lists shorter than the array (a 3-entry ``voxel_size`` on a ``(c, z, y, x)``
 prediction) cover the trailing axes; the leading axes get 1.0, 0.0 or ``""``. OME lists
@@ -604,10 +604,9 @@ def _n5(attrs: dict, group_attrs: dict, node: Node, ndim: int) -> _Resolved:
     for this path; else funlib's ``voxel_size``/``offset`` (array, else group), C order; else
     ``pixelResolution``/``resolution`` (array, else group) times the level's
     ``downsamplingFactors``, plus ``offset``. Lists other than ``transform`` and funlib's are
-    x-first and reversed to C order here. Without an ``offset``: a level with ``downsamplingFactors`` follows
-    BigDataViewer, ``(f - 1) / 2`` full-resolution voxels on, whichever key gave the base
-    (BigStitcher writes ``resolution``); a funlib ``resolution`` with no
-    ``downsamplingFactors`` means a corner at 0 (translation half a voxel)."""
+    x-first and reversed to C order here. Without an ``offset`` the corner is at the origin
+    at every level, whichever key gave the base: translation ``f / 2 * base``, half a voxel
+    of the level, as Neuroglancer draws N5 (Convention 1)."""
     name = basename(node.path)
     transform = attrs.get("transform")
     if isinstance(transform, dict) and "scale" in transform:
@@ -663,14 +662,12 @@ def _n5(attrs: dict, group_attrs: dict, node: Node, ndim: int) -> _Resolved:
 
     if "offset" in attrs:
         corner = _floats(list(attrs["offset"])[::-1], ndim, f"{name}: offset", pad=0.0)
-        translation = corner_to_centre(corner, voxel_size, axes)
-    elif key == "resolution" and "downsamplingFactors" not in attrs:
-        # funlib/daisy N5: a resolution with no offset is a corner at 0 (funlib never writes
-        # downsamplingFactors; BigStitcher writes "resolution" AND downsamplingFactors, and means BDV)
-        translation = corner_to_centre((0.0,) * ndim, voxel_size, axes)
     else:
-        # BigDataViewer: the downsampled voxel's centre is the centre of the block it covers
-        translation = tuple(float(v) for v in (factors - 1) / 2 * base)
+        # no stored origin: the corner at the origin at every level, as Neuroglancer draws N5
+        # (a pure scale of the base grid by downsamplingFactors). BigDataViewer centres voxel
+        # 0 on the origin instead, half a base voxel lower; the shift between levels is the same
+        corner = (0.0,) * ndim
+    translation = corner_to_centre(corner, voxel_size, axes)
     return _Resolved(axes, units, tuple(float(v) for v in voxel_size), tuple(translation), "n5")
 
 

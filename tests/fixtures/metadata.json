@@ -104,7 +104,7 @@
       }
     },
     {
-      "name": "n5_group_pixelresolution_and_downsampling_factors_bigdataviewer",
+      "name": "n5_group_pixelresolution_and_downsampling_factors_corner_at_origin",
       "format": "n5",
       "shape": [
         4,
@@ -136,9 +136,9 @@
           8
         ],
         "translation": [
-          2,
-          2,
-          2
+          4,
+          4,
+          4
         ],
         "axes": [
           "z",
@@ -1289,7 +1289,7 @@
       }
     },
     {
-      "name": "n5_bigstitcher_resolution_with_downsampling_factors_is_bigdataviewer",
+      "name": "n5_bigstitcher_resolution_with_downsampling_factors_corner_at_origin",
       "format": "n5",
       "shape": [
         4,
@@ -1319,9 +1319,9 @@
           0.314
         ],
         "translation": [
-          0,
-          0.0785,
-          0.0785
+          0.5,
+          0.157,
+          0.157
         ],
         "axes": [
           "z",

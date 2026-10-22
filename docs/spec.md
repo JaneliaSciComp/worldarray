@@ -216,10 +216,15 @@ this document and that one differ, fix one of them.
    CF coordinates. Index `i` on an axis sits at `translation + i * voxel_size`; voxel `i`
    covers `[translation + (i - 1/2) * voxel_size, translation + (i + 1/2) * voxel_size)`.
    Formats that store voxel 0's **corner** are moved half a voxel along the spatial axes
-   on reading. N5 levels with `pixelResolution` and `downsamplingFactors` and no offset
-   follow BigDataViewer: level-L voxel `i` is centred where full-resolution voxels
-   `f*i .. f*i+f-1` are, that is `(f - 1) / 2` full-resolution voxels on from voxel 0's
-   centre (the imglib2 rule liconn-err and registration-station both use). The shift
+   on reading. An N5 level with `downsamplingFactors` and no offset sits as Neuroglancer
+   draws it, a pure scale of the base grid with every level's corner at the origin: level-L
+   voxel `i` covers full-resolution voxels `f*i .. f*i+f-1`, so its centre is `f*i + f/2`
+   full-resolution voxels from the origin and its translation `f / 2 * base`. BigDataViewer
+   centres voxel 0 on the origin instead, half a base voxel lower at every level; the shift
+   between levels, `(f - 1) / 2` base voxels, is the same in both and is the imglib2 rule
+   liconn-err and registration-station use. (Decided 2026-10-22, when mesh-n-bone found
+   that `pixelResolution` and `resolution` pyramids disagreed; 0.1.0 followed BigDataViewer
+   for `pixelResolution`.) The shift
    applies only along axes named `z`, `y` or `x`, or the last three when axes are unnamed;
    never along channel or time.
 
@@ -228,7 +233,7 @@ this document and that one differ, fix one of them.
    | OME-NGFF `translation` (zarr v2/v3) | centre of voxel 0 | as is |
    | COSEM `transform.translate` (N5 or zarr) | centre (fibsem-tools wrote it as the first sample's position; Neuroglancer ignores `transform` and `offset` on N5 entirely) | as is |
    | funlib `offset` with `resolution`/`voxel_size` (N5 or zarr; `offset` missing = 0) | corner | `offset + voxel_size / 2` |
-   | N5 `pixelResolution` x `downsamplingFactors f`, no offset | BigDataViewer | `(f - 1) / 2 * pixelResolution` |
+   | N5 `pixelResolution` or `resolution` x `downsamplingFactors f`, no offset | corner at the origin at every level, as Neuroglancer draws N5 | `f / 2 * pixelResolution` |
    | precomputed `voxel_offset` x `resolution` | corner | `+ resolution / 2` |
    | CF coordinate array (xarray zarr) | sample position = centre | as is (chunkmirage layers this) |
    | nothing at all | Neuroglancer draws a plain array with its corner at the origin | voxels of 1, translation 0.5 |
@@ -294,10 +299,10 @@ this document and that one differ, fix one of them.
      order, read by the zarr funlib rule above; else `pixelResolution` (both the
      `{dimensions, unit}` form and a bare list) or `resolution`, from the array else the
      group, times the level's `downsamplingFactors`; plus `offset`; axes from the `axes`
-     attribute. These lists are x-first. Without an `offset`, a level with `downsamplingFactors` follows
-     BigDataViewer whichever key gave the base (BigStitcher writes `resolution` and
-     `downsamplingFactors`), and a funlib `resolution` with no `downsamplingFactors` means a
-     corner at 0 (translation half a voxel); funlib never writes `downsamplingFactors`.
+     attribute. These lists are x-first. Without an `offset` the corner is at the origin at
+     every level whichever key gave the base (BigStitcher writes `resolution` and
+     `downsamplingFactors`; funlib writes `resolution` alone): translation `f / 2 * base`,
+     half a voxel of the level (Convention 1).
    - **Short lists.** A funlib, COSEM or N5 per-axis list shorter than the array (a 3-entry
      `voxel_size` on a `(c, z, y, x)` prediction, which funlib's `prepare_ds(num_channels=)`
      writes) covers the trailing axes; the leading axes get voxel size 1, translation 0,
@@ -495,7 +500,7 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
 
 - chunkmirage's cases: N5 transposed to C order with `resolution` and `offset`; N5 COSEM
   `transform` C order; N5 group `pixelResolution` and `downsamplingFactors`
-  (BigDataViewer); N5 group `multiscales` transform matched by path; OME levels matched by
+  (the corner at the origin at every level, as Neuroglancer); N5 group `multiscales` transform matched by path; OME levels matched by
   path; OME top-level transforms applied after each dataset; an OME-unlisted array borrows
   no other level's scale; zarr legacy array attrs as a corner; a zarr3 OME 0.5 group with a
   channel axis; precomputed `voxel_offset` as a centre translation; xarray dimensions and
@@ -543,8 +548,8 @@ the data; a resample target set at open reports the target voxel size with the s
 Placement: the same cube stored four ways, as OME-NGFF with a `translation`, as N5 with
 funlib `resolution`/`offset`, as N5 with a COSEM `transform`, and as precomputed with a
 `voxel_offset`, reads back with the same `translation` and the same bytes for the same
-world box, within `0.1 * voxel_size`; and an N5 BigDataViewer level 1 sits where the
-equivalent OME level 1 does.
+world box, within `0.1 * voxel_size`; and an N5 level 1 with `downsamplingFactors` sits where the
+equivalent OME level 1 does, both pyramids' s0 corner at the origin.
 
 Network (skipped without it; not yet written): one public OpenOrganelle volume with a
 non-integer z spacing (4.56 or 5.24 nm), read anonymously from s3: the package reports the

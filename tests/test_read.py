@@ -218,13 +218,14 @@ def test_placement_agrees_across_formats(tmp_path):
         np.testing.assert_array_equal(vol.read(box), data[2:5, 2:5, 2:5], err_msg=str(path))
 
 
-def test_bigdataviewer_level_matches_ome_level(tmp_path):
+def test_n5_downsampled_level_matches_ome_level(tmp_path):
     """An N5 pyramid with pixelResolution and downsamplingFactors and no offset sits where the
-    equivalent OME pyramid (voxel 0 of s0 at the origin) puts its levels."""
+    equivalent OME pyramid with s0's corner at the origin puts its levels, as Neuroglancer
+    draws both: s0 centred at half a voxel, s1 at a whole base voxel (f / 2 * base)."""
     base, s1 = pattern((8, 8, 8)), pattern((4, 4, 4))
     ome = tmp_path / "ome.zarr"
     write_zarr2_group(
-        ome, ome_multiscales("zyx", [("s0", (4, 4, 4), (0, 0, 0)), ("s1", (8, 8, 8), (2, 2, 2))])
+        ome, ome_multiscales("zyx", [("s0", (4, 4, 4), (2, 2, 2)), ("s1", (8, 8, 8), (4, 4, 4))])
     )
     write_zarr2(ome / "s0", base)
     write_zarr2(ome / "s1", s1)
@@ -232,10 +233,12 @@ def test_bigdataviewer_level_matches_ome_level(tmp_path):
     write_n5_group(n5, {"pixelResolution": {"dimensions": [4, 4, 4], "unit": "nm"}})
     write_n5(n5 / "s0", base, attrs={"downsamplingFactors": [1, 1, 1]})
     write_n5(n5 / "s1", s1, attrs={"downsamplingFactors": [2, 2, 2]})
-    a, b = wa.open(str(ome / "s1")), wa.open(str(n5 / "s1"))
-    assert a.translation == pytest.approx(b.translation, abs=0.4)
-    box = ((6.0, 6.0, 6.0), (22.0, 22.0, 22.0))
-    np.testing.assert_array_equal(a.read(box), b.read(box))
+    for level in ("s0", "s1"):
+        a, b = wa.open(str(ome / level)), wa.open(str(n5 / level))
+        assert a.translation == pytest.approx(b.translation), level
+        assert b.corner == pytest.approx((0.0, 0.0, 0.0)), level
+        box = ((6.0, 6.0, 6.0), (22.0, 22.0, 22.0))
+        np.testing.assert_array_equal(a.read(box), b.read(box))
 
 
 def test_chunks_covering(cube):
@@ -413,7 +416,7 @@ def test_base_voxel_size_on_a_unitless_n5_pyramid_warns_about_nothing(tmp_path, 
         )
     assert not [r for r in caplog.records if "no unit" in r.message]
     assert s1.voxel_size == pytest.approx((1.0, 0.314, 0.314)) and s1.translation == pytest.approx(
-        (0.0, 0.0785, 0.0785)
+        (0.5, 0.157, 0.157)  # the corner at the origin at every level
     )
 
 
