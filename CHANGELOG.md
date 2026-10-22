@@ -8,8 +8,12 @@ read side changes.
 - `ome_multiscales(axes, units, levels, version)` builds the complete OME-NGFF 0.4 or 0.5
   group document with one explicit placement per level; `level_placement` and
   `level_shape` derive a level from factors and an origin (Convention 1's rule inverted,
-  so a level built from a ROI origin is placed from it). Expected documents are pinned in
-  `tests/fixtures/write.json`, shared with chunkmirage's TypeScript builder.
+    so a level built from a ROI origin is placed from it; `level_shape` absorbs float-noise
+  factors such as `0.3 / 0.1`). Units are written in OME's names (`"nm"` becomes
+  `"nanometer"`; `units.ome_name`), an unknown unit as given; the multiscale's `type` is
+  written when given. Expected documents are pinned in `tests/fixtures/write.json`, shared
+  with chunkmirage's TypeScript builder, each case with its resolved per-axis units and
+  types, fifteen cases.
 - `create(path, shape, dtype, voxel_size, translation, chunks=..., ...)` writes the group
   document (made when absent, else its one dataset entry added or replaced, every other
   attribute kept) and then the array, as zarr v2 with OME 0.4 or zarr v3 with OME 0.5
@@ -17,10 +21,19 @@ read side changes.
   level 3 default, shards are a zarr v3 option. `exists` is `"error"` or `"adopt"` (an
   identical array is opened for writing, a different one raises naming every difference,
   a creation lost to another process is adopted after a short backoff). Nothing is ever
-  deleted, truncated or overwritten. Write units equal to the fill value are not stored
-  unless `store_fill=True`.
+    deleted, truncated or overwritten. Write units equal to the fill value are not stored
+  unless `store_fill=True`, and a stored unit written so loses its key, as zarr-python's
+  `write_empty_chunks=False` does. `create` also writes a bare group document for every
+  missing ancestor down from the `.zarr` root and follows the nearest existing ancestor's
+  zarr version, so a level made in a zarr v2 container is zarr v2 with OME 0.4 and the
+  hierarchy browses (cellmap-analyze, cellmap-flow). Adopting an identical array writes no
+  group document; after a write the document is read again and a lost entry is written
+  again, then raises (registration-station's concurrent block jobs).
+- `ensure_group_entry` is public: list an array the package did not create, such as a
+  symlinked `s0` (mesh-n-bone), or a level filled before it is listed.
 - `open(path, mode="r+")` opens an existing array for writing; a `WorldArray` pickles by
-  its arguments and reopens in the receiving process.
+  its arguments and its context's spec and reopens in the receiving process, a capped
+  context staying capped (mesh-n-bone's workers). `write.codecs_of` takes a path.
 - `write_index(begin, end, data)` writes whole write units only (the shard when sharded,
   else the chunk; the clipped last unit allowed), so writers in different processes need
   no coordination; `partial=True` does tensorstore's read-modify-write. `write(box, data)`

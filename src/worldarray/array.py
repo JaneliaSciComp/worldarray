@@ -24,7 +24,7 @@ import tensorstore as ts
 from . import resample as _resample
 from . import units as U
 from . import write as _write
-from .context import shared_context
+from .context import from_recipe, recipe_of, shared_context
 from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, discover_group, same_voxel_size, select_level
 from .placement import (
@@ -409,8 +409,10 @@ class WorldArray:
         )
 
     def __reduce__(self):
-        """A handle pickles by its arguments and reopens in the receiving process on the
-        default shared context (Behaviour 11): a worker opens its own store, cheaply."""
+        """A handle pickles by its arguments and its context's recipe, and reopens in the
+        receiving process (Behaviour 11): a worker opens its own store, cheaply, on a shared
+        context when the handle had one, else on a context rebuilt from the same spec, so a
+        capped context stays capped."""
         opts = {
             **self._opts,
             "padding": self.padding,
@@ -420,7 +422,7 @@ class WorldArray:
             "retries": self.retries,
             "transform": self.transform,
         }
-        return (_reopen, (self.path, opts))
+        return (_reopen, (self.path, opts, recipe_of(self.context)))
 
     # --- index space ------------------------------------------------------------
 
@@ -1113,7 +1115,6 @@ def create(
         group_path = normalized.rsplit("/", 1)[0]
         _write.ensure_group_entry(
             group_path,
-            fmt,
             normalized.rsplit("/", 1)[-1],
             vs,
             tr,
@@ -1121,6 +1122,7 @@ def create(
             units,
             axis_types,
             group_attrs,
+            format=fmt,
         )
         return WorldArray(
             normalized,
@@ -1164,8 +1166,8 @@ def create(
     )
 
 
-def _reopen(path: str, opts: dict) -> WorldArray:
-    return WorldArray(path, **opts)
+def _reopen(path: str, opts: dict, recipe=None) -> WorldArray:
+    return WorldArray(path, context=from_recipe(recipe), **opts)
 
 
 def open(path: str, **kwargs) -> WorldArray:  # noqa: A001

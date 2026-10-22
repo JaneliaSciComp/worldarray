@@ -91,9 +91,10 @@ s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # place
 - **Carries the geometry**: `Box` with `intersect`, `union`, `contains`, `grow`, `shift`,
   `snap` to a grid, and the voxel indices a world box selects.
 - **Writes placed arrays** (0.2): the OME-NGFF 0.4 or 0.5 document from voxel size, centre
-  translation, axes and units, with each level's placement explicit or derived from
-  factors and an origin; `create` with the group's format, explicit chunks and codecs, and
-  only two answers to "it exists": raise, or adopt an identical array after checking;
+    translation, axes and units, with each level's placement explicit or derived from
+  factors and an origin; `create` following the container's format and writing the group
+  documents an output needs down from its `.zarr` root, with explicit chunks and codecs,
+  and only two answers to "it exists": raise, or adopt an identical array after checking;
   whole-unit writes from many processes with no coordination; `add_level` as metadata plus
   an empty array; chunk keys for every format. Nothing is ever deleted or overwritten.
 
@@ -138,8 +139,10 @@ wa.Box ; wa.units.TABLE
 wa.create(path, shape, dtype, voxel_size, translation, *, axes=None, units="nanometer", chunks=..., shards=None,
           fill_value=0, codecs="zstd", format=None, attrs=None, group_attrs=None, exists="error", store_fill=False) -> WorldArray
 wa.open(path, mode="r+") ; wa.open_pyramid(path, mode="r+").add_level(name, factors=, origin=0, ...)
-wa.ome_multiscales(axes, units, levels, version="0.5") ; wa.level_placement(voxel_size, translation, factors, origin=0)
+wa.ome_multiscales(axes, units, levels, version="0.5", type=None) ; wa.level_placement(voxel_size, translation, factors, origin=0)
 wa.level_shape(shape, factors, origin=0) ; wa.chunk_key(index, format, ...) ; wa.parse_chunk_key(key, format, ...)
+wa.ensure_group_entry(group_path, name, voxel_size, translation, axes, units="nanometer")   # list an array you made yourself
+wa.units.ome_name("nm") -> "nanometer" ; wa.write.codecs_of(path) -> (codecs, shards)
 ```
 
 `WorldArray`: `ts`, `meta`, `grid`, `shape`, `dtype`, `axes`, `voxel_size`, `translation`,

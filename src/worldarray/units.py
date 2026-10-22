@@ -75,3 +75,25 @@ def factor(
     if a[0] != b[0]:
         raise ValueError(f"cannot convert {unit_from!r} ({a[0]}) to {unit_to!r} ({b[0]})")
     return a[1] / b[1]
+
+
+# OME-NGFF's name for each unit the table knows, by (kind, size): every spelling of a unit
+# reaches its entry through the table above, so "nanometre", "nm" and "Nanometers" agree.
+# The American spelling is OME's.
+_OME_NAMES = (
+    "picometer", "angstrom", "nanometer", "micrometer", "millimeter", "centimeter", "meter",
+    "nanosecond", "microsecond", "millisecond", "second", "minute", "hour", "day",
+)  # fmt: skip
+_OME_BY_SIZE = {_lookup(name): name for name in _OME_NAMES}
+
+
+def ome_name(unit: str) -> str:
+    """The OME-NGFF name of a unit: ``"nanometer"`` for any spelling of nanometre the table
+    knows (``"nm"``, ``"nanometre"``, ``"Nanometers"``), ``"micrometer"`` for ``"um"``,
+    ``"µm"`` and ``"micron"``, ``"second"`` for ``"s"`` and so on. A unit the table does
+    not know (``""``, ``"pixel"``) is a ``ValueError``; `ome_multiscales` writes such a
+    unit as given."""
+    found = _lookup(unit) if unit else None
+    if found is None or found not in _OME_BY_SIZE:
+        raise ValueError(f"unknown unit {unit!r}")
+    return _OME_BY_SIZE[found]
