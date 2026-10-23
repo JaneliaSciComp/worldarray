@@ -1174,13 +1174,20 @@ over funlib geometry, by this spec's own assignment.
    a real bucket with listing disabled. One network test before 0.1.0 may change the rule.
 4. **The network test** against a non-integer-voxel OpenOrganelle volume (Tests) is not yet
    written; it needs the dataset chosen from the catalog.
-5. **Legacy attributes on new outputs.** cellmap-analyze writes funlib `voxel_size` and
-   `offset` (holding the centre) on every output and nothing in the five repos reads them;
-   dacapo's checkout has nine `open_ds` users, and cellmap-data and fibsem-tools were not
-   checked. Does any live consumer of cellmap-analyze or cellmap-flow outputs read funlib
-   attributes? If so, should the package offer `funlib_attrs(voxel_size, translation, axes,
-   units)`, writing `offset` as the corner, funlib's meaning, for `create(attrs=)`, or do
-   the repos keep writing their own?
+5. **Legacy attributes on new outputs.** Resolved 2026-10-23: nobody needs them, so there
+   is no `funlib_attrs`. cellmap-analyze stopped writing funlib `voxel_size` and `offset`
+   (which held the centre) in 0.6.0, whose outputs carry only the OME documents `create`
+   writes. cellmap-flow writes them through funlib's own `prepare_ds`, `offset` as the
+   corner beside an agreeing OME 0.4 translation, and is their only reader. dacapo reads
+   funlib attributes through `open_ds` (`ome_metadata=False` by default), but nothing feeds
+   it these outputs, and on a zarr v3 one funlib 0.7 silently reads voxel size 1 and
+   offset 0. cellmap-data and fibsem-tools read OME only, and both pin `zarr<3`. funlib
+   0.6 and 0.7 also require integer offsets and voxel sizes, so a float helper here would
+   either refuse placements or write numbers funlib truncates; a repo that wants the keys
+   passes them through `create(attrs=)`. Found on the way, outside this package:
+   cellmap-data (main 356c3ac, `image.py`) takes an OME translation as voxel 0's corner,
+   half a voxel off on every OME-correct store, and funlib's `open_ome_ds` puts the
+   translation straight into its corner `offset`.
 6. **The block iterator's shape** (Behaviour 17). Resolved 2026-10-22: both sessions
    confirmed it. mesh-n-bone asked that `box` may reach past the array and that `clip`
    clips read boxes only, and derives its per-level boxes from one grid itself;
@@ -1211,7 +1218,7 @@ over funlib geometry, by this spec's own assignment.
    unlisted has its placement nowhere until it is listed, so a `create(listed=False)`
    handle, and its pickles, would carry the placement from its arguments alone. Decide
    whether that is worth having, or whether an unlisted level should describe itself on
-   the array (open question 5's funlib attributes, or an OME-shaped array attribute).
+   the array (an OME-shaped array attribute; funlib keys are out, open question 5).
 12. **Per-open object-store credentials.** cellmap-flow's MinIO writers open with a
    per-session key, secret and endpoint while the same process reads public S3
    anonymously. tensorstore 0.1.85's `aws_credentials` takes no inline key and secret, and
