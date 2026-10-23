@@ -701,12 +701,13 @@ this document and that one differ, fix one of them.
    `concurrency` and the cache to `cache_bytes`, and returns a new context each call, so two
    handles never share one capped pool unless the caller passes the same object twice; a
    `concurrency` of 1 is safe under Behaviour 6's watchdog, but a read or write spanning
-   several chunks then handles them one at a time. On /nrs, from one process in a
-   two-slot job alternating limits op by op (c-elegans, 2026-10-23): a one-chunk block
-   (128^3 uint64) read in 18 to 19 ms and wrote in 51 ms at both 1 and 4, while an 8-chunk
-   block (256^3, what a downsampling step reads) read in 157 ms against 73 and wrote in
-   312 ms against 158. Whether a one-slot worker gains as much, or only borrows cores it
-   was not given, is unmeasured. Both are plain tensorstore contexts; a caller may pass its own, at construction or through
+   several chunks then handles them one at a time. On /nrs, from one process alternating
+   limits op by op (c-elegans, 2026-10-23): a one-chunk block (128^3 uint64) read in 18 to
+   19 ms and wrote in 51 ms at both 1 and 4. An 8-chunk block (256^3, what a downsampling
+   step reads) read in 157 ms against 73 and wrote in 312 ms against 158 in a two-slot
+   job, but in a one-slot job read in 147 ms against 119 and wrote in 325 ms against 302
+   (and that job still used 1.3 cores, LSF not pinning it). Most of the gain is a core the
+   worker was not given, so a worker per slot, as a dask job runs, loses little at 1. Both are plain tensorstore contexts; a caller may pass its own, at construction or through
    `reopen(context=)` when a long-lived worker changes its concurrency (cellmap-analyze
    reopens tensorstore on every read today for that reason).
 
