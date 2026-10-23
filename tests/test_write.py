@@ -849,3 +849,33 @@ def test_codecs_of_a_path_and_the_fill_write_that_removes_a_key(tmp_path):
     vol.write_index((0, 0, 0), (4, 4, 4), np.zeros((4, 4, 4), np.uint8))
     assert vol.list_chunks() == []  # the one key a write may remove: its own, now all fill
     assert int(vol.read_index((0, 0, 0), (4, 4, 4)).sum()) == 0
+
+
+class _NeverAnswers:
+    def result(self, timeout=None):
+        raise TimeoutError()
+
+    def cancel(self):
+        pass
+
+
+def test_a_create_that_lands_after_its_timeout_adopts_its_own_array(tmp_path, monkeypatch):
+    real_open = ts.open
+    creates = []
+
+    def open_landing_late(spec, *args, **kwargs):
+        if kwargs.get("create"):
+            creates.append(1)
+            if len(creates) == 1:  # the array is made, but the answer never comes
+                real_open(spec, *args, **kwargs).result()
+                return _NeverAnswers()
+        return real_open(spec, *args, **kwargs)
+
+    monkeypatch.setattr(ts, "open", open_landing_late)
+    path = str(tmp_path / "vol.zarr/s0")
+    quick = wa.Retry(timeout=0.2, max_attempts=3, base_delay=0.0)
+    vol = wa.create(path, (8, 8, 8), "uint8", (4, 4, 4), (2, 2, 2), chunks=(4, 4, 4), retries=quick)
+    assert len(creates) == 2 and vol.shape == (8, 8, 8)
+    monkeypatch.setattr(ts, "open", real_open)
+    with pytest.raises(FileExistsError):
+        wa.create(path, (8, 8, 8), "uint8", (4, 4, 4), (2, 2, 2), chunks=(4, 4, 4))

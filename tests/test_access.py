@@ -154,7 +154,10 @@ def test_the_thread_budget_follows_the_job(monkeypatch):
     assert wa.thread_budget() == 6
     monkeypatch.setattr(wa.context, "_shared", {})
     spec = wa.shared_context(5).spec.to_json()
-    assert spec["data_copy_concurrency"] == spec["file_io_concurrency"] == {"limit": 6}
+    assert spec["data_copy_concurrency"] == {"limit": 6}
+    assert spec["file_io_concurrency"] == {
+        "limit": wa.context.FILE_IO_FLOOR
+    }  # it waits, not computes
     assert spec["cache_pool"] == {"total_bytes_limit": 5}
 
 
@@ -326,7 +329,11 @@ def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
     monkeypatch.setattr(wa.context, "_shared", {})
     default = wa.shared_context(7)
-    assert default.spec.to_json()["data_copy_concurrency"] == {"limit": 1}
+    spec = default.spec.to_json()
+    assert spec["data_copy_concurrency"] == {"limit": 1} and spec["file_io_concurrency"] == {
+        "limit": 8
+    }
+    assert spec["file_io_sync"] is False and spec["file_io_locking"] == {"mode": "none"}
     four = wa.shared_context(7, threads=4).spec.to_json()
     assert four["data_copy_concurrency"] == four["file_io_concurrency"] == {"limit": 4}
     machine = wa.shared_context(7, threads=0)
@@ -335,8 +342,13 @@ def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
     assert "data_copy_concurrency" not in spec and "file_io_concurrency" not in spec
     assert spec["cache_pool"] == {"total_bytes_limit": 7}
     assert machine in wa.context._watched
-    assert wa.context.recipe_of(machine) == ("shared", (7, 0))
-    assert wa.context.from_recipe(("shared", (7, 0))) is machine
+    assert wa.context.recipe_of(machine) == ("shared", (7, 0, False, "none"))
+    assert wa.context.from_recipe(("shared", (7, 0))) is machine  # a 0.6 or 0.7 pickle
+    durable = wa.shared_context(7, fsync=True, locking="os")
+    spec = durable.spec.to_json()
+    assert durable is not default and spec["file_io_sync"] is True
+    assert spec["file_io_locking"] == {}  # "os", tensorstore's default, which its spec leaves out
+    assert wa.context.from_recipe(wa.context.recipe_of(durable)) is durable
     assert wa.context.from_recipe(("shared", 7)) is default
     with pytest.raises(ValueError):
         wa.shared_context(threads=-1)
@@ -399,3 +411,16 @@ def test_an_http_open_probes_its_keys_at_once(tmp_path):
         assert time.monotonic() - start < 1.0  # in turn: 1.5 s
     finally:
         server.shutdown()
+
+
+def test_capped_contexts_size_file_io_apart_and_write_without_sync_or_locks():
+    spec = wa.capped_context_spec(concurrency=1, network=False)
+    assert spec["data_copy_concurrency"] == spec["file_io_concurrency"] == {"limit": 1}
+    assert spec["file_io_sync"] is False and spec["file_io_locking"] == {"mode": "none"}
+    spec = wa.capped_context_spec(concurrency=1, file_io=8, fsync=True, locking="os")
+    assert spec["file_io_concurrency"] == {"limit": 8} and spec["data_copy_concurrency"] == {
+        "limit": 1
+    }
+    assert spec["file_io_sync"] is True and spec["file_io_locking"] == {"mode": "os"}  # as written
+    capped = wa.capped_context(concurrency=1, file_io=8)
+    assert capped.spec.to_json()["file_io_concurrency"] == {"limit": 8}
