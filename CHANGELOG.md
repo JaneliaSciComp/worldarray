@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+Faster writes from the contexts the package makes, and the create open timed out. No
+placement change and no unit table change. **Requires tensorstore 0.1.68 or later** (was
+0.1.60), the first with the `file_io_locking` setting.
+
+- `shared_context` and `capped_context` write without fsync (`file_io_sync: false`) and
+  without OS file locks (`file_io_locking` mode `"none"`); `fsync=True` and `locking="os"`
+  restore tensorstore's defaults. A whole-unit write stays atomic, a temporary file renamed
+  into place; only concurrent read-modify-writes of one unit (`partial=True`) lose their
+  guarantee, which was never given (Behaviour 13). fsync cost 6.5 ms a chunk on a local
+  disk and nothing on NFS; the locks cost about 10 ms a chunk on NFS.
+- The default context's file I/O pool is `thread_budget()` or 8, whichever is larger;
+  decoding stays at `thread_budget()`. File I/O threads wait on storage rather than
+  compute, and one of them wrote a block's chunk files one NFS round trip after another.
+  `capped_context(file_io=)` sizes it apart from `concurrency` (default unchanged).
+- From one-thread workers through the default context, against 0.7: a 64^3 label chunk to
+  NFS 23 to 12.2 ms (zarr-python 2: 13.1), an 8-chunk label block 159 to 66.5 ms
+  (zarr-python 2: 102), an 8-chunk EM block 330 to 202 ms; to a local disk a label block
+  51.5 to 4.1 ms. Through `capped_context(1, network=False)` the NFS label block went 166
+  to 91 ms; `file_io=8` gives it the rest.
+- The open that creates an array is timed out and retried under `retries` (Behaviour 6). A
+  retry that finds the array made by an attempt of its own that timed out adopts it after
+  the usual comparison, even under `exists="error"`. That open keeps OS locking, so
+  create-if-absent stays atomic.
+
 ## 0.7.1 (2026-10-23)
 
 Faster opens over http. No placement change, no unit table change, no API change.

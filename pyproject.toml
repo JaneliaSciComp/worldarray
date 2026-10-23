@@ -1,6 +1,6 @@
 [project]
 name = "worldarray"
-version = "0.7.1"
+version = "0.8.0"
 description = "Read zarr, N5 and Neuroglancer precomputed volumes in world coordinates through tensorstore: correct voxel placement, pyramid levels, padded region reads, resampling. numpy + tensorstore only."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -31,7 +31,7 @@ classifiers = [
 # no dask, no funlib (docs/spec.md, section 1).
 dependencies = [
     "numpy>=1.26",
-    "tensorstore>=0.1.60",
+    "tensorstore>=0.1.68",
 ]
 
 [project.urls]

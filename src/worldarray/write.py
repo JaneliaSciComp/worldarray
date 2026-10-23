@@ -34,6 +34,7 @@ from .store import (
     _DRIVER,
     Location,
     Node,
+    _wait,
     basename,
     detect,
     is_refused,
@@ -753,6 +754,11 @@ def create_array(
     # the group documents first (Behaviour 11), then the array
     ensure_group_entry(group_path, name, vs, tr, axes, units, axis_types, group_attrs, format=fmt)
 
+    # create-if-absent is a conditional write, atomic only under tensorstore's OS locks,
+    # whatever locking the caller's context chose for its data (write_settings)
+    creating = watch(ts.Context(ts.Context.Spec({"file_io_locking": {"mode": "os"}}), context))
+    starts = 0
+
     def attempt(kvstore: dict) -> ts.TensorStore:
         spec = array_spec(
             kvstore,
@@ -768,16 +774,26 @@ def create_array(
             separator,
             store_fill,
         )
-        return ts.open(spec, create=True, open=False, context=watch(context)).result()
+
+        def start():
+            nonlocal starts
+            starts += 1
+            return ts.open(spec, create=True, open=False, context=creating)
+
+        return _wait(start, kvstore, path, "create")
 
     try:
         with_access(kvstore_specs(path), attempt)
     except Exception as e:  # noqa: BLE001
         if "ALREADY_EXISTS" not in str(e) or is_refused(e):
             raise
-        if exists == "error":
+        if exists == "error" and starts == 1:
             raise FileExistsError(f"{path} was created by another process meanwhile") from e
+        # another process made it, or an attempt of ours that timed out did: the caller
+        # adopts it only if it matches what was asked for (Behaviour 6)
         _wait_for(path)
+        if starts > 1 and fmt == "zarr2" and attrs and Location(path).read(".zattrs") is None:
+            Location(path).write_json(".zattrs", dict(attrs))
         return path, fmt, True
     if fmt == "zarr2" and attrs:
         Location(path).write_json(".zattrs", dict(attrs))
