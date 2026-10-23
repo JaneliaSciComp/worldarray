@@ -1084,10 +1084,14 @@ tests, minimal reusable code. The README is sections 1 to 5 of this file; a beha
 is not stated here is not implemented without adding the statement first.
 
 Versioning. Every consumer pins a floating range and its CI installs the newest version in
-it, so a change in where any voxel sits is a **minor** release, never a patch: 0.1.1 moved
-offset-less N5 pyramids by half a base voxel as a patch, and cellmap-flow's CI was red on
-every open PR within the hour until it pinned 0.1.1. A patch release reads more stores or
-reads them faster and places nothing differently; a minor release may move voxels or add
-API, and its changelog entry starts with **Placement change** when it does; nothing before
-1.0 promises more. Consumers that cannot absorb a move between CI runs pin
-`>=0.x,<0.(x+1)`.
+it within the hour of a release, so the version number says what a release can break. A
+**patch** release brings the code back to what this spec says, or reads more stores or
+reads them faster; it places nothing differently and adds nothing public. A **minor**
+release is anything else: it may move voxels or add API, and an entry added to, renamed in
+or removed from the unit table is API (`wa.units.TABLE` is public, and cellmap-flow exports
+it to its browser app behind a freshness test). Both were once shipped as patches and both
+turned cellmap-flow's CI red on every open PR within the hour: 0.1.1 moved offset-less N5
+pyramids by half a base voxel, and 0.3.1 added kilometres. A changelog entry starts with
+**Placement change** when voxels move and **Unit table change** when the table does, and the
+release message to each consumer repeats those lines; nothing before 1.0 promises more.
+Consumers that cannot absorb a move between CI runs pin `>=0.x,<0.(x+1)`.
