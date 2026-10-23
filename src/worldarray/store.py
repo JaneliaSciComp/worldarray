@@ -8,6 +8,8 @@ one in, with credentials only when a public read is refused (spec, Conventions 5
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import functools
 import json
 import logging
@@ -21,6 +23,7 @@ from typing import Any, TypeVar
 import tensorstore as ts
 
 from .context import watch
+from .retry import Retry, with_retries
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -32,6 +35,11 @@ PROBE_KEYS = ("zarr.json", ".zarray", ".zgroup", "info", "attributes.json")
 
 _SCHEME = re.compile(r"^(s3|gs|http|https|file|memory)://")
 _REMOTE = ("s3://", "gs://", "http://", "https://")
+
+# the Retry that documents and opens wait under: the policy of the public call they serve
+_documents_retry: contextvars.ContextVar[Retry | None] = contextvars.ContextVar(
+    "worldarray_documents_retry", default=None
+)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +197,47 @@ def with_access(specs: Sequence[dict], attempt: Callable[[dict], T]) -> T:
     return result
 
 
+@contextlib.contextmanager
+def documents_retried(retry: Retry | None):
+    """Metadata documents read or written, and stores opened, inside this block are timed
+    out and retried per ``retry`` as reads of no bytes; ``None`` keeps the enclosing
+    policy, else ``Retry()`` (spec, Behaviour 6)."""
+    token = _documents_retry.set(retry) if retry is not None else None
+    try:
+        yield
+    finally:
+        if token is not None:
+            _documents_retry.reset(token)
+
+
+def retried_documents(fn: Callable[..., T]) -> Callable[..., T]:
+    """``fn`` run under ``documents_retried(retries)``, ``retries`` being its keyword."""
+
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        with documents_retried(kwargs.get("retries")):
+            return fn(*args, **kwargs)
+
+    return run
+
+
+def _where(spec: dict, key: str = "") -> str:
+    if spec["driver"] == "file":
+        return spec["path"] + key
+    if spec["driver"] == "http":
+        return spec["base_url"].rstrip("/") + "/" + spec.get("path", "").lstrip("/") + key
+    return f"{spec['driver']}://{spec.get('bucket', '')}/{spec.get('path', '')}{key}"
+
+
+def _wait(start: Callable[[], Any], spec: dict, what: str, verb: str) -> Any:
+    """``start().result()`` for a document or an open: a server that accepts and never
+    answers would otherwise hold it forever (tensorstore's own request retries run inside
+    each attempt)."""
+    retry = _documents_retry.get() or Retry()
+    remote = spec["driver"] in ("http", "gcs", "s3")
+    return with_retries(start, 0, retry, remote=remote, what=what, verb=verb)
+
+
 def metadata_spec(spec: dict) -> dict:
     """``spec`` with its requests' retries capped, so a mistyped host fails in seconds."""
     if spec["driver"] not in ("s3", "gcs", "http"):
@@ -201,14 +250,15 @@ def _metadata_kvstore(spec_json: str, gcs_url: str | None) -> ts.KvStore:
     """One opened kvstore per spec, and per ``TENSORSTORE_GCS_HTTP_URL``: tensorstore's gcs
     driver reads that variable when the store is opened, so a cached store would keep
     talking to the host the variable named then."""
-    return ts.KvStore.open(metadata_spec(json.loads(spec_json))).result()
+    spec = json.loads(spec_json)
+    return _wait(lambda: ts.KvStore.open(metadata_spec(spec)), spec, _where(spec), "open")
 
 
 def _read_key(spec: dict, key: str) -> bytes | None:
     kv = _metadata_kvstore(
         json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL")
     )
-    result = kv.read(key).result()
+    result = _wait(lambda: kv.read(key), spec, _where(spec, key), "read")
     return None if result.state == "missing" else bytes(result.value)
 
 
@@ -216,7 +266,7 @@ def _write_key(spec: dict, key: str, data: bytes) -> None:
     kv = _metadata_kvstore(
         json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL")
     )
-    kv.write(key, data).result()
+    _wait(lambda: kv.write(key, data), spec, _where(spec, key), "write")
 
 
 class Location:
@@ -323,12 +373,14 @@ def _decode(docs: dict[str, bytes | None]) -> dict[str, Any]:
     return {k: json.loads(v) for k, v in docs.items() if v is not None}
 
 
-def detect(path: str, *, missing_ok: bool = False) -> Node | None:
+@retried_documents
+def detect(path: str, *, missing_ok: bool = False, retries: Retry | None = None) -> Node | None:
     """Probe ``zarr.json``, ``.zarray``, ``.zgroup``, ``info``, ``attributes.json`` in that
     order; failing all, probe the parent for ``info`` and take the last path segment as a
     precomputed scale key, then probe ``s0`` for a group that has no document of its own.
     The ``.n5`` or ``.zarr`` suffix is never consulted. Nothing found raises
-    ``FileNotFoundError``, or returns None with ``missing_ok``."""
+    ``FileNotFoundError``, or returns None with ``missing_ok``. ``retries`` times out and
+    retries each document read (Behaviour 6)."""
     path = normalize_path(path)
     docs = _decode(Location(path).read_many(PROBE_KEYS))
     if "zarr.json" in docs:
@@ -440,7 +492,12 @@ def open_array(
             spec["assume_metadata"] = True
         if node.format == "precomputed" and scale_index is not None:
             spec["scale_index"] = scale_index
-        return ts.open(spec, read=True, write=write, context=watch(context)).result()
+        return _wait(
+            lambda: ts.open(spec, read=True, write=write, context=watch(context)),
+            kvstore,
+            node.path,
+            "open",
+        )
 
     store = with_access(kvstore_specs(node.path), attempt)
     if node.format in ("n5", "precomputed"):

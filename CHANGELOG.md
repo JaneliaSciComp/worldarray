@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+Opens time out. No placement change and no unit table change.
+
+- Every metadata document read or written and every store opened is timed out and
+  retried under `Retry`, as data reads are (Behaviour 6): by default 5 s times the attempt,
+  ten attempts. A server that accepts a connection and never answers held `wa.open` and
+  `wa.metadata` forever before; it now raises `TimeoutError` naming the URL and the
+  attempts (cellmap-flow, 2026-10-23). The policy is the call's `retries`, which
+  `wa.metadata`, `wa.detect` and `wa.open_tensorstore` now take as `wa.open`,
+  `wa.open_pyramid` and `wa.create` already did. Listings and the open that creates an
+  array are not timed out.
+
 ## 0.6.0 (2026-10-23)
 
 One new argument, at chunkmirage's request. No placement change and no unit table change;

@@ -5,6 +5,8 @@ from __future__ import annotations
 import gc
 import logging
 import os
+import socket
+import threading
 import time
 import weakref
 
@@ -321,3 +323,38 @@ def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
     assert wa.context.from_recipe(("shared", 7)) is default
     with pytest.raises(ValueError):
         wa.shared_context(threads=-1)
+
+
+@pytest.fixture
+def silent_server():
+    """An http address whose server accepts every connection and never answers."""
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(16)
+    held = []
+
+    def accept():
+        while True:
+            try:
+                held.append(srv.accept()[0])
+            except OSError:
+                return
+
+    threading.Thread(target=accept, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.getsockname()[1]}"
+    srv.close()
+    for c in held:
+        c.close()
+
+
+def test_a_server_that_never_answers_times_out_the_open(silent_server):
+    quick = wa.Retry(timeout=0.3, max_attempts=2, base_delay=0.0)
+    for open_it in (
+        lambda url: wa.metadata(url, open=False, retries=quick),
+        lambda url: wa.open(url, retries=quick),
+        lambda url: wa.detect(url, retries=quick),
+    ):
+        start = time.monotonic()
+        with pytest.raises(TimeoutError, match="127.0.0.1.*2 attempts"):
+            open_it(f"{silent_server}/vol.zarr/s0")
+        assert time.monotonic() - start < 10
