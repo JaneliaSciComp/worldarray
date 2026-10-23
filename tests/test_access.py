@@ -117,7 +117,8 @@ def test_contexts_and_retry_timeouts():
 def test_the_thread_budget_follows_the_job(monkeypatch):
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
     monkeypatch.delenv("LSB_DJOB_NUMPROC", raising=False)
-    assert wa.thread_budget() == len(os.sched_getaffinity(0))
+    allowed = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+    assert wa.thread_budget() == allowed  # macOS has no affinity call
     monkeypatch.setenv("LSB_DJOB_NUMPROC", "12")
     assert wa.thread_budget() == 12
     monkeypatch.setenv("OMP_NUM_THREADS", "24")  # a job script's 2 * slots
