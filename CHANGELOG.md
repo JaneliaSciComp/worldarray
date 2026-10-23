@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.1 (unreleased)
+## 0.3.1 (2026-10-22)
 
 - `source_voxel_size` reports the stored level's voxel size under `on_mismatch="relabel"`,
   as the spec says; it reported the relabelled size (cellmap-flow's report). Reads,
