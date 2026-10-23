@@ -36,7 +36,15 @@ from .placement import (
     read_meta_light,
 )
 from .retry import Retry, read_with_retries
-from .store import Node, detect, is_remote, join, open_array, precomputed_scale_index
+from .store import (
+    Node,
+    detect,
+    is_remote,
+    join,
+    normalize_path,
+    open_array,
+    precomputed_scale_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +98,9 @@ class WorldArray:
         if mode not in ("r", "r+"):
             raise ValueError("mode is 'r' (read) or 'r+' (read and write)")
         self.path = path
+        # where later opens find it (reopen, a pickle, the pyramid): a local path resolved
+        # against the working directory now, so a worker that changes directory opens the same store
+        self._where = normalize_path(path)
         self._mode = mode
         self._store_fill = bool(store_fill)
         self.padding = padding
@@ -373,7 +384,7 @@ class WorldArray:
     def levels_pyramid(self) -> Pyramid:
         if self._pyramid is None:
             self._pyramid = Pyramid(
-                self.path, context=self.context, units=self.units, select=self._select
+                self._where, context=self.context, units=self.units, select=self._select
             )
         return self._pyramid
 
@@ -422,14 +433,15 @@ class WorldArray:
             **overrides,
         }
         return WorldArray(
-            self.path, context=context if context is not None else self.context, **opts
+            self._where, context=context if context is not None else self.context, **opts
         )
 
     def __reduce__(self):
         """A handle pickles by its arguments and its context's recipe, and reopens in the
         receiving process (Behaviour 11): a worker opens its own store, cheaply, on a shared
         context when the handle had one, else on a context rebuilt from the same spec, so a
-        capped context stays capped."""
+        capped context stays capped. A local path goes as resolved at open, so a worker that
+        changed directory still finds the store."""
         opts = {
             **self._opts,
             "padding": self.padding,
@@ -439,7 +451,7 @@ class WorldArray:
             "retries": self.retries,
             "transform": self.transform,
         }
-        return (_reopen, (self.path, opts, recipe_of(self.context)))
+        return (_reopen, (self._where, opts, recipe_of(self.context)))
 
     # --- index space ------------------------------------------------------------
 
@@ -520,7 +532,9 @@ class WorldArray:
         or the array's end), so writers in different processes need no coordination; a
         unit written whole is one put. ``partial=True`` lifts the check and does tensorstore's
         read-modify-write of the touched units, unsafe while anything else writes the same
-        unit. No cast, no padding, no resampling; the write commits before returning."""
+        unit. ``data`` may be a scalar, which fills the box: it is converted to the array's
+        dtype only when the value survives (``0`` into ``uint8``, not ``300`` or ``0.5``).
+        No other cast, no padding, no resampling; the write commits before returning."""
         if not self.writable:
             raise ValueError(
                 f"{self.path} was opened read-only; open it with mode='r+' or create it"
@@ -535,9 +549,11 @@ class WorldArray:
         if len(begin) != len(shape) or len(end) != len(shape):
             raise ValueError(f"{self.path}: begin and end need one entry per axis of {shape}")
         wanted = tuple(e - b for b, e in zip(begin, end))
-        if data.shape != wanted:
+        if data.ndim == 0:
+            data = self._scalar(data)
+        elif data.shape != wanted:
             raise ValueError(f"{self.path}: data has shape {data.shape}; the box is {wanted}")
-        if data.dtype != self.dtype:
+        elif data.dtype != self.dtype:
             raise ValueError(
                 f"{self.path}: data is {data.dtype}, the array {self.dtype}; nothing is cast on write"
             )
@@ -554,6 +570,22 @@ class WorldArray:
                         f"units of {u}; align the box to write_shape {self.write_shape} or pass partial=True"
                     )
         self._store[tuple(slice(b, e) for b, e in zip(begin, end))].write(data).result()
+
+    def _scalar(self, value: np.ndarray) -> np.ndarray:
+        """A 0-d ``value`` in the array's dtype, or ``ValueError`` when converting changes it:
+        an integer or bool array takes only whole numbers in its range, a float array any
+        number that does not overflow it (rounded to its precision)."""
+        dtype = self.dtype
+        with np.errstate(invalid="ignore", over="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            out = value.astype(dtype)
+            if dtype.kind in "biu":
+                kept = bool(out == value)
+            else:
+                kept = bool(np.isfinite(out) or not np.isfinite(value))
+        if not kept:
+            raise ValueError(f"{self.path}: {value.item()!r} does not fit {dtype}")
+        return out
 
     def write(self, box, data: np.ndarray, partial: bool = False) -> None:
         """Write ``data`` over a world box: the voxels Behaviour 2's centre rule selects, then
@@ -879,6 +911,57 @@ class WorldArray:
                 data = data.copy()
                 data[~inside] = padding
         return _squeeze((data, inside) if mask else data, drop)
+
+    def read_onto(
+        self,
+        grid,
+        begin: Sequence[int] | None = None,
+        end: Sequence[int] | None = None,
+        padding: Any = None,
+        method: str | None = None,
+        mask: bool = False,
+        retries: Retry | None = None,
+        transform: Transform | None = None,
+        post_transform: Transform | None = None,
+        select: dict[str, int] | None = None,
+    ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+        """Voxels ``[begin, end)`` of another grid (a ``Grid``), read from this array
+        (Behaviour 20): ``begin`` and ``end`` index the grid's spatial axes, all of it when
+        None, and the result has exactly that shape there; other axes are read as ``read``
+        reads them. At the array's own voxel size nothing is resampled, however the grids are
+        offset: each grid voxel takes the stored voxel whose centre lies in it. Otherwise the
+        array is resampled onto the grid by ``method``, anchored at the grid's corner. The
+        grid's units are converted to ``units``; its spatial axes must be named as this
+        array's are."""
+        sp, mine = grid.spatial, self._grid.spatial
+        names = tuple(grid.axes[i] for i in sp)
+        if names != tuple(self._grid.axes[i] for i in mine):
+            raise ValueError(
+                f"{self.path}: the grid's spatial axes are {names}; the array's "
+                f"{tuple(self._grid.axes[i] for i in mine)}"
+            )
+        vs, tr = [], []
+        for i, j in zip(sp, mine):
+            have, want = grid.units[i], self._grid.units[j]
+            f = 1.0 if have == want else U.factor(have, want)
+            vs.append(grid.voxel_size[i] * f)
+            tr.append(grid.translation[i] * f)
+        begin = (0,) * len(sp) if begin is None else tuple(int(b) for b in begin)
+        end = tuple(grid.shape[i] for i in sp) if end is None else tuple(int(e) for e in end)
+        if len(begin) != len(sp) or len(end) != len(sp):
+            raise ValueError(f"begin and end need one entry per spatial axis of the grid {names}")
+        return self.read(
+            Box.from_index(begin, end, vs, tr),
+            voxel_size=vs,
+            anchor=tuple(t - v / 2 for t, v in zip(tr, vs)),
+            padding=padding,
+            method=method,
+            mask=mask,
+            retries=retries,
+            transform=transform,
+            post_transform=post_transform,
+            select=select,
+        )
 
 
 def _squeeze(out, drop: tuple[int, ...]):

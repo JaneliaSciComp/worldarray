@@ -139,3 +139,45 @@ def test_partial_block_mean_and_edge_fill(tmp_path):
         ((0, 0, 0), (48, 16, 16)), voxel_size=(8, 8, 8), method="nearest", padding="edge"
     )
     assert list(near[:, 0, 0]) == pytest.approx([1, 3, 5, 6, 6, 6])
+
+
+def test_read_onto_reads_another_grids_voxels(tmp_path):
+    """cellmap-analyze's per-operation grid (Behaviour 20): voxels [begin, end) of a grid,
+    exactly that many, from any array; at the array's own voxel size nothing is resampled,
+    however far under a voxel the grids are offset."""
+    path, data = _ramp(tmp_path, "float32")
+    vol = wa.open(path, method="linear")
+    near = wa.Grid((8, 4, 4), (4, 4, 4), (3, 3, 3))  # corner 1 nm past the array's
+    np.testing.assert_array_equal(vol.read_onto(near), data)  # stored values, not interpolated
+    far = wa.Grid(
+        (8, 4, 4), (4, 4, 4), (5, 2, 2)
+    )  # 3 nm past on z: each grid voxel holds the next centre
+    out = vol.read_onto(far)
+    assert out.shape == (8, 4, 4)
+    np.testing.assert_array_equal(out[:7], data[1:])
+    assert np.all(out[7] == 0)  # the last grid voxel holds no stored centre: the fill
+    finer = wa.Grid((16, 8, 8), (2, 2, 2), (-1, -1, -1), chunks=(4, 4, 4))  # corner -2
+    expect = vol.read(finer.box, voxel_size=(2, 2, 2), anchor=finer.corner)
+    np.testing.assert_array_equal(vol.read_onto(finer), expect)
+    halves = np.concatenate(
+        [vol.read_onto(finer, (0, 0, 0), (6, 8, 8)), vol.read_onto(finer, (6, 0, 0), (16, 8, 8))]
+    )
+    np.testing.assert_array_equal(halves, expect)  # adjoining reads agree with one read
+    in_um = wa.Grid((16, 8, 8), (0.002,) * 3, (-0.001,) * 3, units="micrometer")
+    np.testing.assert_array_equal(vol.read_onto(in_um), expect)
+    # the grid's voxels -1 and 0 are centred at -3 and -1 nm, before the data: fill, masked
+    out, inside = vol.read_onto(finer, (-1, 1, 1), (3, 3, 3), mask=True)
+    assert out.shape == (4, 2, 2) and not inside[:2].any() and inside[2:].all()
+    with pytest.raises(ValueError, match="spatial axes"):
+        vol.read_onto(wa.Grid((4, 4), (4, 4), (2, 2), axes=("y", "x")))
+
+
+def test_read_onto_its_own_grid_is_the_stored_array(tmp_path):
+    data = np.arange(7 * 6 * 5, dtype="uint16").reshape(7, 6, 5)
+    group = tmp_path / "odd.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (3.54, 4, 5.3), (1.0, -2.3, 7.7))]))
+    write_zarr2(group / "s0", data, chunks=(3, 3, 3))
+    vol = wa.open(str(group / "s0"))
+    np.testing.assert_array_equal(vol.read_onto(wa.Grid.from_meta(vol.grid)), data)
+    twice = wa.Grid.from_meta(vol.grid, voxel_size=(1.77, 2, 2.65))
+    assert vol.read_onto(twice).shape == twice.shape == (14, 12, 10)

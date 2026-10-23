@@ -720,6 +720,44 @@ def test_ensure_group_entry_lists_an_array_the_package_did_not_create(tmp_path, 
         )
 
 
+def test_a_pickled_relative_path_reopens_after_a_chdir(tmp_path, monkeypatch):
+    """cellmap-analyze's dask workers change directory before they unpickle."""
+    monkeypatch.chdir(tmp_path)
+    wa.create("b.zarr/seg/s0", (8, 8, 8), "uint8", (4, 4, 4), (2, 2, 2), chunks=(4, 4, 4))
+    vol = wa.open("b.zarr/seg/s0", mode="r+")
+    vol.write_index((0, 0, 0), (4, 4, 4), np.full((4, 4, 4), 9, np.uint8))
+    blob = pickle.dumps(vol)
+    (tmp_path / "elsewhere").mkdir()
+    monkeypatch.chdir(tmp_path / "elsewhere")
+    again = pickle.loads(blob)
+    assert again.path == str(tmp_path / "b.zarr/seg/s0")
+    assert int(again.read_index((0, 0, 0), (1, 1, 1))[0, 0, 0]) == 9
+    assert vol.reopen().level_path == again.level_path
+
+
+def test_a_scalar_fills_the_box(tmp_path):
+    vol = wa.create(
+        str(tmp_path / "vol.zarr/s0"), (8, 8, 8), "uint8", (1, 1, 1), (0.5,) * 3, chunks=(4, 4, 4)
+    )
+    vol.write_index((0, 0, 0), (4, 8, 8), 7)
+    vol.write(((4, 0, 0), (8, 4, 4)), np.uint8(3))
+    vol.write_chunk((1, 1, 1), 5)
+    got = vol.read_index((0, 0, 0), (8, 8, 8))
+    assert np.all(got[:4] == 7) and np.all(got[4:, :4, :4] == 3) and np.all(got[4:, 4:, 4:] == 5)
+    for bad in (300, -1, 0.5, float("nan"), True + 255):
+        with pytest.raises(ValueError, match="does not fit uint8"):
+            vol.write_index((0, 0, 0), (4, 4, 4), bad)
+    vol.write_index((0, 0, 0), (4, 4, 4), 0)  # the fill over a whole unit leaves it absent
+    assert (0, 0, 0) not in vol.list_chunks() and (0, 1, 0) in vol.list_chunks()
+    f = wa.create(
+        str(tmp_path / "f.zarr/s0"), (4,), "float32", (1,), (0.5,), axes=("x",), chunks=(4,)
+    )
+    f.write_index((0,), (4,), 0.1)  # rounded to the array's precision
+    assert np.all(f.read_index((0,), (4,)) == np.float32(0.1))
+    with pytest.raises(ValueError, match="does not fit float32"):
+        f.write_index((0,), (4,), 1e300)
+
+
 def test_a_pickled_handle_keeps_its_context(tmp_path):
     path = str(tmp_path / "vol.zarr/s0")
     wa.create(path, (8, 8, 8), "uint16", (4, 4, 4), (2, 2, 2), chunks=(4, 4, 4))

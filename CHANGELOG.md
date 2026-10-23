@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+cellmap-analyze's three asks, so it can call worldarray directly with no wrapper. No
+placement change and no unit table change.
+
+- `vol.read_onto(grid, begin=None, end=None, ...)` reads voxels `[begin, end)` of a
+  `Grid`'s spatial axes from the array, exactly that shape (Behaviour 20). It is the
+  `read` of the grid's index box at the grid's voxel size anchored at its corner, so at
+  the array's own voxel size nothing is resampled, whatever the sub-voxel offset, and
+  otherwise the array is resampled onto the grid. The grid's units are converted.
+- A pickled handle, and `reopen`, use the path resolved against the working directory at
+  open, so a worker that changes directory before unpickling opens the same store; it
+  used to raise `FileNotFoundError` for a relative path.
+- `write_index`, `write` and `write_chunk` take a scalar, which fills the box. It is
+  converted to the dtype only when its value survives (`0` into `uint8`; `300`, `-1`, `0.5`
+  and NaN raise), and the fill value over whole units leaves them absent.
+
 ## 0.3.1 (2026-10-22)
 
 - `source_voxel_size` reports the stored level's voxel size under `on_mismatch="relabel"`,
