@@ -826,6 +826,8 @@ def test_a_pickled_handle_keeps_its_context(tmp_path):
     )  # one rebuilt context per spec
     shared = pickle.loads(pickle.dumps(wa.open(path)))
     assert shared.context is wa.shared_context(0)
+    machine = wa.shared_context(0, threads=0)
+    assert pickle.loads(pickle.dumps(wa.open(path, context=machine))).context is machine
 
 
 def test_codecs_of_a_path_and_the_fill_write_that_removes_a_key(tmp_path):

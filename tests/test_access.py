@@ -301,3 +301,23 @@ def test_gce_guard_is_left_alone_on_a_google_machine(monkeypatch):
     monkeypatch.setattr(store, "_on_google_cloud", lambda: False)
     store.kvstore_specs("gs://bucket/vol")
     assert os.environ["GCE_METADATA_ROOT"] == "metadata.google.internal.invalid"
+
+
+def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    monkeypatch.setattr(wa.context, "_shared", {})
+    default = wa.shared_context(7)
+    assert default.spec.to_json()["data_copy_concurrency"] == {"limit": 1}
+    four = wa.shared_context(7, threads=4).spec.to_json()
+    assert four["data_copy_concurrency"] == four["file_io_concurrency"] == {"limit": 4}
+    machine = wa.shared_context(7, threads=0)
+    assert machine is wa.shared_context(7, threads=0) and machine is not default
+    spec = machine.spec.to_json()
+    assert "data_copy_concurrency" not in spec and "file_io_concurrency" not in spec
+    assert spec["cache_pool"] == {"total_bytes_limit": 7}
+    assert machine in wa.context._watched
+    assert wa.context.recipe_of(machine) == ("shared", (7, 0))
+    assert wa.context.from_recipe(("shared", (7, 0))) is machine
+    assert wa.context.from_recipe(("shared", 7)) is default
+    with pytest.raises(ValueError):
+        wa.shared_context(threads=-1)

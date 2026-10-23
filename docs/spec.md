@@ -185,7 +185,8 @@ wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore  
 wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
 wa.units.TABLE      # the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
-wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.capped_context_spec(...)
+wa.shared_context(cache_bytes=0, threads=None) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.capped_context_spec(...)
+                    # threads: None = thread_budget(), N = that many, 0 = tensorstore's own pool sizes (0.6)
                     # network=False caps decoding and local file I/O only, leaving tensorstore's request pools alone
 wa.list_chunk_keys(path, separator=".", ndim=None)   # chunk indices present under a path, from its keys alone: no
                     #   metadata document needed, so a directory of chunk files with no .zarray lists too
@@ -229,9 +230,11 @@ returned one would raise on inputs cellmap-analyze reads every day. A consumer t
 in integer Rois builds them from `corner`, `voxel_size` and `shape` in its own subclass,
 where it also chooses the integer scale factor that makes the corner whole.
 
-`shared_context(cache_bytes)` is one `tensorstore.Context` per budget for the process, so
-the levels of a pyramid and repeat opens share one cache pool; the default budget is 0. Its
-decoding and file I/O pools are sized by `thread_budget()` (0.5, Behaviour 7).
+`shared_context(cache_bytes, threads=None)` is one `tensorstore.Context` per budget and
+thread limit for the process, so the levels of a pyramid and repeat opens share one cache
+pool; the default budget is 0. Its decoding and file I/O pools are sized by
+`thread_budget()` (0.5), or by `threads` when given, `0` leaving tensorstore's own sizes
+(0.6, Behaviour 7).
 `capped_context` is mesh-n-bone's worker-process context (every tensorstore concurrency
 resource limited, cache off); it returns a **new** context per call, as those workers
 inline the spec into every open today, and `capped_context_spec` exports the dict for
@@ -684,8 +687,15 @@ this document and that one differ, fix one of them.
    task (a 256^3 block write took 2.1 s against 1.3 s uncapped) but not a job of many
    workers, whose throughput its cores bound either way (four writers: 1.8 s against
    1.9 s). A process that wants more threads than its job has slots, a server under
-   `bsub -n 1` say, asks for more slots or passes its own context (decided 2026-10-23,
-   over chunkmirage's objection, once the watchdog had removed the hang risk).
+   `bsub -n 1` say, asks for more slots or says so: `shared_context(cache_bytes,
+   threads=N)` limits both pools to `N`, and `threads=0` writes no limit, leaving
+   tensorstore's own sizes (decided 2026-10-23, over chunkmirage's objection, once the
+   watchdog had removed the hang risk; the argument is 0.6, at chunkmirage's request, so
+   its server keeps one watched context per cache budget for every store it opens
+   instead of building its own). Each `(cache_bytes, threads)` is one context for the
+   process, made on first use and watched; `threads=None` and the number
+   `thread_budget()` returns are two contexts, as a pickle carries `None` for the other
+   process to size by its own job and a number as that number.
    `capped_context` sets `data_copy_concurrency`, `file_io_concurrency`,
    `gcs_request_concurrency`, `s3_request_concurrency` and `http_request_concurrency` to
    `concurrency` and the cache to `cache_bytes`, and returns a new context each call, so two
@@ -769,8 +779,8 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     unchanged, and a handle pickles by its arguments and its context's spec, so each worker
     process opens its own cheaply (a local path goes resolved against the working directory
     at open, so a worker that changes directory before unpickling, as cellmap-analyze's dask
-    workers do, opens the same store; `reopen` uses it too), on the shared context when the handle had one, else on
-    a context rebuilt once per process from the same spec, so a capped context stays
+    workers do, opens the same store; `reopen` uses it too), on the shared context when the handle had one (the same
+    `threads`, and the same cache budget), else on a context rebuilt once per process from the same spec, so a capped context stays
     capped (mesh-n-bone's per-process cache and thread caps).
 
 12. **Group attributes belong to everyone.** The package rewrites only the `multiscales`
@@ -1000,7 +1010,9 @@ nothing resolves) cancelled and retried, the warning naming `TimeoutError`, and 
 after the last attempt; a capped context and a caller's context passed to an open both
 kicked by the watchdog, a dead context no longer watched, and a kick landing on a capped
 context's own pools; `thread_budget` from each variable, a bad value skipped, and the
-shared context's limits. Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
+shared context's limits. 0.6: `shared_context(threads=)` at `None`, `N` and `0`, one
+context per pair, a negative count refused, and a pickled handle coming back on the same
+shared context. Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
 `tests/test_lost_wakeup.py`): worker processes aim tasks at the moment a one-thread pool's
 worker exits idle, so a plain context strands some for good (13 of about 7,000 on
 tensorstore 0.1.78; 40 to 44 of 12,000 to 15,000 with 16 workers on 0.1.75 and 0.1.85)

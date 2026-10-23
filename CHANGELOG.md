@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 (unreleased)
+
+One new argument, at chunkmirage's request. No placement change and no unit table change;
+nothing changes for a caller that does not pass it.
+
+- `wa.shared_context(cache_bytes, threads=)`: `None` (the default) limits the decoding and
+  file I/O pools to `thread_budget()` as in 0.5, a positive number limits them to that many,
+  and `0` writes no limit, so tensorstore sizes them itself (every CPU on the node). Each
+  `(cache_bytes, threads)` is one watched context for the process, so a server can share
+  one cache pool across every store it opens at the thread count it chose, without building
+  and watching its own context. A pickled handle on such a context comes back on the same
+  one; `threads=None` still lets the other process size by its own job.
+
 ## 0.5.0 (2026-10-23)
 
 Two bugs that hung or crashed cellmap-analyze 0.6 on /nrs (salamander's and c-elegans'
