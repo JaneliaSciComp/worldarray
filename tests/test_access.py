@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
+import time
+import weakref
 
 import numpy as np
 import pytest
@@ -127,9 +130,12 @@ def test_the_thread_budget_follows_the_job(monkeypatch):
     assert wa.thread_budget() == 1
     monkeypatch.setenv("OMP_NUM_THREADS", "x")
     assert wa.thread_budget() == 12
+    monkeypatch.delenv("LSB_DJOB_NUMPROC")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "6")
+    assert wa.thread_budget() == 6
     monkeypatch.setattr(wa.context, "_shared", {})
     spec = wa.shared_context(5).spec.to_json()
-    assert spec["data_copy_concurrency"] == spec["file_io_concurrency"] == {"limit": 12}
+    assert spec["data_copy_concurrency"] == spec["file_io_concurrency"] == {"limit": 6}
     assert spec["cache_pool"] == {"total_bytes_limit": 5}
 
 
@@ -140,31 +146,27 @@ def test_a_kick_runs_on_the_contexts_own_pools():
     assert [type(f.result(timeout=10)).__name__ for f in futures] == ["ndarray", "ReadResult"]
 
 
-def test_a_pending_future_is_kicked_until_it_resolves(monkeypatch):
-    # tensorstore's lost wakeup: the stranded task runs once anything else uses its pool
-    monkeypatch.setattr(wa.context, "KICK_AFTER", 0.01)
-    promise, future = ts.Promise.new()
+def test_every_context_the_package_touches_is_kicked(monkeypatch, tmp_path):
+    # tensorstore's lost wakeup: a stranded task runs once anything else uses its pool, so
+    # a watched context's pools get a no-op task every KICK_EVERY seconds, whoever waits
     kicked = []
-
-    def kick(context):
-        kicked.append(context)
-        if len(kicked) == 3:
-            promise.set_result(7)
-        return []
-
-    monkeypatch.setattr(wa.context, "kick", kick)
-    assert wa.context.wait(future, "ctx") == 7
-    assert kicked == ["ctx"] * 3
-    stuck = ts.Promise.new()
-    with pytest.raises(TimeoutError):
-        wa.context.wait(stuck[1], "ctx", timeout=0.05)
-    assert wa.context.wait(_ready(), None) == 1
-
-
-def _ready():
-    promise, future = ts.Promise.new()
-    promise.set_result(1)
-    return future
+    monkeypatch.setattr(wa.context, "_watched", weakref.WeakKeyDictionary())
+    monkeypatch.setattr(wa.context, "kick", lambda c: kicked.append(id(c)) or [])
+    monkeypatch.setattr(wa.context, "KICK_EVERY", 0.01)
+    monkeypatch.setattr(wa.context, "_watchdog", None)
+    capped = wa.capped_context(concurrency=1)
+    own = ts.Context({"data_copy_concurrency": {"limit": 1}})
+    write_zarr2(tmp_path / "a.zarr", pattern((4, 4)), chunks=(2, 2))
+    wa.open_tensorstore(str(tmp_path / "a.zarr"), context=own)
+    deadline = time.monotonic() + 5
+    while not {id(capped), id(own)} <= set(kicked) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert {id(capped), id(own)} <= set(kicked)
+    assert wa.context._watchdog.daemon and wa.context._watchdog.name == "worldarray-kick"
+    n = len(wa.context._watched)
+    del capped
+    gc.collect()
+    assert len(wa.context._watched) == n - 1  # a context that died is no longer watched
 
 
 class _StalledView:

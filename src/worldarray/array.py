@@ -589,7 +589,6 @@ class WorldArray:
             retries or self.retries,
             remote=self.remote,
             what=self.path,
-            context=self.context,
         )
 
     def _scalar(self, value: np.ndarray) -> np.ndarray:
@@ -736,9 +735,7 @@ class WorldArray:
         transform: Transform | None = None,
     ) -> np.ndarray:
         view = self._store[tuple(slice(int(a), int(c)) for a, c in zip(lo, hi))]
-        data = read_with_retries(
-            view, retries or self.retries, remote=self.remote, what=self.path, context=self.context
-        )
+        data = read_with_retries(view, retries or self.retries, remote=self.remote, what=self.path)
         data = np.asarray(data)
         if not data.dtype.isnative:
             data = data.astype(data.dtype.newbyteorder("="))

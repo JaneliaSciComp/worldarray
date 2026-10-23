@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import tensorstore as ts
 
-from .context import wait
+from .context import watch
 from .geometry import snap_integral
 from .placement import spatial_axes
 from .store import (
@@ -768,7 +768,7 @@ def create_array(
             separator,
             store_fill,
         )
-        return wait(ts.open(spec, create=True, open=False, context=context), context)
+        return ts.open(spec, create=True, open=False, context=watch(context)).result()
 
     try:
         with_access(kvstore_specs(path), attempt)

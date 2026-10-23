@@ -362,8 +362,8 @@ vol.write(box, data, partial=False, retries=None) ; vol.write_chunk(index, data,
                           # timed out and retried as reads are: `retries`, else the handle's (Behaviour 6)
 wa.thread_budget() -> int # threads for tensorstore's decoding and file I/O in this process: OMP_NUM_THREADS, else
                           #   LSB_DJOB_NUMPROC, else the CPUs it may run on (Behaviour 7)
-                          # every wait on a data read, write or open kicks its context's pools after each second
-                          #   it is still pending (Behaviour 6)
+                          # every context the package makes or opens a store on is kicked once a second, whoever
+                          #   waits on it (Behaviour 6)
 ```
 
 ## 3. Conventions
@@ -650,19 +650,22 @@ this document and that one differ, fix one of them.
    retried this way (Convention 5). The policy is a per-handle attribute and a per-read and
    per-write argument, never only constructor state.
 
-   The kick (0.5): tensorstore up to at least 0.1.85 can strand a queued task. A pool
+   The watchdog (0.5): tensorstore up to at least 0.1.85 can strand a queued task. A pool
    worker idle for 20 ms exits, and a task queued as it exits gets no thread while the pool
    counts itself full (fixed upstream in google/tensorstore ed51718085, in no release yet).
    The future then waits forever with no tensorstore thread alive, on a read, a write or an
    open. A pool limited to one thread meets it most; cellmap-analyze 0.6 hung on /nrs with
    `data_copy` and `file_io` at 1, and one more task on the same context woke the pool
    within seconds (salamander's and c-elegans' live tests, 2026-10-22, with un-kicked
-   workers staying stuck). So every wait on a data read, a data write or a store open
-   gives the context's decoding and file I/O pools one no-op task each (an in-memory array
-   copy and a local read of a key that does not exist; no store is touched) after every
-   second the future is still pending. A stranded operation finishes within about a
-   second, at any concurrency, and the retry stays the outer net. Open question 14 says
-   when the kick goes.
+   workers staying stuck). cellmap-analyze's read retries of June 2025 ("it sometimes
+   hangs") worked for the same reason: each attempt is a new task. So every context the
+   package makes (`shared_context`, `capped_context`, a rebuilt one) or opens a store on is
+   watched, weakly: one daemon thread, started on first use, gives each live watched
+   context's decoding and file I/O pools one no-op task every second (an in-memory array
+   copy and a local read of a key that does not exist; no store is touched, about 0.3 ms
+   of CPU). A stranded task then runs within about a second whoever waits on it: the
+   package, `vol.ts` directly, or `await`, at any concurrency. The retry stays the outer
+   net. Open question 14 says when the watchdog goes.
 
 7. **Contexts.** Without `context`, every open in the process shares `shared_context(0)`:
    tensorstore's cache is off and the levels of one pyramid share one context. Its
@@ -673,13 +676,14 @@ this document and that one differ, fix one of them.
    in the job already takes, as Janelia's cluster guidance asks. tensorstore alone sizes
    both pools to every CPU of the node, whatever the job's slots, so each of twelve dask
    workers in a twelve-slot job on a 96-core node could start 96 threads (0.5). A dask
-   worker therefore runs tensorstore on one thread of each pool, which Behaviour 6's kick
-   makes safe.
+   worker therefore runs tensorstore on one thread of each pool, which Behaviour 6's
+   watchdog makes safe. SLURM's `SLURM_CPUS_PER_TASK` and SGE's `NSLOTS` stand in for
+   `LSB_DJOB_NUMPROC` elsewhere.
    `capped_context` sets `data_copy_concurrency`, `file_io_concurrency`,
    `gcs_request_concurrency`, `s3_request_concurrency` and `http_request_concurrency` to
    `concurrency` and the cache to `cache_bytes`, and returns a new context each call, so two
    handles never share one capped pool unless the caller passes the same object twice; a
-   `concurrency` of 1 is safe under Behaviour 6's kick. Both are plain tensorstore contexts; a caller may pass its own, at construction or through
+   `concurrency` of 1 is safe under Behaviour 6's watchdog. Both are plain tensorstore contexts; a caller may pass its own, at construction or through
    `reopen(context=)` when a long-lived worker changes its concurrency (cellmap-analyze
    reopens tensorstore on every read today for that reason).
 
@@ -986,9 +990,10 @@ path reopening after a `chdir`; `codecs_of` by path; an all-fill write removing 
 a scalar filling a box through `write_index`, `write` and `write_chunk`, refused when it
 does not fit the dtype. 0.5: a read and a write whose first attempts never finish (a future
 nothing resolves) cancelled and retried, the warning naming `TimeoutError`, and the error
-after the last attempt; a pending future kicked until it resolves, a wait's timeout, and a
-kick landing on a capped context's own pools; `thread_budget` from each variable, a bad
-value skipped, and the shared context's limits.
+after the last attempt; a capped context and a caller's context passed to an open both
+kicked by the watchdog, a dead context no longer watched, and a kick landing on a capped
+context's own pools; `thread_budget` from each variable, a bad value skipped, and the
+shared context's limits.
 
 Grids (0.3): `blocks` partitioning with and without a box, `context` as an int, per axis
 and as before/after pairs, clipping on and off, `len`, `blocks[id]` and `index_of`;
@@ -1172,12 +1177,12 @@ over funlib geometry, by this spec's own assignment.
    boxes on one grid. `Grid.blocks` could carry world boxes too (`b.box`, `b.read_box` as
    `Box`, a context in world units). Two lines on cellmap-flow's side today. Not planned
    (2026-10-22): daisy does cellmap-flow's tiling and stays; reopen if cellmap-flow drops it.
-14. **When the kick goes.** Behaviour 6's kick works around tensorstore's lost wakeup,
-   fixed upstream in google/tensorstore ed51718085 (2026-09-30, "Fix lost wakeups in
-   TaskGroup when workers block or exit") and in no release up to 0.1.85. When a release
+14. **When the watchdog goes.** Behaviour 6's watchdog works around tensorstore's lost
+   wakeup, fixed upstream in google/tensorstore ed51718085 (2026-09-30, "Fix lost wakeups
+   in TaskGroup when workers block or exit") and in no release up to 0.1.85. When a release
    contains it (`gh api repos/google/tensorstore/compare/ed51718085...vX.Y.Z` reports
-   "ahead" or "identical"), require that release, remove `context.kick` and `KICK_AFTER`
-   (waits go back to `future.result(timeout)`), and keep the write retries. That release
+   "ahead" or "identical"), require that release, remove `watch`, `kick` and the watchdog
+   thread from `context.py`, and keep the write retries. That release
    needs Python 3.11 or later, as tensorstore has since 0.1.81, so it also ends support for
    3.10.
 

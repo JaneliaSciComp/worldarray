@@ -20,7 +20,7 @@ from typing import Any, TypeVar
 
 import tensorstore as ts
 
-from .context import wait
+from .context import watch
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -440,7 +440,7 @@ def open_array(
             spec["assume_metadata"] = True
         if node.format == "precomputed" and scale_index is not None:
             spec["scale_index"] = scale_index
-        return wait(ts.open(spec, read=True, write=write, context=context), context)
+        return ts.open(spec, read=True, write=write, context=watch(context)).result()
 
     store = with_access(kvstore_specs(node.path), attempt)
     if node.format in ("n5", "precomputed"):
