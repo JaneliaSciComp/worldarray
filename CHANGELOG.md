@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-10-22)
 
 cellmap-analyze's three asks, so it can call worldarray directly with no wrapper, and two
 of cellmap-flow's. No placement change and no unit table change.
