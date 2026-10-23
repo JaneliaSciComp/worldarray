@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import multiprocessing as mp
 import pickle
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -746,6 +748,47 @@ def test_a_pickled_relative_path_reopens_after_a_chdir(tmp_path, monkeypatch):
     assert again.path == str(tmp_path / "b.zarr/seg/s0")
     assert int(again.read_index((0, 0, 0), (1, 1, 1))[0, 0, 0]) == 9
     assert vol.reopen().level_path == again.level_path
+
+
+class _StallingStore:
+    """A tensorstore whose first ``stalls`` writes never finish, as a write stuck on NFS
+    looks from Python; later writes go through."""
+
+    def __init__(self, store, stalls):
+        self.store, self.stalls, self.held = store, stalls, []
+
+    def __getitem__(self, index):
+        view = self.store[index]
+
+        def write(data):
+            if len(self.held) >= self.stalls:
+                return view.write(data)
+            promise, future = ts.Promise.new()
+            self.held.append((promise, future))
+            return future
+
+        return SimpleNamespace(shape=view.shape, dtype=view.dtype, write=write)
+
+
+def test_a_stalled_write_is_cancelled_and_retried(tmp_path, monkeypatch, caplog):
+    # salamander's 0.4.0 runs on /nrs: workers parked forever in write().result()
+    monkeypatch.setattr(wa.retry.time, "sleep", lambda s: None)
+    vol = wa.create(
+        str(tmp_path / "vol.zarr/s0"), (8, 8, 8), "uint8", (1, 1, 1), (0.5,) * 3, chunks=(4, 4, 4)
+    )
+    store = vol._store
+    vol._store = _StallingStore(store, stalls=2)
+    with caplog.at_level(logging.WARNING, logger="worldarray.retry"):
+        vol.write_index((0, 0, 0), (4, 4, 4), 9, retries=wa.Retry(timeout=0.01, max_attempts=3))
+    assert [f.cancelled() for _, f in vol._store.held] == [True, True]
+    assert "write " + vol.path + " failed on attempt 1/3 (TimeoutError)" in caplog.text
+    vol.retries = wa.Retry(timeout=0.01, max_attempts=2)
+    vol._store = _StallingStore(store, stalls=9)
+    with pytest.raises(TimeoutError, match="timed out on all 2 attempts"):
+        vol.write_chunk((1, 1, 1), 5)
+    vol._store = store
+    got = vol.read_index((0, 0, 0), (8, 8, 8))
+    assert np.all(got[:4, :4, :4] == 9) and np.all(got[4:, 4:, 4:] == 0)
 
 
 def test_a_scalar_fills_the_box(tmp_path):

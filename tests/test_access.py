@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import gc
+import logging
 import os
+import time
+import weakref
 
 import numpy as np
 import pytest
+import tensorstore as ts
 
 import worldarray as wa
 from conftest import pattern, write_zarr2, write_zarr2_group
-from worldarray import store
+from worldarray import retry, store
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +115,94 @@ def test_contexts_and_retry_timeouts():
         and r.timeout_for(16 << 30, remote=False) == 30.0
     )
     assert wa.Retry(timeout=7).timeout_for(10**12, remote=True) == 7.0
+
+
+def test_the_thread_budget_follows_the_job(monkeypatch):
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.delenv("LSB_DJOB_NUMPROC", raising=False)
+    allowed = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+    assert wa.thread_budget() == allowed  # macOS has no affinity call
+    monkeypatch.setenv("LSB_DJOB_NUMPROC", "12")
+    assert wa.thread_budget() == 12
+    monkeypatch.setenv("OMP_NUM_THREADS", "24")  # a job script's 2 * slots
+    assert wa.thread_budget() == 24
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")  # what dask sets in each worker
+    assert wa.thread_budget() == 1
+    monkeypatch.setenv("OMP_NUM_THREADS", "x")
+    assert wa.thread_budget() == 12
+    monkeypatch.delenv("LSB_DJOB_NUMPROC")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "6")
+    assert wa.thread_budget() == 6
+    monkeypatch.setattr(wa.context, "_shared", {})
+    spec = wa.shared_context(5).spec.to_json()
+    assert spec["data_copy_concurrency"] == spec["file_io_concurrency"] == {"limit": 6}
+    assert spec["cache_pool"] == {"total_bytes_limit": 5}
+
+
+def test_a_kick_runs_on_the_contexts_own_pools():
+    ctx = wa.capped_context(concurrency=1)
+    futures = wa.context.kick(ctx)
+    assert len(futures) == 2
+    assert [type(f.result(timeout=10)).__name__ for f in futures] == ["ndarray", "ReadResult"]
+
+
+def test_every_context_the_package_touches_is_kicked(monkeypatch, tmp_path):
+    # tensorstore's lost wakeup: a stranded task runs once anything else uses its pool, so
+    # a watched context's pools get a no-op task every KICK_EVERY seconds, whoever waits
+    kicked = []
+    monkeypatch.setattr(wa.context, "_watched", weakref.WeakKeyDictionary())
+    monkeypatch.setattr(wa.context, "kick", lambda c: kicked.append(id(c)) or [])
+    monkeypatch.setattr(wa.context, "KICK_EVERY", 0.01)
+    monkeypatch.setattr(wa.context, "_watchdog", None)
+    capped = wa.capped_context(concurrency=1)
+    own = ts.Context({"data_copy_concurrency": {"limit": 1}})
+    write_zarr2(tmp_path / "a.zarr", pattern((4, 4)), chunks=(2, 2))
+    wa.open_tensorstore(str(tmp_path / "a.zarr"), context=own)
+    deadline = time.monotonic() + 5
+    while not {id(capped), id(own)} <= set(kicked) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert {id(capped), id(own)} <= set(kicked)
+    assert wa.context._watchdog.daemon and wa.context._watchdog.name == "worldarray-kick"
+    n = len(wa.context._watched)
+    del capped
+    gc.collect()
+    assert len(wa.context._watched) == n - 1  # a context that died is no longer watched
+
+
+class _StalledView:
+    """A view whose first ``stalls`` reads never finish (a future nothing resolves, as a
+    read stuck on NFS looks from Python); later reads return ``0, 1, 2, 3``."""
+
+    shape, dtype = (4,), ts.uint8
+
+    def __init__(self, stalls):
+        self.stalls, self.held = stalls, []
+
+    def read(self):
+        promise, future = ts.Promise.new()
+        if len(self.held) < self.stalls:
+            self.held.append((promise, future))
+        else:
+            promise.set_result(np.arange(4, dtype=np.uint8))
+        return future
+
+
+def test_a_timed_out_read_is_cancelled_and_retried(monkeypatch, caplog):
+    # tensorstore's TimeoutError has an empty message; the warning names its type
+    # (salamander's IndexError on /nrs under 0.4.0)
+    monkeypatch.setattr(retry.time, "sleep", lambda s: None)
+    view = _StalledView(stalls=2)
+    with caplog.at_level(logging.WARNING, logger="worldarray.retry"):
+        got = retry.read_with_retries(
+            view, wa.Retry(timeout=0.01, max_attempts=3), remote=False, what="v"
+        )
+    assert got.tolist() == [0, 1, 2, 3]
+    assert [f.cancelled() for _, f in view.held] == [True, True]
+    assert "read v failed on attempt 1/3 (TimeoutError)" in caplog.text
+    with pytest.raises(TimeoutError, match="read v timed out on all 2 attempts"):
+        retry.read_with_retries(
+            _StalledView(stalls=9), wa.Retry(timeout=0.01, max_attempts=2), remote=False, what="v"
+        )
 
 
 def test_metadata_reads_carry_capped_retries():
