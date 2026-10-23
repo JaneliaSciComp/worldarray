@@ -149,8 +149,9 @@ wa.open_pyramid(path, ...) -> Pyramid          # .names .levels .by_name() .sele
 wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False: from documents alone
 wa.detect(path, missing_ok=False) -> Node      # format, array or group, raw attrs
 wa.open_tensorstore(path, level=None, context=None)
-wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
-wa.thread_budget()                              # the shared context's thread limit: OMP_NUM_THREADS, the job's slots, or CPUs
+wa.shared_context(cache_bytes=0, threads=None) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
+wa.thread_budget()                              # the shared context's default thread limit: OMP_NUM_THREADS, the job's slots, or CPUs;
+                                                #   threads=N limits it to N, threads=0 leaves tensorstore's own pool sizes
 wa.list_chunk_keys(path, separator=".")        # chunk indices from keys alone, no metadata needed
 wa.Box ; wa.units.TABLE
 

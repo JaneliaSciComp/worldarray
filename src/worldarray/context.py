@@ -1,12 +1,14 @@
 """Tensorstore contexts: one shared per cache budget, or a capped one per call.
 
-``shared_context(cache_bytes)`` is one ``tensorstore.Context`` per budget for the whole
-process, so the levels of a pyramid and repeat opens of an array draw on one cache pool.
-The default budget is 0: tensorstore's decoded-chunk cache is off, because every consumer
-either reads each region once or caches decoded chunks itself. Its decoding and file I/O
-pools are sized by ``thread_budget()``, from the variables a cluster job sets, where
-tensorstore alone would size them to every CPU on the node. Every context here, and every
-one a store is opened on, is watched for tensorstore's lost wakeup (``watch``).
+``shared_context(cache_bytes, threads=)`` is one ``tensorstore.Context`` per budget and
+thread limit for the whole process, so the levels of a pyramid and repeat opens of an
+array draw on one cache pool. The default budget is 0: tensorstore's decoded-chunk cache
+is off, because every consumer either reads each region once or caches decoded chunks
+itself. By default its decoding and file I/O pools are sized by ``thread_budget()``, from
+the variables a cluster job sets, where tensorstore alone would size them to every CPU on
+the node; ``threads=0`` leaves them at tensorstore's sizes (chunkmirage's server). Every
+context here, and every one a store is opened on, is watched for tensorstore's lost wakeup
+(``watch``).
 
 ``capped_context`` is mesh-n-bone's worker-process context: every tensorstore concurrency
 resource limited, so dozens of worker processes on one host do not multiply into thousands
@@ -26,7 +28,7 @@ from typing import Any
 
 import tensorstore as ts
 
-_shared: dict[int, ts.Context] = {}
+_shared: dict[tuple[int, int | None], ts.Context] = {}
 _rebuilt: dict[str, ts.Context] = {}
 _lock = threading.Lock()
 
@@ -136,20 +138,23 @@ def thread_budget() -> int:
         return os.cpu_count() or 1
 
 
-def shared_context(cache_bytes: int = 0) -> ts.Context:
+def shared_context(cache_bytes: int = 0, *, threads: int | None = None) -> ts.Context:
+    """The process's one context for ``cache_bytes`` and ``threads``, made on first use and
+    watched. ``threads`` limits its decoding and file I/O pools: ``None`` to
+    ``thread_budget()``, a positive number to that many, ``0`` not at all (tensorstore's own
+    sizes, every CPU on the node)."""
+    key = (int(cache_bytes), None if threads is None else int(threads))
+    if key[1] is not None and key[1] < 0:
+        raise ValueError(f"threads must be None, 0 or positive, not {threads!r}")
     with _lock:
-        ctx = _shared.get(int(cache_bytes))
+        ctx = _shared.get(key)
         if ctx is None:
-            limit = {"limit": thread_budget()}
-            ctx = ts.Context(
-                {
-                    "cache_pool": {"total_bytes_limit": int(cache_bytes)},
-                    "data_copy_concurrency": limit,
-                    "file_io_concurrency": limit,
-                }
-            )
-            watch(ctx)
-            _shared[int(cache_bytes)] = ctx
+            spec: dict = {"cache_pool": {"total_bytes_limit": key[0]}}
+            limit = thread_budget() if threads is None else key[1]
+            if limit:
+                spec["data_copy_concurrency"] = spec["file_io_concurrency"] = {"limit": limit}
+            ctx = watch(ts.Context(spec))
+            _shared[key] = ctx
         return ctx
 
 
@@ -157,7 +162,9 @@ def capped_context_spec(cache_bytes: int = 0, concurrency: int = 1, network: boo
     """The spec dict behind ``capped_context``, for callers building their own opens.
     ``network=False`` caps only decoding and local file I/O, leaving tensorstore's request
     pools alone (cellmap-analyze's choice for remote reads). A ``concurrency`` of 1 is safe:
-    the context is watched (see ``KICK_EVERY``)."""
+    the context is watched (see ``KICK_EVERY``). It is not free: a read or write spanning
+    several chunks then decodes and stores them one at a time, half the speed of 4 on
+    8-chunk blocks in a two-slot job, 7 to 19% slower in a one-slot one (spec, Behaviour 7)."""
     limit = {"limit": int(concurrency)}
     spec = {
         "data_copy_concurrency": limit,
@@ -179,12 +186,14 @@ def capped_context(cache_bytes: int = 0, concurrency: int = 1, network: bool = T
 
 def recipe_of(context: ts.Context) -> tuple[str, Any]:
     """How another process rebuilds ``context``: ``("shared", cache_bytes)`` for a shared
-    context, else ``("spec", json)`` from the context's own spec, so a capped context stays
-    capped across a pickle (Behaviour 11, mesh-n-bone's workers)."""
+    context at the default limit (the other process takes its own ``thread_budget()``),
+    ``("shared", (cache_bytes, threads))`` for one with ``threads`` given, else
+    ``("spec", json)`` from the context's own spec, so a capped context stays capped across
+    a pickle (Behaviour 11, mesh-n-bone's workers)."""
     with _lock:
-        for cache_bytes, ctx in _shared.items():
+        for (cache_bytes, threads), ctx in _shared.items():
             if ctx is context:
-                return ("shared", cache_bytes)
+                return ("shared", cache_bytes if threads is None else (cache_bytes, threads))
     spec = context.spec
     return ("spec", json.dumps(spec.to_json() if spec is not None else {}, sort_keys=True))
 
@@ -196,7 +205,8 @@ def from_recipe(recipe: tuple[str, Any] | None) -> ts.Context | None:
         return None
     kind, value = recipe
     if kind == "shared":
-        return shared_context(int(value))
+        cache_bytes, threads = value if isinstance(value, (tuple, list)) else (value, None)
+        return shared_context(int(cache_bytes), threads=threads)
     with _lock:
         ctx = _rebuilt.get(value)
         if ctx is None:
