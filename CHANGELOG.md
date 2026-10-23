@@ -29,9 +29,10 @@ unit table change.
   new `wa.thread_budget()`: `OMP_NUM_THREADS` when set (dask sets 1 in each worker), else
   `LSB_DJOB_NUMPROC` (an LSF job's slots), else the CPUs the process may run on.
   tensorstore alone sizes both to every CPU on the node, whatever `bsub -n` asked for, so
-  a dask worker's tensorstore now takes the same one thread as its numpy. Writes stay 2 to
-  8 times faster than cellmap-analyze's zarr-python writer on NFS, at one scale, measured
-  on 128^3 uint64 label chunks.
+  a dask worker's tensorstore now takes the same one thread as its numpy. Writes stay faster
+  than cellmap-analyze's zarr-python writer on NFS, at one scale on 128^3 uint64 label
+  chunks: 2.3 to 5 times at one thread per pool (7 threads per process against
+  zarr-python's 24 to 31), 2 to 7 times with the pools at the machine's CPUs.
 
 ## 0.4.0 (2026-10-22)
 
