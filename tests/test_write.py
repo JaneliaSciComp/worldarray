@@ -272,6 +272,19 @@ def test_create_never_overwrites_and_adopts_only_an_identical_array(tmp_path):
         wa.create(path, *args[:3], (3, 2, 2), chunks=(4, 4, 4), exists="adopt")
 
 
+def test_adopt_checks_the_attributes_it_was_given(tmp_path):
+    """cellmap-flow's _refuse_another_region: funlib's prepare_ds kept an old offset silently."""
+    path = str(tmp_path / "vol.zarr/s0")
+    args = ((8, 8, 8), "uint8", (4, 4, 4), (2, 2, 2))
+    wa.create(path, *args, chunks=(4, 4, 4), attrs={"offset": (0, 0, 0), "model": "a"})
+    again = wa.create(path, *args, chunks=(4, 4, 4), attrs={"offset": [0.0, 0, 0]}, exists="adopt")
+    assert again.meta.attrs["model"] == "a"  # keys not given are not compared
+    with pytest.raises(ValueError) as e:
+        wa.create(path, *args, chunks=(4, 4, 4), attrs={"model": "b", "run": 2}, exists="adopt")
+    assert "attrs['model']: found 'a', wanted 'b'" in str(e.value)
+    assert "attrs['run']: missing, wanted 2" in str(e.value)
+
+
 def test_create_keeps_everyone_elses_attributes(tmp_path):
     group = tmp_path / "shared.zarr"
     write_zarr3_group(

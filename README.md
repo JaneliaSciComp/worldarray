@@ -169,7 +169,7 @@ wa.units.abbreviation("nanometer") ; wa.store.join(path, "s0") ; wa.store.parent
 ```
 
 `WorldArray`: `ts`, `meta`, `grid`, `shape`, `dtype`, `axes`, `voxel_size`, `translation`,
-`corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `resampled`,
+`corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `source_translation`, `resampled`,
 `writable`, `write_shape`;
 `read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, post_transform=, select=, strict=)`,
 `read_index(begin, end, padding=, mask=, select=, transform=)`, `read_onto(grid, begin=, end=, ...)`, `index_box(box)`,

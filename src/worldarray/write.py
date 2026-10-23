@@ -803,9 +803,12 @@ def differences(
     shards: Sequence[int] | None,
     voxel_size: Sequence[float],
     translation: Sequence[float],
+    attrs: dict | None = None,
 ) -> list[str]:
     """How an existing array's ``ArrayMeta`` differs from what a caller wanted to create:
-    one line per field, empty when identical (placement within ``RTOL``)."""
+    one line per field, empty when identical (placement within ``RTOL``). Of the array's
+    attributes only the keys of ``attrs`` are compared, as JSON stores them; every other key
+    is someone else's."""
     out = []
     if tuple(meta.shape) != tuple(int(n) for n in shape):
         out.append(f"shape: found {tuple(meta.shape)}, wanted {tuple(shape)}")
@@ -826,4 +829,10 @@ def differences(
             out.append(
                 f"{what}: found {tuple(float(x) for x in f)}, wanted {tuple(float(x) for x in w)}"
             )
+    found_attrs = meta.attrs or {}
+    for key, wanted in json.loads(json.dumps(attrs or {})).items():
+        if key not in found_attrs:
+            out.append(f"attrs[{key!r}]: missing, wanted {wanted!r}")
+        elif found_attrs[key] != wanted:
+            out.append(f"attrs[{key!r}]: found {found_attrs[key]!r}, wanted {wanted!r}")
     return out

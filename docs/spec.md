@@ -149,8 +149,9 @@ vol.meta           # ArrayMeta in the store's own units
 vol.grid           # ArrayMeta in the requested units, every axis
 vol.shape, vol.dtype, vol.axes, vol.spatial, vol.level_name, vol.levels, vol.remote
                    # shape is the stored shape, or with a resample target the target voxels covering the data
-vol.source_voxel_size, vol.resampled   # the stored level's voxel size, also under resample and relabel; whether reads
-                                       #   resample to a target
+vol.source_voxel_size, vol.source_translation, vol.resampled
+                   # the stored level's voxel size and translation (0.4), also under resample and relabel; whether
+                   #   reads resample to a target
 vol.list_chunks()  # the chunk indices that exist in storage, by listing keys (zarr v2/v3, N5, unsharded precomputed)
 vol.path           # what the caller passed (a group, say); vol.level_path is the array actually opened
 vol.voxel_size     # tuple[float] in `units`, spatial axes, the array's order (zyx for a volume)
@@ -285,7 +286,8 @@ vol = wa.create(
     attrs=None,           # extra array attributes, merged into the array's own
     group_attrs=None,     # extra group attributes, merged; no one else's key is dropped or rewritten (Behaviour 12)
     exists="error",       # "error": anything already at `path` raises | "adopt": an identical array (shape, dtype, chunks,
-                          #   shards, placement within rtol 1e-6) is opened for writing; a different one raises naming each
+                          #   shards, placement within rtol 1e-6, and from 0.4 every key of `attrs` holding the value given)
+                          #   is opened for writing; a different one raises naming each
                                                     #   difference. There is no third value. An adopt writes no group document when the entry
                           #   already says the same (Behaviour 12)
     store_fill=False,     # True stores write units equal to fill_value instead of leaving them absent
@@ -347,6 +349,8 @@ vol.read_onto(grid, begin=None, end=None, padding=None, method=None, mask=False,
                           #   grid anchored at its corner (Behaviour 20)
 vol.write_index(begin, end, 0) ; vol.write(box, 0) ; vol.write_chunk(index, 0)
                           # a scalar fills the box, converted to the dtype only when its value survives (Behaviour 13)
+vol.source_translation    # the stored level's translation in `units`, beside source_voxel_size, under resample and relabel
+wa.create(..., attrs={...}, exists="adopt")   # an adopt also compares the keys of `attrs` (Behaviour 11)
 ```
 
 ## 3. Conventions
@@ -694,9 +698,11 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     compression; cellmap-flow's blosc stays blosc by passing it. There is no overwrite: with
     `exists="error"` any document already at `path` raises `FileExistsError`; with
     `exists="adopt"` an array whose shape, dtype, chunks, shards and placement match
-    (placement within `rtol 1e-6`) is opened for writing and its dataset entry ensured, and
-    one that differs raises `ValueError` listing every differing field with the value found
-    and the value wanted (cellmap-flow's `_refuse_another_region`, registration-station's
+    (placement within `rtol 1e-6`), and whose attributes hold every key of `attrs` with the
+    value given as JSON stores it (keys not given are someone else's and not compared), is
+    opened for writing and its dataset entry ensured, and one that differs raises
+    `ValueError` listing every differing field and key with the value found and the value
+    wanted (cellmap-flow's `_refuse_another_region`, registration-station's
     missing check, which let a shorter last band's chunk grid win a creation race). A
     creation that loses a race, the store reporting the array present after the probe said
     absent, is re-read with backoff, 5 attempts at `0.5 s * attempt`, and then treated as an
@@ -950,6 +956,8 @@ under a sub-voxel offset with `method="linear"`, and the next voxel past a half-
 onto a finer grid equal to the `read` it is defined as, in micrometres too, adjoining
 reads agreeing, the mask marking grid voxels before the data; its own grid at voxel sizes
 3.54, 4 and 5.3 returning the stored array exactly; a grid with other axis names refused.
+`source_translation` under relabel and resample and in micrometres; an adopt keeping keys
+it was not given and refusing a different or missing one, naming both values.
 
 Target: about 600 lines of test cases for 0.1 and about 300 more for 0.2 and 0.3, the
 store builders in `conftest.py` aside; no wording pins; no `/nrs`; no cluster.

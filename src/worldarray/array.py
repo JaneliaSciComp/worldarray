@@ -150,8 +150,9 @@ class WorldArray:
             self._meta = self._rescaled_to_base(base_voxel_size, base_units)
         space, time = _unit_targets(units)
         self._grid = self._meta.in_units(space=space, time=time, strict=strict_units)
-        # the stored level's spatial voxel size, before any relabel renames the grid
+        # the stored level's spatial placement, before any relabel renames the grid
         self._stored_voxel_size = tuple(self._grid.voxel_size[i] for i in self._grid.spatial)
+        self._stored_translation = tuple(self._grid.translation[i] for i in self._grid.spatial)
 
         self._target: tuple[float, ...] | None = None
         if voxel_size is not None:
@@ -315,6 +316,13 @@ class WorldArray:
         """The stored level's voxel size on the spatial axes, in ``units``: what the level
         is, whether reads resample it or ``on_mismatch="relabel"`` renames its grid."""
         return self._stored_voxel_size
+
+    @property
+    def source_translation(self) -> tuple[float, ...]:
+        """The stored level's translation (the centre of its voxel 0) on the spatial axes, in
+        ``units``: where the level is, whether reads resample it or ``on_mismatch="relabel"``
+        renames its grid."""
+        return self._stored_translation
 
     @property
     def resampled(self) -> bool:
@@ -1206,8 +1214,8 @@ def create(
     0.5) following the group's format (Behaviours 11 and 12). ``chunks`` is required.
     Nothing is ever deleted or overwritten: with ``exists="error"`` anything at ``path``
     raises ``FileExistsError``; with ``"adopt"`` an identical array (shape, dtype, chunks,
-    shards, placement) is opened for writing and a different one raises ``ValueError``
-    naming every difference. Returns a writable ``WorldArray``."""
+    shards, placement, and every key of ``attrs`` already holding the value given) is opened
+    for writing and a different one raises ``ValueError`` naming every difference. Returns a writable ``WorldArray``."""
     if grid is not None:
         # a Grid planned the output (Behaviour 18): its facts are the array's, chunks and
         # shards overridable; the placement arguments must not also be given
@@ -1248,6 +1256,7 @@ def create(
             shards=shards,
             voxel_size=vs,
             translation=tr,
+            attrs=attrs,
         )
         if diffs:
             raise ValueError(
