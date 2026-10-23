@@ -44,6 +44,7 @@ from .store import (
     normalize_path,
     open_array,
     precomputed_scale_index,
+    retried_documents,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ class WorldArray:
     ``voxel_size`` picks the level; a group with neither raises, listing its levels).
     """
 
+    @retried_documents
     def __init__(
         self,
         path: str,
@@ -1002,6 +1004,7 @@ class Pyramid:
     own metadata where it lists the levels' scales (OME-NGFF, COSEM N5, precomputed), and
     opens the levels only when it does not."""
 
+    @retried_documents
     def __init__(
         self,
         path: str,
@@ -1201,6 +1204,7 @@ class Pyramid:
 # Functions
 
 
+@retried_documents
 def create(
     path: str,
     shape: Sequence[int] | None = None,
@@ -1345,14 +1349,21 @@ def open_pyramid(path: str, **kwargs) -> Pyramid:
     return Pyramid(path, **kwargs)
 
 
+@retried_documents
 def metadata(
-    path: str, *, level: str | int | None = None, units: Units = None, open: bool = True
+    path: str,
+    *,
+    level: str | int | None = None,
+    units: Units = None,
+    open: bool = True,
+    retries: Retry | None = None,
 ) -> ArrayMeta:
     """The ``ArrayMeta`` of an array (or of ``level`` under a group), in native units unless
     ``units`` says otherwise. ``open=False`` reads it from the documents alone, with no
-    tensorstore opened."""
+    tensorstore opened. ``retries`` times out and retries each document read and the open
+    (Behaviour 6)."""
     if open:
-        vol = WorldArray(path, level=level, units=units)
+        vol = WorldArray(path, level=level, units=units, retries=retries)
         return vol.meta if units is None else vol.grid
     node = detect(path)
     if level == "first":
@@ -1386,13 +1397,18 @@ def metadata(
     return meta.in_units(space=space, time=time)
 
 
+@retried_documents
 def open_tensorstore(
-    path: str, *, level: str | int | None = None, context: ts.Context | None = None
+    path: str,
+    *,
+    level: str | int | None = None,
+    context: ts.Context | None = None,
+    retries: Retry | None = None,
 ) -> ts.TensorStore:
     """The raw tensorstore of an array or level: C order, origin 0, a precomputed single
-    channel dropped. The access fallbacks and shared context apply. No world metadata is
-    read, so an array whose placement attributes are odd (a coordinate array, a field) still
-    opens."""
+    channel dropped. The access fallbacks and shared context apply, and ``retries`` to each
+    document read and the open (Behaviour 6). No world metadata is read, so an array whose
+    placement attributes are odd (a coordinate array, a field) still opens."""
     context = context if context is not None else shared_context(0)
     node = detect(path)
     if level == "first":

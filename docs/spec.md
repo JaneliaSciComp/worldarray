@@ -177,10 +177,10 @@ pyr.voxel_sizes() ; pyr.translations()   #   where it lists the levels (OME-NGFF
                     #   choosing or placing a level opens nothing, whether the pyramid was opened by its
                     #   group path or by one of its level paths; else by opening each level
 
-wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False: from the documents alone
-wa.detect(path, missing_ok=False) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
+wa.metadata(path, level=None, units=None, open=True, retries=None) -> ArrayMeta   # open=False: from the documents alone
+wa.detect(path, missing_ok=False, retries=None) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
                                                    #   attributes), .multiscales (OME 0.5's `ome` unwrapped)
-wa.open_tensorstore(path, level=None, context=None) -> tensorstore.TensorStore   # reads no world metadata, so an
+wa.open_tensorstore(path, level=None, context=None, retries=None) -> tensorstore.TensorStore   # reads no world metadata, so an
                                                    #   array with odd placement attributes (a coordinate array) still opens
 wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
 wa.units.TABLE      # the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}
@@ -521,7 +521,8 @@ this document and that one differ, fix one of them.
    one probe key counts as "missing" when another probe key was read under the same way,
    and only when every probe key is refused is the next way tried (see Open question 4).
    Metadata reads retry for about five seconds in total (`max_retries 5, initial_delay
-   0.2s, max_delay 2s`); data reads keep tensorstore's defaults plus `Retry`.
+   0.2s, max_delay 2s`); data reads keep tensorstore's defaults plus `Retry`, and each
+   document read and store open is also timed out under `Retry` (0.7, Behaviour 6).
 
 6. **Writing is reading inverted, in one format.** The package writes OME-NGFF zarr only:
    zarr v2 with OME 0.4 (`.zgroup`, and `.zattrs` holding `multiscales`, each entry with
@@ -649,9 +650,21 @@ this document and that one differ, fix one of them.
    still land after its cancel, with the same bytes the next attempt writes. Each retry is
    logged as a warning naming the error's first line, or its type when the message is
    empty (tensorstore's timeout is `TimeoutError()`); when every attempt times out the
-   `TimeoutError` names the operation, the path and the attempts. Metadata documents are not
-   retried this way (Convention 5). The policy is a per-handle attribute and a per-read and
-   per-write argument, never only constructor state.
+   `TimeoutError` names the operation, the path and the attempts. The policy is a
+   per-handle attribute and a per-read and per-write argument, never only constructor
+   state.
+
+   Documents and opens (0.7): every metadata document read or written and every store
+   opened is timed out and retried the same way, as an operation of no bytes (by default
+   5 s times the attempt, ten attempts), with tensorstore's own request retries
+   (Convention 5) running inside each attempt. A server that accepts a connection and
+   never answers used to hold `wa.open` and `wa.metadata` forever: cellmap-flow's picker
+   kept a 5 s probe of its own in front of them (2026-10-23). The policy is the `retries`
+   of the public call doing the reading: `open`, `open_pyramid`, `create`, `metadata`,
+   `detect` and `open_tensorstore`, which all take it; a document read later outside such
+   a call (a zarr v2 `.zattrs` read on demand, a pyramid placing its levels) waits under
+   `Retry()`. Listings are not timed out, their size being unknown, and neither is the
+   open that creates an array, which a second attempt would find already made.
 
    The watchdog (0.5): tensorstore up to at least 0.1.85 can strand a queued task. A pool
    worker idle for 20 ms exits, and a task queued as it exits gets no thread while the pool
@@ -1019,7 +1032,8 @@ kicked by the watchdog, a dead context no longer watched, and a kick landing on 
 context's own pools; `thread_budget` from each variable, a bad value skipped, and the
 shared context's limits. 0.6: `shared_context(threads=)` at `None`, `N` and `0`, one
 context per pair, a negative count refused, and a pickled handle coming back on the same
-shared context. Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
+shared context. 0.7: `metadata`, `open` and `detect` against a server
+that accepts and never answers raising `TimeoutError` after the attempts. Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
 `tests/test_lost_wakeup.py`): worker processes aim tasks at the moment a one-thread pool's
 worker exits idle, so a plain context strands some for good (13 of about 7,000 on
 tensorstore 0.1.78; 40 to 44 of 12,000 to 15,000 with 16 workers on 0.1.75 and 0.1.85)
@@ -1160,13 +1174,20 @@ over funlib geometry, by this spec's own assignment.
    a real bucket with listing disabled. One network test before 0.1.0 may change the rule.
 4. **The network test** against a non-integer-voxel OpenOrganelle volume (Tests) is not yet
    written; it needs the dataset chosen from the catalog.
-5. **Legacy attributes on new outputs.** cellmap-analyze writes funlib `voxel_size` and
-   `offset` (holding the centre) on every output and nothing in the five repos reads them;
-   dacapo's checkout has nine `open_ds` users, and cellmap-data and fibsem-tools were not
-   checked. Does any live consumer of cellmap-analyze or cellmap-flow outputs read funlib
-   attributes? If so, should the package offer `funlib_attrs(voxel_size, translation, axes,
-   units)`, writing `offset` as the corner, funlib's meaning, for `create(attrs=)`, or do
-   the repos keep writing their own?
+5. **Legacy attributes on new outputs.** Resolved 2026-10-23: nobody needs them, so there
+   is no `funlib_attrs`. cellmap-analyze stopped writing funlib `voxel_size` and `offset`
+   (which held the centre) in 0.6.0, whose outputs carry only the OME documents `create`
+   writes. cellmap-flow writes them through funlib's own `prepare_ds`, `offset` as the
+   corner beside an agreeing OME 0.4 translation, and is their only reader. dacapo reads
+   funlib attributes through `open_ds` (`ome_metadata=False` by default), but nothing feeds
+   it these outputs, and on a zarr v3 one funlib 0.7 silently reads voxel size 1 and
+   offset 0. cellmap-data and fibsem-tools read OME only, and both pin `zarr<3`. funlib
+   0.6 and 0.7 also require integer offsets and voxel sizes, so a float helper here would
+   either refuse placements or write numbers funlib truncates; a repo that wants the keys
+   passes them through `create(attrs=)`. Found on the way, outside this package:
+   cellmap-data (main 356c3ac, `image.py`) takes an OME translation as voxel 0's corner,
+   half a voxel off on every OME-correct store, and funlib's `open_ome_ds` puts the
+   translation straight into its corner `offset`.
 6. **The block iterator's shape** (Behaviour 17). Resolved 2026-10-22: both sessions
    confirmed it. mesh-n-bone asked that `box` may reach past the array and that `clip`
    clips read boxes only, and derives its per-level boxes from one grid itself;
@@ -1197,7 +1218,7 @@ over funlib geometry, by this spec's own assignment.
    unlisted has its placement nowhere until it is listed, so a `create(listed=False)`
    handle, and its pickles, would carry the placement from its arguments alone. Decide
    whether that is worth having, or whether an unlisted level should describe itself on
-   the array (open question 5's funlib attributes, or an OME-shaped array attribute).
+   the array (an OME-shaped array attribute; funlib keys are out, open question 5).
 12. **Per-open object-store credentials.** cellmap-flow's MinIO writers open with a
    per-session key, secret and endpoint while the same process reads public S3
    anonymously. tensorstore 0.1.85's `aws_credentials` takes no inline key and secret, and

@@ -146,9 +146,10 @@ wa.open(path, *, level=None, voxel_size=None, level_mode="floor", on_mismatch="e
         metadata_conflicts="error", base_voxel_size=None, base_units=None, anchor=None,
         transform=None, strict_units=True) -> WorldArray
 wa.open_pyramid(path, ...) -> Pyramid          # .names .levels .by_name() .select() .placements() .metas(): no opens needed
-wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False: from documents alone
-wa.detect(path, missing_ok=False) -> Node      # format, array or group, raw attrs
-wa.open_tensorstore(path, level=None, context=None)
+wa.metadata(path, level=None, units=None, open=True, retries=None) -> ArrayMeta   # open=False: from documents alone
+wa.detect(path, missing_ok=False, retries=None) -> Node      # format, array or group, raw attrs
+wa.open_tensorstore(path, level=None, context=None, retries=None)
+                    # retries= times out and retries document reads and the open, as it does data reads
 wa.shared_context(cache_bytes=0, threads=None) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
 wa.thread_budget()                              # the shared context's default thread limit: OMP_NUM_THREADS, the job's slots, or CPUs;
                                                 #   threads=N limits it to N, threads=0 leaves tensorstore's own pool sizes
