@@ -57,6 +57,7 @@ def test_units_are_written_in_ome_names_and_unknown_ones_as_given():
         assert wa.units.ome_name(spelling) == "nanometer"
     assert wa.units.ome_name("um") == wa.units.ome_name("\u00b5m") == "micrometer"
     assert wa.units.ome_name("s") == "second"
+    assert wa.units.ome_name("km") == wa.units.ome_name("Kilometres") == "kilometer"
     with pytest.raises(ValueError, match="unknown unit"):
         wa.units.ome_name("pixel")
     doc = wa.ome_multiscales(("z", "y", "x"), "pixel", [("s0", (1, 1, 1), (0.5,) * 3)])

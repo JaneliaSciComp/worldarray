@@ -149,7 +149,8 @@ vol.meta           # ArrayMeta in the store's own units
 vol.grid           # ArrayMeta in the requested units, every axis
 vol.shape, vol.dtype, vol.axes, vol.spatial, vol.level_name, vol.levels, vol.remote
                    # shape is the stored shape, or with a resample target the target voxels covering the data
-vol.source_voxel_size, vol.resampled   # the stored level's voxel size; whether reads resample to a target
+vol.source_voxel_size, vol.resampled   # the stored level's voxel size, also under resample and relabel; whether reads
+                                       #   resample to a target
 vol.list_chunks()  # the chunk indices that exist in storage, by listing keys (zarr v2/v3, N5, unsharded precomputed)
 vol.path           # what the caller passed (a group, say); vol.level_path is the array actually opened
 vol.voxel_size     # tuple[float] in `units`, spatial axes, the array's order (zyx for a volume)
@@ -212,7 +213,8 @@ window and a spatial box at once); anything with `.begin` and `.end`, or `.offse
 `shift`, `snap(voxel_size, translation, mode="grow" | "shrink" | "closest")` to a grid's
 voxel corners, `to_index` (the centre rule) and `Box.from_index`; `vol.box` is the array's
 own extent on the spatial axes, `[corner, corner + shape * voxel_size)`, what funlib calls
-the array's roi. So `vol.read(vol.box.intersect(roi).snap(vol.voxel_size, vol.translation))`
+the array's roi; with a resample target, the target voxels `shape` counts, so `read(vol.box)`
+returns `shape` and equals `Grid.from_meta(meta, voxel_size=t).box`. So `vol.read(vol.box.intersect(roi).snap(vol.voxel_size, vol.translation))`
 is the migration of a clipped, snapped Roi read, without funlib.
 
 There is no `offset` attribute anywhere in this API, because that word means the corner in
@@ -393,7 +395,7 @@ this document and that one differ, fix one of them.
 3. **Units are kept as stored and converted only on the axes a caller asks to convert**
    (`ArrayMeta.in_units(space=, time=)`, `in_nm()`, the `units` argument), through one table:
    for length, American and British spellings, `nm`, `um`, `µm` (U+00B5), `μm` (U+03BC),
-   `mm`, `cm`, `m`, `angstrom`/`Å`, `pm`; for time, `s`/`second`, `ms`, `us`/`µs`, `ns`,
+   `mm`, `cm`, `m`, `km`, `angstrom`/`Å`, `pm`; for time, `s`/`second`, `ms`, `us`/`µs`, `ns`,
    `minute`, `hour`, `day`. Any unit string on any axis is accepted and never rejected until
    a conversion is asked for (`"s"`, `"m"`, `"degrees_north"`, `""`). A spatial axis with no
    unit is taken as nanometres, with a **warning once per array** (every repo assumed this
@@ -549,8 +551,8 @@ this document and that one differ, fix one of them.
    reads that level voxel for voxel and reports `voxel_size` as the requested size with
    **voxel `i` staying voxel `i`**: every world quantity, the translation and the corner
    included, scales by the ratio of the sizes (cellmap-flow's rule, which chunkmirage's
-   server relies on), so a box of `m` requested voxels returns `m` stored voxels of the
-   level; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
+   server relies on), so a box of `m` requested voxels returns `m` stored voxels of the level,
+   and `source_voxel_size` still reports the level's own size; `"keep"` reads the chosen level at its own voxel size (a level pick, nothing
    more). `relabel` and `nearest` are different things and both exist: one is a grid
    policy, the other a resampling kernel. `level` also takes a position, `0` or `"first"`
    for the first listed level. The pyramid an array belongs to is found through

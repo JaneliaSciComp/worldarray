@@ -19,6 +19,7 @@ LENGTH_M = {
     "millimeter": 1e-3, "millimetre": 1e-3, "mm": 1e-3,
     "centimeter": 1e-2, "centimetre": 1e-2, "cm": 1e-2,
     "meter": 1.0, "metre": 1.0, "m": 1.0,
+    "kilometer": 1e3, "kilometre": 1e3, "km": 1e3,
 }  # fmt: skip
 TIME_S = {
     "nanosecond": 1e-9, "ns": 1e-9,
@@ -81,7 +82,7 @@ def factor(
 # entry through the table above, so "nanometre", "nm" and "Nanometers" agree.
 _SHORT = {
     "picometer": "pm", "angstrom": "Å", "nanometer": "nm", "micrometer": "µm",
-    "millimeter": "mm", "centimeter": "cm", "meter": "m",
+    "millimeter": "mm", "centimeter": "cm", "meter": "m", "kilometer": "km",
     "nanosecond": "ns", "microsecond": "µs", "millisecond": "ms", "second": "s",
     "minute": "min", "hour": "h", "day": "d",
 }  # fmt: skip
@@ -103,6 +104,7 @@ def abbreviation(unit: str) -> str:
 # The American spelling is OME's.
 _OME_NAMES = (
     "picometer", "angstrom", "nanometer", "micrometer", "millimeter", "centimeter", "meter",
+    "kilometer",
     "nanosecond", "microsecond", "millisecond", "second", "minute", "hour", "day",
 )  # fmt: skip
 _OME_BY_SIZE = {_lookup(name): name for name in _OME_NAMES}

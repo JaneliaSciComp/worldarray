@@ -550,6 +550,28 @@ def test_relabel_rescales_everything_by_the_ratio(tmp_path):
         and vol.translation == (20.0, 20.0, 20.0)
         and vol.corner == (16.0, 16.0, 16.0)
     )
+    assert vol.source_voxel_size == (4.0, 4.0, 4.0)  # what the level is (cellmap-flow's report)
+    resampled = wa.open(str(group / "s0"), voxel_size=(8, 8, 8), on_mismatch="resample")
+    assert resampled.source_voxel_size == (4.0, 4.0, 4.0)
+    assert resampled.voxel_size == (8.0, 8.0, 8.0)
+
+
+def test_a_resampled_box_is_the_target_voxels_shape_counts(tmp_path):
+    """cellmap-flow's 7 voxels of 8 nm read at 24 nm: 3 target voxels, box 0 to 72, not 56."""
+    group = tmp_path / "rs.zarr"
+    write_zarr2_group(group, ome_multiscales("zyx", [("s0", (8, 8, 8), (4, 4, 4))]))
+    write_zarr2(group / "s0", pattern((7, 7, 7)))
+    vol = wa.open(str(group / "s0"), voxel_size=(24, 24, 24), on_mismatch="resample")
+    assert vol.shape == (3, 3, 3) and vol.box == wa.Box((0.0,) * 3, (72.0,) * 3)
+    assert vol.read(vol.box).shape == vol.shape
+    g = wa.Grid.from_meta(wa.open(str(group / "s0")).grid, voxel_size=(24, 24, 24))
+    assert g.box == vol.box  # the planned grid and the opened array agree
+    # target corners at 4 + 24 k: the voxels from -20 cover the data from 0
+    anchored = wa.open(
+        str(group / "s0"), voxel_size=(24, 24, 24), on_mismatch="resample", anchor=(4, 4, 4)
+    )
+    assert anchored.shape == (4, 4, 4) and anchored.box == wa.Box((-20.0,) * 3, (76.0,) * 3)
+    assert anchored.read(anchored.box).shape == anchored.shape
 
 
 def test_post_transform_runs_after_resampling_and_before_padding(tmp_path):

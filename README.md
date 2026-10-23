@@ -106,9 +106,18 @@ s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # place
 ## The placement rule
 
 A translation is where the centre of voxel 0 is. Index `i` sits at
-`translation + i * voxel_size`; voxel `i` covers half a voxel either side. That is how
-OME-NGFF defines it and how Neuroglancer draws it. Dialects that store the corner are
-moved half a voxel on reading:
+`translation + i * voxel_size` and covers half a voxel either side, so the array's corner
+is `corner = translation - voxel_size / 2`. With 8 nm voxels and the corner at 0, the
+translation is 4: voxel 0 covers 0 to 8 nm around its centre at 4, voxel 1 covers 8 to
+16 nm around 12. That is how OME-NGFF defines it and how Neuroglancer draws it.
+
+The centre is the model because a voxel is a sample taken at a point. Everything that
+compares or resamples grids (picking a level, reading one volume onto another's grid,
+interpolating) works on those points, and the box a voxel covers follows from its point.
+The read rule follows too: a voxel is read iff its centre lies in the box, so boxes that
+adjoin never share a voxel or drop one.
+
+Dialects that store the corner are moved half a voxel on reading:
 
 | Stored | Means | Read as `translation` |
 |---|---|---|
