@@ -554,6 +554,12 @@ def test_relabel_rescales_everything_by_the_ratio(tmp_path):
     resampled = wa.open(str(group / "s0"), voxel_size=(8, 8, 8), on_mismatch="resample")
     assert resampled.source_voxel_size == (4.0, 4.0, 4.0)
     assert resampled.voxel_size == (8.0, 8.0, 8.0)
+    for v in (
+        vol,
+        resampled,
+    ):  # where the level is, beside what it is (cellmap-flow's stored_placement)
+        assert v.source_translation == (10.0, 10.0, 10.0)
+    assert wa.open(str(group / "s0"), units="micrometer").source_translation == (0.01, 0.01, 0.01)
 
 
 def test_a_resampled_box_is_the_target_voxels_shape_counts(tmp_path):

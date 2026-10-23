@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.0 (2026-10-22)
+
+cellmap-analyze's three asks, so it can call worldarray directly with no wrapper, and two
+of cellmap-flow's. No placement change and no unit table change.
+
+- `vol.read_onto(grid, begin=None, end=None, ...)` reads voxels `[begin, end)` of a
+  `Grid`'s spatial axes from the array, exactly that shape (Behaviour 20). It is the
+  `read` of the grid's index box at the grid's voxel size anchored at its corner, so at
+  the array's own voxel size nothing is resampled, whatever the sub-voxel offset, and
+  otherwise the array is resampled onto the grid. The grid's units are converted.
+- A pickled handle, and `reopen`, use the path resolved against the working directory at
+  open, so a worker that changes directory before unpickling opens the same store; it
+  used to raise `FileNotFoundError` for a relative path.
+- `write_index`, `write` and `write_chunk` take a scalar, which fills the box. It is
+  converted to the dtype only when its value survives (`0` into `uint8`; `300`, `-1`, `0.5`
+  and NaN raise), and the fill value over whole units leaves them absent.
+- `vol.source_translation`: the stored level's translation in `units`, beside
+  `source_voxel_size`, under resample and relabel too (cellmap-flow's `stored_placement`).
+- `create(exists="adopt")` also compares the keys of `attrs` with the existing array's
+  attributes and raises naming each that differs or is missing; keys not given are not
+  compared. An adopt given different `attrs` used to keep the old ones silently, as funlib's
+  `prepare_ds` kept an old offset (cellmap-flow's `_refuse_another_region`).
+
 ## 0.3.1 (2026-10-22)
 
 - `source_voxel_size` reports the stored level's voxel size under `on_mismatch="relabel"`,

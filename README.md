@@ -50,6 +50,7 @@ six = wa.open(path, voxel_size=(6, 6, 6), on_mismatch="resample")
 
 # one volume read onto another volume's grid, for masks, contact sites, statistics
 onto = raw.read(box, voxel_size=labels.voxel_size, anchor=labels.corner)
+onto = raw.read_onto(grid, begin, end)   # voxels [begin, end) of a Grid, exactly that shape
 
 # index space, native units: what an engine or a viewer wants
 vol = wa.open(path, units=None)
@@ -100,8 +101,8 @@ s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # place
 - **Plans outputs and blocks** (0.3): a store-less `Grid` with the same geometry as an
   array, so an output is planned, cut into blocks and only then created; `blocks` tiling an
   array or a box into write boxes with context-grown read boxes, in C order, as plain
-  picklable records a cluster job takes by id; the anisotropy-aware pyramid schedule.
-  Nothing is scheduled or run.
+  picklable records a cluster job takes by id; the anisotropy-aware pyramid schedule; every
+  input read onto that grid by its voxel indices (0.4). Nothing is scheduled or run.
 
 ## The placement rule
 
@@ -168,12 +169,12 @@ wa.units.abbreviation("nanometer") ; wa.store.join(path, "s0") ; wa.store.parent
 ```
 
 `WorldArray`: `ts`, `meta`, `grid`, `shape`, `dtype`, `axes`, `voxel_size`, `translation`,
-`corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `resampled`,
+`corner`, `box`, `levels`, `level_name`, `level_path`, `source_voxel_size`, `source_translation`, `resampled`,
 `writable`, `write_shape`;
 `read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, post_transform=, select=, strict=)`,
-`read_index(begin, end, padding=, mask=, select=, transform=)`, `index_box(box)`,
+`read_index(begin, end, padding=, mask=, select=, transform=)`, `read_onto(grid, begin=, end=, ...)`, `index_box(box)`,
 `chunks_covering(begin, end, write=)`, `list_chunks()`, `chunk_key(index)`, `parse_chunk_key(key)`,
-`write_index(begin, end, data, partial=)`, `write(box, data, partial=)`, `reopen(context=)`.
+`write_index(begin, end, data, partial=)` and `write(box, data, partial=)` (`data` an array or a scalar), `reopen(context=)`.
 
 A box is a `(begin, end)` pair of floats in your units, half-open per axis, over the
 spatial axes or every axis; any object with `.begin`/`.end` or `.offset`/`.shape` also
