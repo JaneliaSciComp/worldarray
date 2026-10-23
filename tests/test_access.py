@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import functools
 import gc
+import http.server
 import logging
 import os
 import socket
@@ -56,6 +58,21 @@ def test_other_errors_raise_at_once():
         store.with_access(specs, attempt)
 
 
+def _per_key(read_key):
+    """A ``store._read_keys`` stand-in built from a one-key fake."""
+
+    def read_keys(spec, keys):
+        out = {}
+        for key in keys:
+            try:
+                out[key] = read_key(spec, key)
+            except Exception as e:  # noqa: BLE001
+                out[key] = e
+        return out
+
+    return read_keys
+
+
 def test_a_refused_probe_key_counts_as_missing_when_another_key_was_read(monkeypatch):
     present = {"zarr.json": b'{"node_type": "array"}'}
 
@@ -66,7 +83,7 @@ def test_a_refused_probe_key_counts_as_missing_when_another_key_was_read(monkeyp
             return present[key]
         raise RuntimeError("PERMISSION_DENIED: listing is off, so a missing key is a 403")
 
-    monkeypatch.setattr(store, "_read_key", fake_read_key)
+    monkeypatch.setattr(store, "_read_keys", _per_key(fake_read_key))
     loc = store.Location("s3://bucket/vol.zarr/s0")
     found = loc.read_many(store.PROBE_KEYS)
     assert found["zarr.json"] == present["zarr.json"]
@@ -79,7 +96,7 @@ def test_all_probe_keys_refused_falls_back(monkeypatch):
             raise RuntimeError("PERMISSION_DENIED")
         return b"{}" if key == ".zarray" else None
 
-    monkeypatch.setattr(store, "_read_key", fake_read_key)
+    monkeypatch.setattr(store, "_read_keys", _per_key(fake_read_key))
     found = store.Location("s3://bucket/vol.zarr/s0").read_many(store.PROBE_KEYS)
     assert found[".zarray"] == b"{}" and found["zarr.json"] is None
 
@@ -358,3 +375,27 @@ def test_a_server_that_never_answers_times_out_the_open(silent_server):
         with pytest.raises(TimeoutError, match="127.0.0.1.*2 attempts"):
             open_it(f"{silent_server}/vol.zarr/s0")
         assert time.monotonic() - start < 10
+
+
+def test_an_http_open_probes_its_keys_at_once(tmp_path):
+    """Five probe keys, one round trip: each answer here takes 0.3 s."""
+    write_zarr2(tmp_path / "vol.zarr" / "s0", pattern((4, 4, 4)))
+
+    class Slow(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            time.sleep(0.3)
+            super().do_GET()
+
+        def log_message(self, *args):
+            pass
+
+    handler = functools.partial(Slow, directory=str(tmp_path))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        start = time.monotonic()
+        node = wa.detect(f"http://127.0.0.1:{server.server_address[1]}/vol.zarr/s0")
+        assert node.format == "zarr2" and node.kind == "array"
+        assert time.monotonic() - start < 1.0  # in turn: 1.5 s
+    finally:
+        server.shutdown()

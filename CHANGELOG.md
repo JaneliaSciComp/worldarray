@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 (unreleased)
+
+Faster opens over http. No placement change, no unit table change, no API change.
+
+- The documents a call needs from one directory are read at once instead of in turn. An
+  http open of a zarr v2 level made its eight requests one after another (five probe keys,
+  the level's `.zattrs`, the parent's `zarr.json` and `.zattrs`); now they go in three
+  rounds. At 10 ms an answer, `wa.open` took 98 ms and takes 52 (cellmap-flow's
+  measurement). A server that never answers still costs one key's attempts, not five.
+
 ## 0.7.0 (2026-10-23)
 
 Opens time out. No placement change and no unit table change.
