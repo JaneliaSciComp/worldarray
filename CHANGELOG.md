@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+Two bugs that hung or crashed cellmap-analyze 0.6 on /nrs (salamander's and c-elegans'
+runs, 2026-10-22), and tensorstore's threads sized to the job. No placement change and no
+unit table change.
+
+- A read whose first attempt timed out raised `IndexError` instead of retrying: the
+  warning took the first line of the error's message, and tensorstore's `TimeoutError()`
+  has none. The warning now names the error's type when the message is empty, and the
+  error after the last attempt names the operation, the path and the attempts.
+- Every wait on a data read, a data write or a store open nudges its context's thread
+  pools after each second the operation is still pending: one no-op task on the decoding
+  pool and one on the file I/O pool (an in-memory copy and a local read of a missing key;
+  no store is touched). tensorstore up to at least 0.1.85 can strand a queued task: a pool
+  worker idle for 20 ms exits as the task arrives, and the task never runs (fixed upstream
+  in google/tensorstore ed51718085, in no release yet). With `data_copy` and `file_io`
+  capped at 1, as cellmap-analyze's workers were, dozens of workers per run waited forever
+  in `write_index` with no tensorstore thread alive, and reads timed out into the
+  `IndexError` above. One more task on the same pool wakes it, which salamander's and
+  c-elegans' sessions proved on live stuck workers, so a stranded operation now finishes
+  within about a second at any concurrency, a limit of 1 included. Spec open question 14
+  says when this goes.
+- `write_index`, `write` and `write_chunk` are timed out and retried as reads are
+  (Behaviour 6), by a new `retries=` argument or the handle's `retries`. A write used to
+  wait on its future with no timeout at all.
+- Without `context`, the shared context's decoding and file I/O pools are limited to the
+  new `wa.thread_budget()`: `OMP_NUM_THREADS` when set (dask sets 1 in each worker), else
+  `LSB_DJOB_NUMPROC` (an LSF job's slots), else the CPUs the process may run on.
+  tensorstore alone sizes both to every CPU on the node, whatever `bsub -n` asked for, so
+  a dask worker's tensorstore now takes the same one thread as its numpy. Writes stay 2 to
+  8 times faster than cellmap-analyze's zarr-python writer on NFS, at one scale, measured
+  on 128^3 uint64 label chunks.
+
 ## 0.4.0 (2026-10-22)
 
 cellmap-analyze's three asks, so it can call worldarray directly with no wrapper, and two

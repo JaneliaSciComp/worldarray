@@ -86,9 +86,11 @@ s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # place
   `transform` applied before padding (or `post_transform` after resampling), and resampling by nearest neighbour or linear
   interpolation anchored where you say. Adjoining block reads agree with one read across
   both.
-- **Behaves on a cluster**: one shared tensorstore context per process or a capped one per
-  worker, retries with backoff and size-aware timeouts on transient store errors, and a
-  cancelled future on timeout.
+- **Behaves on a cluster**: one shared tensorstore context per process, its threads sized
+  from `OMP_NUM_THREADS` or the LSF job's slots instead of the node's cores, or a capped one
+  per worker; reads and writes retried with backoff and size-aware timeouts on transient
+  store errors, a cancelled future on timeout, and a waiting operation's thread pools nudged
+  every second, so a stuck operation recovers or fails loudly instead of hanging the job.
 - **Carries the geometry**: `Box` with `intersect`, `union`, `contains`, `grow`, `shift`,
   `snap` to a grid, and the voxel indices a world box selects.
 - **Writes placed arrays** (0.2): the OME-NGFF 0.4 or 0.5 document from voxel size, centre
@@ -147,6 +149,7 @@ wa.metadata(path, level=None, units=None, open=True) -> ArrayMeta   # open=False
 wa.detect(path, missing_ok=False) -> Node      # format, array or group, raw attrs
 wa.open_tensorstore(path, level=None, context=None)
 wa.shared_context(cache_bytes=0) ; wa.capped_context(cache_bytes=0, concurrency=1, network=True) ; wa.Retry(...)
+wa.thread_budget()                              # the shared context's thread limit: OMP_NUM_THREADS, LSB_DJOB_NUMPROC or CPUs
 wa.list_chunk_keys(path, separator=".")        # chunk indices from keys alone, no metadata needed
 wa.Box ; wa.units.TABLE
 
@@ -174,7 +177,8 @@ wa.units.abbreviation("nanometer") ; wa.store.join(path, "s0") ; wa.store.parent
 `read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, post_transform=, select=, strict=)`,
 `read_index(begin, end, padding=, mask=, select=, transform=)`, `read_onto(grid, begin=, end=, ...)`, `index_box(box)`,
 `chunks_covering(begin, end, write=)`, `list_chunks()`, `chunk_key(index)`, `parse_chunk_key(key)`,
-`write_index(begin, end, data, partial=)` and `write(box, data, partial=)` (`data` an array or a scalar), `reopen(context=)`.
+`write_index(begin, end, data, partial=, retries=)` and `write(box, data, partial=, retries=)` (`data` an array or a
+scalar), `reopen(context=)`.
 
 A box is a `(begin, end)` pair of floats in your units, half-open per axis, over the
 spatial axes or every axis; any object with `.begin`/`.end` or `.offset`/`.shape` also

@@ -230,7 +230,8 @@ in integer Rois builds them from `corner`, `voxel_size` and `shape` in its own s
 where it also chooses the integer scale factor that makes the corner whole.
 
 `shared_context(cache_bytes)` is one `tensorstore.Context` per budget for the process, so
-the levels of a pyramid and repeat opens share one cache pool; the default budget is 0.
+the levels of a pyramid and repeat opens share one cache pool; the default budget is 0. Its
+decoding and file I/O pools are sized by `thread_budget()` (0.5, Behaviour 7).
 `capped_context` is mesh-n-bone's worker-process context (every tensorstore concurrency
 resource limited, cache off); it returns a **new** context per call, as those workers
 inline the spec into every open today, and `capped_context_spec` exports the dict for
@@ -351,6 +352,18 @@ vol.write_index(begin, end, 0) ; vol.write(box, 0) ; vol.write_chunk(index, 0)
                           # a scalar fills the box, converted to the dtype only when its value survives (Behaviour 13)
 vol.source_translation    # the stored level's translation in `units`, beside source_voxel_size, under resample and relabel
 wa.create(..., attrs={...}, exists="adopt")   # an adopt also compares the keys of `attrs` (Behaviour 11)
+```
+
+### 0.5: writes that cannot hang
+
+```python
+vol.write_index(begin, end, data, partial=False, retries=None)
+vol.write(box, data, partial=False, retries=None) ; vol.write_chunk(index, data, retries=None)
+                          # timed out and retried as reads are: `retries`, else the handle's (Behaviour 6)
+wa.thread_budget() -> int # threads for tensorstore's decoding and file I/O in this process: OMP_NUM_THREADS, else
+                          #   LSB_DJOB_NUMPROC, else the CPUs it may run on (Behaviour 7)
+                          # every wait on a data read, write or open kicks its context's pools after each second
+                          #   it is still pending (Behaviour 6)
 ```
 
 ## 3. Conventions
@@ -620,25 +633,53 @@ this document and that one differ, fix one of them.
    `on_mismatch="relabel"` and picks `method` with its own `is_label_dtype` rule;
    cellmap-analyze passes `method` from its `interpolation_order`.
 
-6. **Retries** apply to data reads only, with mesh-n-bone's formula, which its tests
-   already pin: attempt `k` (from 1) waits `timeout * k` seconds on `.result()`, where
+6. **Retries** apply to data reads and data writes, with mesh-n-bone's formula, which its
+   tests already pin: attempt `k` (from 1) waits `timeout * k` seconds on `.result()`, where
    `timeout` is the given value or, when `None`, `clamp(MiB / 16, 5, 120)` for a remote
    store (`gs://`, `s3://`, `http(s)://`) and `clamp(MiB / 256, 5, 30)` for a local one
    (`file`, `memory`), `MiB` being the size of the in-bounds part of the read after
-   clipping; between attempts the sleep is `base_delay * 1.3 ** (k - 1)` plus `U(0, 1)`
+   clipping, or of the box written; between attempts the sleep is `base_delay * 1.3 ** (k - 1)` plus `U(0, 1)`
    seconds; at most `max_attempts` (default 10). Retried: `TimeoutError`, and a tensorstore
    error whose message starts with `UNAVAILABLE`, `DEADLINE_EXCEEDED` or
    `RESOURCE_EXHAUSTED` or carries an HTTP 5xx or 429. Any other error is raised at once. A
-   timed-out tensorstore future is cancelled before the next attempt starts. The policy is a
-   per-handle attribute and a per-read argument, never only constructor state.
+   timed-out tensorstore future is cancelled before the next attempt starts; a write may
+   still land after its cancel, with the same bytes the next attempt writes. Each retry is
+   logged as a warning naming the error's first line, or its type when the message is
+   empty (tensorstore's timeout is `TimeoutError()`); when every attempt times out the
+   `TimeoutError` names the operation, the path and the attempts. Metadata documents are not
+   retried this way (Convention 5). The policy is a per-handle attribute and a per-read and
+   per-write argument, never only constructor state.
+
+   The kick (0.5): tensorstore up to at least 0.1.85 can strand a queued task. A pool
+   worker idle for 20 ms exits, and a task queued as it exits gets no thread while the pool
+   counts itself full (fixed upstream in google/tensorstore ed51718085, in no release yet).
+   The future then waits forever with no tensorstore thread alive, on a read, a write or an
+   open. A pool limited to one thread meets it most; cellmap-analyze 0.6 hung on /nrs with
+   `data_copy` and `file_io` at 1, and one more task on the same context woke the pool
+   within seconds (salamander's and c-elegans' live tests, 2026-10-22, with un-kicked
+   workers staying stuck). So every wait on a data read, a data write or a store open
+   gives the context's decoding and file I/O pools one no-op task each (an in-memory array
+   copy and a local read of a key that does not exist; no store is touched) after every
+   second the future is still pending. A stranded operation finishes within about a
+   second, at any concurrency, and the retry stays the outer net. Open question 14 says
+   when the kick goes.
 
 7. **Contexts.** Without `context`, every open in the process shares `shared_context(0)`:
-   tensorstore's cache is off and the levels of one pyramid share one context.
+   tensorstore's cache is off and the levels of one pyramid share one context. Its
+   `data_copy_concurrency` and `file_io_concurrency` limits are `thread_budget()`: the
+   first of `OMP_NUM_THREADS` (dask sets 1 in every worker it spawns; a cluster job script
+   sets its slots) and `LSB_DJOB_NUMPROC` (an LSF job's slots) that holds a positive
+   integer, else the CPUs `sched_getaffinity` allows: the cap every other threaded library
+   in the job already takes, as Janelia's cluster guidance asks. tensorstore alone sizes
+   both pools to every CPU of the node, whatever the job's slots, so each of twelve dask
+   workers in a twelve-slot job on a 96-core node could start 96 threads (0.5). A dask
+   worker therefore runs tensorstore on one thread of each pool, which Behaviour 6's kick
+   makes safe.
    `capped_context` sets `data_copy_concurrency`, `file_io_concurrency`,
    `gcs_request_concurrency`, `s3_request_concurrency` and `http_request_concurrency` to
    `concurrency` and the cache to `cache_bytes`, and returns a new context each call, so two
-   handles never share one capped pool unless the caller passes the same object twice. Both
-   are plain tensorstore contexts; a caller may pass its own, at construction or through
+   handles never share one capped pool unless the caller passes the same object twice; a
+   `concurrency` of 1 is safe under Behaviour 6's kick. Both are plain tensorstore contexts; a caller may pass its own, at construction or through
    `reopen(context=)` when a long-lived worker changes its concurrency (cellmap-analyze
    reopens tensorstore on every read today for that reason).
 
@@ -755,7 +796,8 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     construction. `partial=True` lifts the check and does tensorstore's read-modify-write
     of the touched units, documented as unsafe while anything else writes the same unit
     (cellmap-flow's paint slabs, which it serialises itself). A write commits before the
-    call returns and is not retried by the package; `retries` applies to reads. `write(box,
+    call returns, timed out and retried by Behaviour 6 (0.5; before, it was not, and a
+    stranded write waited forever). `write(box,
     data)` maps a world box by Behaviour 2 and then calls `write_index`; a box reaching
     outside the array raises (nothing is padded on write) and `voxel_size` is not an
     argument (nothing is resampled on write).
@@ -942,7 +984,11 @@ and the error after the attempts; `ensure_group_entry` on a foreign array, idemp
 pickled handle keeping a capped context's spec and sharing the shared one, and a relative
 path reopening after a `chdir`; `codecs_of` by path; an all-fill write removing its own key;
 a scalar filling a box through `write_index`, `write` and `write_chunk`, refused when it
-does not fit the dtype.
+does not fit the dtype. 0.5: a read and a write whose first attempts never finish (a future
+nothing resolves) cancelled and retried, the warning naming `TimeoutError`, and the error
+after the last attempt; a pending future kicked until it resolves, a wait's timeout, and a
+kick landing on a capped context's own pools; `thread_budget` from each variable, a bad
+value skipped, and the shared context's limits.
 
 Grids (0.3): `blocks` partitioning with and without a box, `context` as an int, per axis
 and as before/after pairs, clipping on and off, `len`, `blocks[id]` and `index_of`;
@@ -1126,6 +1172,14 @@ over funlib geometry, by this spec's own assignment.
    boxes on one grid. `Grid.blocks` could carry world boxes too (`b.box`, `b.read_box` as
    `Box`, a context in world units). Two lines on cellmap-flow's side today. Not planned
    (2026-10-22): daisy does cellmap-flow's tiling and stays; reopen if cellmap-flow drops it.
+14. **When the kick goes.** Behaviour 6's kick works around tensorstore's lost wakeup,
+   fixed upstream in google/tensorstore ed51718085 (2026-09-30, "Fix lost wakeups in
+   TaskGroup when workers block or exit") and in no release up to 0.1.85. When a release
+   contains it (`gh api repos/google/tensorstore/compare/ed51718085...vX.Y.Z` reports
+   "ahead" or "identical"), require that release, remove `context.kick` and `KICK_AFTER`
+   (waits go back to `future.result(timeout)`), and keep the write retries. That release
+   needs Python 3.11 or later, as tensorstore has since 0.1.81, so it also ends support for
+   3.10.
 
 ## 8. Constraints for whoever builds on this
 

@@ -35,7 +35,7 @@ from .placement import (
     read_meta,
     read_meta_light,
 )
-from .retry import Retry, read_with_retries
+from .retry import Retry, read_with_retries, write_with_retries
 from .store import (
     Node,
     detect,
@@ -533,7 +533,12 @@ class WorldArray:
     # --- writing (Behaviour 13) ----------------------------------------------------
 
     def write_index(
-        self, begin: Sequence[int], end: Sequence[int], data: np.ndarray, partial: bool = False
+        self,
+        begin: Sequence[int],
+        end: Sequence[int],
+        data: np.ndarray,
+        partial: bool = False,
+        retries: Retry | None = None,
     ) -> None:
         """Write ``data`` over the voxel box ``[begin, end)`` of the stored grid. The box must
         be a union of whole write units (every bound a multiple of ``write_shape`` on its axis,
@@ -542,7 +547,8 @@ class WorldArray:
         read-modify-write of the touched units, unsafe while anything else writes the same
         unit. ``data`` may be a scalar, which fills the box: it is converted to the array's
         dtype only when the value survives (``0`` into ``uint8``, not ``300`` or ``0.5``).
-        No other cast, no padding, no resampling; the write commits before returning."""
+        No other cast, no padding, no resampling; the write commits before returning, timed
+        out and retried as reads are (``retries``, else the handle's)."""
         if not self.writable:
             raise ValueError(
                 f"{self.path} was opened read-only; open it with mode='r+' or create it"
@@ -577,7 +583,14 @@ class WorldArray:
                         f"{self.path}: write [{b}, {e}) on axis {axis} ({self.axes[axis]}) is not whole write "
                         f"units of {u}; align the box to write_shape {self.write_shape} or pass partial=True"
                     )
-        self._store[tuple(slice(b, e) for b, e in zip(begin, end))].write(data).result()
+        write_with_retries(
+            self._store[tuple(slice(b, e) for b, e in zip(begin, end))],
+            data,
+            retries or self.retries,
+            remote=self.remote,
+            what=self.path,
+            context=self.context,
+        )
 
     def _scalar(self, value: np.ndarray) -> np.ndarray:
         """A 0-d ``value`` in the array's dtype, or ``ValueError`` when converting changes it:
@@ -595,7 +608,9 @@ class WorldArray:
             raise ValueError(f"{self.path}: {value.item()!r} does not fit {dtype}")
         return out
 
-    def write(self, box, data: np.ndarray, partial: bool = False) -> None:
+    def write(
+        self, box, data: np.ndarray, partial: bool = False, retries: Retry | None = None
+    ) -> None:
         """Write ``data`` over a world box: the voxels Behaviour 2's centre rule selects, then
         ``write_index``. A box reaching outside the array raises; nothing is padded or
         resampled on write."""
@@ -606,7 +621,7 @@ class WorldArray:
                     f"{self.path}: the box reaches outside the array on axis {axis} ({self.axes[axis]}): "
                     f"voxels [{b}, {e}) of {n}; nothing is padded on write"
                 )
-        self.write_index(begin, end, data, partial=partial)
+        self.write_index(begin, end, data, partial=partial, retries=retries)
 
     def blocks(self, block_shape=None, context=0, box=None, clip: bool = True):
         """The array cut into blocks (Behaviour 17): write boxes tiling the stored grid (or a
@@ -623,7 +638,9 @@ class WorldArray:
             clip=clip,
         )
 
-    def write_chunk(self, index: Sequence[int], data: np.ndarray) -> None:
+    def write_chunk(
+        self, index: Sequence[int], data: np.ndarray, retries: Retry | None = None
+    ) -> None:
         """Write the whole write unit at ``index`` on the storage grid (the shard of a sharded
         array); ``data`` has that unit's shape, clipped at the array's end."""
         unit, shape = self.write_shape, self._grid.shape
@@ -634,7 +651,7 @@ class WorldArray:
         if any(i < 0 or b >= n for i, b, n in zip(index, begin, shape)):
             raise ValueError(f"{self.path}: no write unit at {index}")
         end = tuple(min(b + u, n) for b, u, n in zip(begin, unit, shape))
-        self.write_index(begin, end, data)
+        self.write_index(begin, end, data, retries=retries)
 
     def read_index(
         self,
@@ -719,7 +736,9 @@ class WorldArray:
         transform: Transform | None = None,
     ) -> np.ndarray:
         view = self._store[tuple(slice(int(a), int(c)) for a, c in zip(lo, hi))]
-        data = read_with_retries(view, retries or self.retries, remote=self.remote, what=self.path)
+        data = read_with_retries(
+            view, retries or self.retries, remote=self.remote, what=self.path, context=self.context
+        )
         data = np.asarray(data)
         if not data.dtype.isnative:
             data = data.astype(data.dtype.newbyteorder("="))

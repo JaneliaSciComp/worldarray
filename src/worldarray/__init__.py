@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from . import grid, store, units, write
 from .array import Pyramid, WorldArray, create, metadata, open, open_pyramid, open_tensorstore
-from .context import capped_context, capped_context_spec, shared_context
+from .context import capped_context, capped_context_spec, shared_context, thread_budget
 from .geometry import Box, index_range
 from .grid import Block, Grid, blocks, level_factors
 from .levels import select_level
@@ -28,7 +28,7 @@ from .write import (
     parse_chunk_key,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "ArrayMeta",
@@ -62,6 +62,7 @@ __all__ = [
     "open_tensorstore",
     "select_level",
     "shared_context",
+    "thread_budget",
     "store",
     "units",
     "write",
