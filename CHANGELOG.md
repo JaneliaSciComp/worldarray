@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 (unreleased)
+## 0.6.0 (2026-10-23)
 
 One new argument, at chunkmirage's request. No placement change and no unit table change;
 nothing changes for a caller that does not pass it.
@@ -12,6 +12,10 @@ nothing changes for a caller that does not pass it.
   one cache pool across every store it opens at the thread count it chose, without building
   and watching its own context. A pickled handle on such a context comes back on the same
   one; `threads=None` still lets the other process size by its own job.
+- Documented what a pool of one thread costs (spec Behaviour 7, `capped_context_spec`):
+  nothing on one-chunk blocks; on 8-chunk blocks, half the speed of 4 in a two-slot job
+  but only 7 to 19% slower in a one-slot one (c-elegans on /nrs), so a worker per slot
+  loses little at the default.
 
 ## 0.5.0 (2026-10-23)
 
