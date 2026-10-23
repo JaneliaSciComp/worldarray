@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 (unreleased)
+## 0.7.0 (2026-10-23)
 
 Opens time out. No placement change and no unit table change.
 
