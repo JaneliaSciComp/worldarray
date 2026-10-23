@@ -20,7 +20,10 @@ unit table change.
   alive, and reads timed out into the `IndexError` above. One more task on the same pool
   wakes it, which salamander's and c-elegans' sessions proved on live stuck workers, so a
   stranded task now runs within about a second, at any concurrency, whoever waits on it:
-  worldarray, `vol.ts` directly or `await`. Spec open question 14 says when this goes.
+  worldarray, `vol.ts` directly or `await`. Reproduced on purpose on tensorstore 0.1.75,
+  0.1.78 and 0.1.85 (opt-in `tests/test_lost_wakeup.py`): cellmap-analyze's block loop
+  gave 29 `IndexError`s and 55 writes stuck past 20 s on 0.4.0, none on 0.5.0, slowest
+  0.98 s. Spec open question 14 says when this goes.
 - `write_index`, `write` and `write_chunk` are timed out and retried as reads are
   (Behaviour 6), by a new `retries=` argument or the handle's `retries`. A write used to
   wait on its future with no timeout at all.

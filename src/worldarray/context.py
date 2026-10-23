@@ -43,7 +43,8 @@ _lock = threading.Lock()
 # "Fix lost wakeups in TaskGroup when workers block or exit"). Once a release contains it,
 # require that release and remove the watchdog (spec, open question 14):
 # `gh api repos/google/tensorstore/compare/ed51718085...vX.Y.Z` says "ahead" or "identical"
-# for a release that has it.
+# for a release that has it, and `WORLDARRAY_STRESS=1 pytest tests/test_lost_wakeup.py -s`
+# then strands nothing on a plain context.
 KICK_EVERY = 1.0
 _KICK_DIR = tempfile.gettempdir()
 _KICK_KEY = "worldarray-kick-no-such-key"

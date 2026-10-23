@@ -1000,7 +1000,13 @@ nothing resolves) cancelled and retried, the warning naming `TimeoutError`, and 
 after the last attempt; a capped context and a caller's context passed to an open both
 kicked by the watchdog, a dead context no longer watched, and a kick landing on a capped
 context's own pools; `thread_budget` from each variable, a bad value skipped, and the
-shared context's limits.
+shared context's limits. Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
+`tests/test_lost_wakeup.py`): worker processes aim tasks at the moment a one-thread pool's
+worker exits idle, so a plain context strands some for good (13 of about 7,000 on
+tensorstore 0.1.78; 40 to 44 of 12,000 to 15,000 with 16 workers on 0.1.75 and 0.1.85)
+and a watched one strands none, its slowest task under a second. Run against cellmap-analyze's
+block loop (a chunk read, then a whole-chunk `write_index`, on its 0.6.1 context), 0.4.0
+gave 29 `IndexError`s and 55 writes stuck past 20 s, and 0.5.0 none, slowest 0.98 s.
 
 Grids (0.3): `blocks` partitioning with and without a box, `context` as an int, per axis
 and as before/after pairs, clipping on and off, `len`, `blocks[id]` and `index_of`;
@@ -1188,8 +1194,10 @@ over funlib geometry, by this spec's own assignment.
    wakeup, fixed upstream in google/tensorstore ed51718085 (2026-09-30, "Fix lost wakeups
    in TaskGroup when workers block or exit") and in no release up to 0.1.85. When a release
    contains it (`gh api repos/google/tensorstore/compare/ed51718085...vX.Y.Z` reports
-   "ahead" or "identical"), require that release, remove `watch`, `kick` and the watchdog
-   thread from `context.py`, and keep the write retries. That release
+   "ahead" or "identical"), confirm it with `WORLDARRAY_STRESS=1 pytest
+   tests/test_lost_wakeup.py -s` (a plain context should strand nothing), require that
+   release, remove `watch`, `kick` and the watchdog thread from `context.py`, and keep the
+   write retries. That release
    needs Python 3.11 or later, as tensorstore has since 0.1.81, so it also ends support for
    3.10.
 
