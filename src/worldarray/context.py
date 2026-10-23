@@ -162,7 +162,9 @@ def capped_context_spec(cache_bytes: int = 0, concurrency: int = 1, network: boo
     """The spec dict behind ``capped_context``, for callers building their own opens.
     ``network=False`` caps only decoding and local file I/O, leaving tensorstore's request
     pools alone (cellmap-analyze's choice for remote reads). A ``concurrency`` of 1 is safe:
-    the context is watched (see ``KICK_EVERY``)."""
+    the context is watched (see ``KICK_EVERY``). It is not free: a read or write spanning
+    several chunks then decodes and stores them one at a time, about half the speed of 4
+    on 8-chunk blocks (spec, Behaviour 7)."""
     limit = {"limit": int(concurrency)}
     spec = {
         "data_copy_concurrency": limit,
