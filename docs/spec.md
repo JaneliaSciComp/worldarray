@@ -678,7 +678,14 @@ this document and that one differ, fix one of them.
    workers in a twelve-slot job on a 96-core node could start 96 threads (0.5). A dask
    worker therefore runs tensorstore on one thread of each pool, which Behaviour 6's
    watchdog makes safe. SLURM's `SLURM_CPUS_PER_TASK` and SGE's `NSLOTS` stand in for
-   `LSB_DJOB_NUMPROC` elsewhere.
+   `LSB_DJOB_NUMPROC` elsewhere. The cap is the default because the process that passes
+   no context is the one nobody tuned: a quick dask script over `wa.open(path)` is how a
+   job came to start a thousand threads on twelve slots. One thread per pool slows one
+   task (a 256^3 block write took 2.1 s against 1.3 s uncapped) but not a job of many
+   workers, whose throughput its cores bound either way (four writers: 1.8 s against
+   1.9 s). A process that wants more threads than its job has slots, a server under
+   `bsub -n 1` say, asks for more slots or passes its own context (decided 2026-10-23,
+   over chunkmirage's objection, once the watchdog had removed the hang risk).
    `capped_context` sets `data_copy_concurrency`, `file_io_concurrency`,
    `gcs_request_concurrency`, `s3_request_concurrency` and `http_request_concurrency` to
    `concurrency` and the cache to `cache_bytes`, and returns a new context each call, so two

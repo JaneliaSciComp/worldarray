@@ -27,7 +27,8 @@ unit table change.
 - Without `context`, the shared context's decoding and file I/O pools are limited to the
   new `wa.thread_budget()`: `OMP_NUM_THREADS` when set (dask sets 1 in each worker), else
   the job's slots (`LSB_DJOB_NUMPROC`, `SLURM_CPUS_PER_TASK`, `NSLOTS`), else the CPUs the
-  process may run on.
+  process may run on. A server that wants more threads than its job's slots asks for more
+  slots or passes its own context.
   tensorstore alone sizes both to every CPU on the node, whatever `bsub -n` asked for, so
   a dask worker's tensorstore now takes the same one thread as its numpy. Writes stay faster
   than cellmap-analyze's zarr-python writer on NFS, at one scale on 128^3 uint64 label
