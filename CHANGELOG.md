@@ -10,6 +10,10 @@
   `Grid.from_meta(meta, voxel_size=t).box` already was; it was the stored data's extent, so
   `read(box)` could return fewer voxels than `shape` (cellmap-flow's 7 voxels of 8 nm at
   24 nm: box ended at 56 nm, now 72). No voxel moves.
+- The unit table knows kilometres (`kilometer`, `kilometre`, `km`, 1e3 m), so they
+  convert, abbreviate to `km` and are written as OME's `kilometer` (chunkmirage's ask).
+- README: the placement rule gains the corner formula, a worked example, why the centre
+  is the model, and how the read rule follows from it.
 
 ## 0.3.0 (2026-10-22)
 

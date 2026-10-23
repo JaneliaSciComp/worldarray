@@ -395,7 +395,7 @@ this document and that one differ, fix one of them.
 3. **Units are kept as stored and converted only on the axes a caller asks to convert**
    (`ArrayMeta.in_units(space=, time=)`, `in_nm()`, the `units` argument), through one table:
    for length, American and British spellings, `nm`, `um`, `µm` (U+00B5), `μm` (U+03BC),
-   `mm`, `cm`, `m`, `angstrom`/`Å`, `pm`; for time, `s`/`second`, `ms`, `us`/`µs`, `ns`,
+   `mm`, `cm`, `m`, `km`, `angstrom`/`Å`, `pm`; for time, `s`/`second`, `ms`, `us`/`µs`, `ns`,
    `minute`, `hour`, `day`. Any unit string on any axis is accepted and never rejected until
    a conversion is asked for (`"s"`, `"m"`, `"degrees_north"`, `""`). A spatial axis with no
    unit is taken as nanometres, with a **warning once per array** (every repo assumed this

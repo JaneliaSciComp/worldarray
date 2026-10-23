@@ -299,6 +299,7 @@ SHORT_FORMS = {
     "mm": ("millimeter", "millimetre", "mm"),
     "cm": ("centimeter", "centimetre", "cm"),
     "m": ("meter", "metre", "m"),
+    "km": ("kilometer", "kilometre", "km"),
     "ns": ("nanosecond", "ns"),
     "µs": ("microsecond", "us", "µs", "μs"),
     "ms": ("millisecond", "ms"),
