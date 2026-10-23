@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-10-23)
 
 Two bugs that hung or crashed cellmap-analyze 0.6 on /nrs (salamander's and c-elegans'
 runs, 2026-10-22), and tensorstore's threads sized to the job. No placement change and no
@@ -33,10 +33,12 @@ unit table change.
   process may run on. A server that wants more threads than its job's slots asks for more
   slots or passes its own context.
   tensorstore alone sizes both to every CPU on the node, whatever `bsub -n` asked for, so
-  a dask worker's tensorstore now takes the same one thread as its numpy. Writes stay faster
-  than cellmap-analyze's zarr-python writer on NFS, at one scale on 128^3 uint64 label
-  chunks: 2.3 to 5 times at one thread per pool (7 threads per process against
-  zarr-python's 24 to 31), 2 to 7 times with the pools at the machine's CPUs.
+  a dask worker's tensorstore now takes the same one thread as its numpy (pinned to one
+  CPU, tensorstore's default context started 43 to 45 pool threads, the capped one 4 to 5).
+  Against cellmap-analyze 0.5.0's own block I/O on NFS (128^3 uint64 label blocks, each
+  one chunk), its 0.6.1 on this release reads a block in 26 ms instead of 40 and writes it
+  in 45 ms instead of 62 from one process at one thread per pool, and about 1.15 times
+  faster from 8. Speed gains grow with blocks of several chunks and more threads.
 
 ## 0.4.0 (2026-10-22)
 
