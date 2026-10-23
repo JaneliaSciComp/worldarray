@@ -254,18 +254,48 @@ def _metadata_kvstore(spec_json: str, gcs_url: str | None) -> ts.KvStore:
     return _wait(lambda: ts.KvStore.open(metadata_spec(spec)), spec, _where(spec), "open")
 
 
-def _read_key(spec: dict, key: str) -> bytes | None:
-    kv = _metadata_kvstore(
+def _metadata_kv(spec: dict) -> ts.KvStore:
+    return _metadata_kvstore(
         json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL")
     )
-    result = _wait(lambda: kv.read(key), spec, _where(spec, key), "read")
-    return None if result.state == "missing" else bytes(result.value)
+
+
+def _read_keys(spec: dict, keys: Sequence[str]) -> dict[str, bytes | None | BaseException]:
+    """``keys`` under one way in, their reads begun at once: one round trip, not one per key
+    (an http open probes five). Each value is the document, None when it is missing, or the
+    error its read raised; after an error other than a refusal the rest are cancelled and
+    left out, so a server that never answers costs one key's attempts, not five."""
+    kv = _metadata_kv(spec)
+    started = {key: kv.read(key) for key in keys}
+    out: dict[str, bytes | None | BaseException] = {}
+    for key in keys:
+        first = [started[key]]
+
+        def start(key=key, first=first):
+            return first.pop() if first else kv.read(key)
+
+        try:
+            result = _wait(start, spec, _where(spec, key), "read")
+        except Exception as e:  # noqa: BLE001  the caller decides what a failed key means
+            out[key] = e
+            if not is_refused(e):
+                for future in started.values():
+                    future.cancel()
+                return out
+            continue
+        out[key] = None if result.state == "missing" else bytes(result.value)
+    return out
+
+
+def _read_key(spec: dict, key: str) -> bytes | None:
+    value = _read_keys(spec, [key])[key]
+    if isinstance(value, BaseException):
+        raise value
+    return value
 
 
 def _write_key(spec: dict, key: str, data: bytes) -> None:
-    kv = _metadata_kvstore(
-        json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL")
-    )
+    kv = _metadata_kv(spec)
     _wait(lambda: kv.write(key, data), spec, _where(spec, key), "write")
 
 
@@ -292,20 +322,21 @@ class Location:
         self.write(key, (json.dumps(doc, indent=2) + "\n").encode())
 
     def read_many(self, keys: Sequence[str]) -> dict[str, bytes | None]:
-        """All of ``keys`` under one way in. A bucket with listing off answers a refusal for a
-        missing key, so a refusal on one key counts as missing when another key was read
-        under the same way; only when every key is refused is the next way tried."""
+        """All of ``keys`` under one way in, read at once (``_read_keys``). A bucket with
+        listing off answers a refusal for a missing key, so a refusal on one key counts as
+        missing when another key was read under the same way; only when every key is refused
+        is the next way tried."""
 
         def attempt(spec: dict) -> dict[str, bytes | None]:
             found: dict[str, bytes | None] = {}
             refusals: dict[str, BaseException] = {}
-            for key in keys:
-                try:
-                    found[key] = _read_key(spec, key)
-                except Exception as e:
-                    if not is_refused(e):
-                        raise
-                    refusals[key] = e
+            for key, value in _read_keys(spec, keys).items():
+                if isinstance(value, BaseException):
+                    if not is_refused(value):
+                        raise value
+                    refusals[key] = value
+                else:
+                    found[key] = value
             if refusals and len(refusals) == len(keys):
                 raise Refused(next(iter(refusals.values())).args[0] if refusals else "refused")
             for key in refusals:

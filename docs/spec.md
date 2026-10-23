@@ -490,7 +490,9 @@ this document and that one differ, fix one of them.
 
 5. **Stores are read through tensorstore's kvstore only**, never zarr-python: `zarr.json`,
    `.zarray`, `.zattrs`, `.zgroup`, `attributes.json`, `info`. Format detection probes keys
-   in this order: `zarr.json`, `.zarray`, `.zgroup`, `info`, `attributes.json`; when none is
+   in this order: `zarr.json`, `.zarray`, `.zgroup`, `info`, `attributes.json`, the reads
+   begun all at once and the order deciding which document wins (0.7.1: one round trip
+   where an http open made five in a row, cellmap-flow's measurement); when none is
    found, the parent is probed for `info` and the last path segment is taken as a
    precomputed scale key (mesh-n-bone's case), then `s0` is probed so a group with no
    document of its own (an N5 directory holding `s0, s1, ...`) is still a group. The
