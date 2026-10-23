@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (unreleased)
+## 0.8.0 (2026-10-23)
 
 Faster writes from the contexts the package makes, and the create open timed out. No
 placement change and no unit table change. **Requires tensorstore 0.1.68 or later** (was
