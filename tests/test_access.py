@@ -137,6 +137,7 @@ def test_contexts_and_retry_timeouts():
 
 
 def test_the_thread_budget_follows_the_job(monkeypatch):
+    monkeypatch.delenv("WORLDARRAY_THREADS", raising=False)
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
     monkeypatch.delenv("LSB_DJOB_NUMPROC", raising=False)
     allowed = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
@@ -159,6 +160,19 @@ def test_the_thread_budget_follows_the_job(monkeypatch):
         "limit": wa.context.FILE_IO_FLOOR
     }  # it waits, not computes
     assert spec["cache_pool"] == {"total_bytes_limit": 5}
+
+
+def test_a_job_script_gives_each_worker_its_threads(monkeypatch):
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")  # what dask and a job prologue set, for numpy
+    monkeypatch.setenv("LSB_DJOB_NUMPROC", "24")  # the whole job's slots, not one worker's
+    monkeypatch.setenv("WORLDARRAY_THREADS", "3")  # the job's cpus over its worker processes
+    assert wa.thread_budget() == 3
+    monkeypatch.setenv("WORLDARRAY_THREADS", " ")
+    assert wa.thread_budget() == 1  # empty is unset
+    for bad in ("0", "-2", "x", "2.5"):  # worldarray's own variable: a bad value is an error
+        monkeypatch.setenv("WORLDARRAY_THREADS", bad)
+        with pytest.raises(ValueError, match="WORLDARRAY_THREADS"):
+            wa.thread_budget()
 
 
 def test_a_kick_runs_on_the_contexts_own_pools():
@@ -326,6 +340,7 @@ def test_gce_guard_is_left_alone_on_a_google_machine(monkeypatch):
 
 
 def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
+    monkeypatch.delenv("WORLDARRAY_THREADS", raising=False)
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
     monkeypatch.setattr(wa.context, "_shared", {})
     default = wa.shared_context(7)
@@ -342,7 +357,7 @@ def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
     assert "data_copy_concurrency" not in spec and "file_io_concurrency" not in spec
     assert spec["cache_pool"] == {"total_bytes_limit": 7}
     assert machine in wa.context._watched
-    assert wa.context.recipe_of(machine) == ("shared", (7, 0, False, "none"))
+    assert wa.context.recipe_of(machine) == ("shared", (7, 0, False, "none", 8))
     assert wa.context.from_recipe(("shared", (7, 0))) is machine  # a 0.6 or 0.7 pickle
     durable = wa.shared_context(7, fsync=True, locking="os")
     spec = durable.spec.to_json()
@@ -352,6 +367,30 @@ def test_a_shared_context_takes_the_callers_thread_count(monkeypatch):
     assert wa.context.from_recipe(("shared", 7)) is default
     with pytest.raises(ValueError):
         wa.shared_context(threads=-1)
+
+
+def test_file_io_can_follow_the_thread_budget(monkeypatch):
+    monkeypatch.setenv("WORLDARRAY_THREADS", "3")
+    monkeypatch.setattr(wa.context, "_shared", {})
+    default = wa.shared_context(0)
+    assert default.spec.to_json()["file_io_concurrency"] == {"limit": 8}
+    level = wa.shared_context(0, file_io_floor=1)
+    spec = level.spec.to_json()
+    assert spec["data_copy_concurrency"] == spec["file_io_concurrency"] == {"limit": 3}
+    assert level is not default and wa.shared_context(0, file_io_floor=0) is level
+    assert wa.shared_context(0, file_io_floor=wa.context.FILE_IO_FLOOR) is default
+    wide = wa.shared_context(0, file_io_floor=16).spec.to_json()
+    assert wide["data_copy_concurrency"] == {"limit": 3}
+    assert wide["file_io_concurrency"] == {"limit": 16}
+    # the floor sizes the budget's pools alone: a thread count of its own ignores it
+    assert wa.shared_context(0, threads=4, file_io_floor=1) is wa.shared_context(0, threads=4)
+    assert wa.shared_context(0, threads=0, file_io_floor=1) is wa.shared_context(0, threads=0)
+    assert wa.context.recipe_of(level) == ("shared", (0, None, False, "none", 1))
+    assert wa.context.from_recipe(wa.context.recipe_of(level)) is level
+    assert wa.context.recipe_of(default) == ("shared", 0)
+    assert wa.context.from_recipe(("shared", (0, None, False, "none"))) is default  # 0.8
+    with pytest.raises(ValueError):
+        wa.shared_context(file_io_floor=-1)
 
 
 @pytest.fixture

@@ -87,11 +87,12 @@ s1 = wa.open_pyramid("out.zarr", mode="r+").add_level("s1", factors=2)   # place
   interpolation anchored where you say. Adjoining block reads agree with one read across
   both.
 - **Behaves on a cluster**: one shared tensorstore context per process, its threads sized
-  from `OMP_NUM_THREADS` or the LSF job's slots instead of the node's cores, or a capped one
-  per worker; reads and writes retried with backoff and size-aware timeouts on transient
-  store errors, a cancelled future on timeout, and every context's thread pools nudged once
-  a second against a tensorstore bug that can leave a queued task with no thread, so a
-  stuck operation recovers or fails loudly instead of hanging the job.
+  from `WORLDARRAY_THREADS` (a job script's share for each worker), `OMP_NUM_THREADS` or
+  the LSF job's slots instead of the node's cores, or a capped one per worker; reads and
+  writes retried with backoff and size-aware timeouts on transient store errors, a
+  cancelled future on timeout, and every context's thread pools nudged once a second
+  against a tensorstore bug that can leave a queued task with no thread, so a stuck
+  operation recovers or fails loudly instead of hanging the job.
 - **Carries the geometry**: `Box` with `intersect`, `union`, `contains`, `grow`, `shift`,
   `snap` to a grid, and the voxel indices a world box selects.
 - **Writes placed arrays** (0.2): the OME-NGFF 0.4 or 0.5 document from voxel size, centre
@@ -150,10 +151,11 @@ wa.metadata(path, level=None, units=None, open=True, retries=None) -> ArrayMeta 
 wa.detect(path, missing_ok=False, retries=None) -> Node      # format, array or group, raw attrs
 wa.open_tensorstore(path, level=None, context=None, retries=None)
                     # retries= times out and retries document reads and the open, as it does data reads
-wa.shared_context(cache_bytes=0, threads=None, fsync=False, locking="none") ; wa.Retry(...)
+wa.shared_context(cache_bytes=0, threads=None, fsync=False, locking="none", file_io_floor=8) ; wa.Retry(...)
 wa.capped_context(cache_bytes=0, concurrency=1, network=True, file_io=None, fsync=False, locking="none")
-wa.thread_budget()                              # the shared context's decoding threads: OMP_NUM_THREADS, the job's slots, or CPUs;
-                                                #   file I/O gets at least 8; threads=N limits both to N, threads=0 leaves tensorstore's sizes
+wa.thread_budget()                              # the shared context's decoding threads: WORLDARRAY_THREADS, OMP_NUM_THREADS,
+                                                #   the job's slots, or CPUs; file I/O gets at least file_io_floor (8);
+                                                #   threads=N limits both to N, threads=0 leaves tensorstore's sizes
                                                 # contexts made here write without fsync or OS file locks; fsync=True, locking="os" restore them
 wa.list_chunk_keys(path, separator=".")        # chunk indices from keys alone, no metadata needed
 wa.Box ; wa.units.TABLE
