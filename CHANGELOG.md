@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.0 (2026-10-23)
+
+A job script can size each worker's threads. No placement change, no unit table change, and
+no default changes: with `WORLDARRAY_THREADS` unset and no `file_io_floor`, every context
+is what 0.8 made.
+
+- `thread_budget()` reads `WORLDARRAY_THREADS` ahead of `OMP_NUM_THREADS` and the job's
+  slots, for a job script to give each dask worker its share of the job's cores where
+  `OMP_NUM_THREADS` stays 1 for numpy and `LSB_DJOB_NUMPROC` counts the whole job (for
+  example `max(1, ncpus // processes)`). A handle opened on the driver on the shared
+  context is sized in each worker by that worker's value. Anything but a positive integer
+  raises `ValueError`; blank is unset.
+- `shared_context(file_io_floor=)` sets the least the file I/O pool takes under the thread
+  budget (default `FILE_IO_FLOOR`, 8); `1` keeps file I/O at the budget. A pickle carries
+  it, and with `threads=N` or `threads=0` it is ignored.
+
 ## 0.8.0 (2026-10-23)
 
 Faster writes from the contexts the package makes, and the create open timed out. No

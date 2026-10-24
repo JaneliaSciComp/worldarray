@@ -185,11 +185,12 @@ wa.open_tensorstore(path, level=None, context=None, retries=None) -> tensorstore
 wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
 wa.units.TABLE      # the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
-wa.shared_context(cache_bytes=0, threads=None, fsync=False, locking="none")
+wa.shared_context(cache_bytes=0, threads=None, fsync=False, locking="none", file_io_floor=8)
 wa.capped_context(cache_bytes=0, concurrency=1, network=True, file_io=None, fsync=False, locking="none") ; wa.capped_context_spec(...)
-                    # threads: None = thread_budget() for decoding and at least 8 for file I/O (0.8), N = that many,
-                    #   0 = tensorstore's own pool sizes (0.6); fsync and locking: tensorstore's file_io_sync and
-                    #   file_io_locking mode, off and "none" in every context the package makes (0.8, Behaviour 7)
+                    # threads: None = thread_budget() for decoding and at least file_io_floor for file I/O (0.8; the
+                    #   argument 0.9), N = that many, 0 = tensorstore's own pool sizes (0.6); fsync and locking:
+                    #   tensorstore's file_io_sync and file_io_locking mode, off and "none" in every context the
+                    #   package makes (0.8, Behaviour 7)
                     # network=False caps decoding and local file I/O only, leaving tensorstore's request pools alone
 wa.list_chunk_keys(path, separator=".", ndim=None)   # chunk indices present under a path, from its keys alone: no
                     #   metadata document needed, so a directory of chunk files with no .zarray lists too
@@ -236,8 +237,8 @@ where it also chooses the integer scale factor that makes the corner whole.
 `shared_context(cache_bytes, threads=None)` is one `tensorstore.Context` per budget and
 thread limit for the process, so the levels of a pyramid and repeat opens share one cache
 pool; the default budget is 0. Its decoding pool is sized by `thread_budget()` (0.5) and
-its file I/O pool by that or 8, whichever is larger (0.8), or both by `threads` when given,
-`0` leaving tensorstore's own sizes (0.6, Behaviour 7).
+its file I/O pool by that or `file_io_floor` (8), whichever is larger (0.8; the argument
+0.9), or both by `threads` when given, `0` leaving tensorstore's own sizes (0.6, Behaviour 7).
 `capped_context` is mesh-n-bone's worker-process context (every tensorstore concurrency
 resource limited, cache off); it returns a **new** context per call, as those workers
 inline the spec into every open today, and `capped_context_spec` exports the dict for
@@ -366,8 +367,8 @@ wa.create(..., attrs={...}, exists="adopt")   # an adopt also compares the keys 
 vol.write_index(begin, end, data, partial=False, retries=None)
 vol.write(box, data, partial=False, retries=None) ; vol.write_chunk(index, data, retries=None)
                           # timed out and retried as reads are: `retries`, else the handle's (Behaviour 6)
-wa.thread_budget() -> int # threads for tensorstore's decoding and file I/O in this process: OMP_NUM_THREADS, else
-                          #   LSB_DJOB_NUMPROC, else the CPUs it may run on (Behaviour 7)
+wa.thread_budget() -> int # threads for tensorstore's decoding and file I/O in this process: WORLDARRAY_THREADS (0.9),
+                          #   else OMP_NUM_THREADS, else LSB_DJOB_NUMPROC, else the CPUs it may run on (Behaviour 7)
                           # every context the package makes or opens a store on is kicked once a second, whoever
                           #   waits on it (Behaviour 6)
 ```
@@ -703,8 +704,20 @@ this document and that one differ, fix one of them.
    workers in a twelve-slot job on a 96-core node could start 96 threads (0.5). A dask
    worker therefore runs tensorstore on one thread of each pool, which Behaviour 6's
    watchdog makes safe. SLURM's `SLURM_CPUS_PER_TASK` and SGE's `NSLOTS` stand in for
-   `LSB_DJOB_NUMPROC` elsewhere. Its `file_io_concurrency` limit is that or
-   `context.FILE_IO_FLOOR` (8), whichever is larger (0.8): file I/O threads wait on storage
+   `LSB_DJOB_NUMPROC` elsewhere. Ahead of them all comes `WORLDARRAY_THREADS` (0.9), the
+   package's own variable, for a job script to give each worker its share of the job's
+   cores where `OMP_NUM_THREADS` stays 1 for numpy and `LSB_DJOB_NUMPROC` counts the whole
+   job: cellmap-analyze's prologue exports its CPUs over its worker processes, at least 1,
+   so a worker with spare cores uses them (in a two-slot job, pools of four against one
+   halved an 8-chunk block's time, below) and a worker per slot stays at one. A handle opened on
+   the driver before the cluster starts is then sized in each worker by that worker's
+   share, as a pickle carries `threads=None`, not a number (Behaviour 11). A value that is
+   not a positive integer raises `ValueError` rather than being skipped: nothing else sets
+   this variable, so a value worldarray cannot use is a mistake to report. Its
+   `file_io_concurrency` limit is that or `file_io_floor`, by default
+   `context.FILE_IO_FLOOR` (8), whichever is larger (0.8; the argument 0.9, `1` keeping
+   file I/O at the budget, cellmap-analyze's choice until eight is measured on /nrs at
+   scale): file I/O threads wait on storage
    rather than compute, so they take no core from the job, and one of them serialises every
    chunk file of a block on NFS's round trips. From one decoding thread, eight 64^3 label
    chunks written to NFS took 166 to 176 ms with one file I/O thread and 83 to 89 ms with
@@ -720,10 +733,11 @@ this document and that one differ, fix one of them.
    tensorstore's own sizes (decided 2026-10-23, over chunkmirage's objection, once the
    watchdog had removed the hang risk; the argument is 0.6, at chunkmirage's request, so
    its server keeps one watched context per cache budget for every store it opens
-   instead of building its own). Each `(cache_bytes, threads)` is one context for the
-   process, made on first use and watched; `threads=None` and the number
-   `thread_budget()` returns are two contexts, as a pickle carries `None` for the other
-   process to size by its own job and a number as that number.
+   instead of building its own). Each set of arguments is one context for the process,
+   made on first use and watched; `threads=None` and the number `thread_budget()` returns
+   are two contexts, as a pickle carries `None` for the other process to size by its own
+   job and a number as that number. `file_io_floor` sizes only the budget's pool, so with
+   a thread count of its own it is ignored and no second context is made.
 
    Writes (0.8). Every context the package makes (`shared_context`, `capped_context`)
    sets tensorstore's `file_io_sync` to false and its `file_io_locking` mode to `"none"`,
@@ -1072,7 +1086,11 @@ shared context. 0.7: `metadata`, `open` and `detect` against a server
 that accepts and never answers raising `TimeoutError` after the attempts. 0.8: the default
 and capped contexts' file I/O limit, sync and locking, `fsync` and `locking` carried
 through a pickle, and a create whose first attempt lands after its timeout adopting its own
-array under `exists="error"`. Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
+array under `exists="error"`. 0.9: `WORLDARRAY_THREADS` ahead of every other variable,
+blank as unset and a bad value refused; `file_io_floor` sizing file I/O under the budget,
+ignored with a thread count, and carried through a pickle; a handle pickled on the driver
+sized in a spawned worker by that worker's `WORLDARRAY_THREADS`.
+Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
 `tests/test_lost_wakeup.py`): worker processes aim tasks at the moment a one-thread pool's
 worker exits idle, so a plain context strands some for good (13 of about 7,000 on
 tensorstore 0.1.78; 40 to 44 of 12,000 to 15,000 with 16 workers on 0.1.75 and 0.1.85)

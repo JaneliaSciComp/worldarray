@@ -830,6 +830,23 @@ def test_a_pickled_handle_keeps_its_context(tmp_path):
     assert pickle.loads(pickle.dumps(wa.open(path, context=machine))).context is machine
 
 
+def _worker_limits(handle):
+    spec = handle.context.spec.to_json()
+    return spec["data_copy_concurrency"]["limit"], spec["file_io_concurrency"]["limit"]
+
+
+def test_a_pickled_handle_takes_each_workers_thread_share(tmp_path, monkeypatch):
+    # a handle opened before the cluster starts is sized in each worker by that worker's job
+    # script, which exports WORLDARRAY_THREADS where OMP_NUM_THREADS stays 1 (cellmap-analyze)
+    path = str(tmp_path / "vol.zarr/s0")
+    wa.create(path, (8, 8, 8), "uint16", (4, 4, 4), (2, 2, 2), chunks=(4, 4, 4))
+    handles = [wa.open(path, context=wa.shared_context(0, file_io_floor=1)), wa.open(path)]
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    monkeypatch.setenv("WORLDARRAY_THREADS", "3")
+    with mp.get_context("spawn").Pool(1) as pool:
+        assert pool.map(_worker_limits, handles) == [(3, 3), (3, 8)]
+
+
 def test_codecs_of_a_path_and_the_fill_write_that_removes_a_key(tmp_path):
     path = str(tmp_path / "vol.zarr/s0")
     vol = wa.create(
