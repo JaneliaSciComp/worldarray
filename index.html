@@ -1,0 +1,864 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Chunked arrays in world coordinates, through tensorstore.">
+      
+      
+      
+        <link rel="canonical" href="https://janeliascicomp.github.io/worldarray/">
+      
+      
+      
+        <link rel="next" href="spec/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>worldarray</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#worldarray" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="worldarray" class="md-header__button md-logo" aria-label="worldarray" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            worldarray
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Home
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/JaneliaSciComp/worldarray" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    worldarray
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="worldarray" class="md-nav__button md-logo" aria-label="worldarray" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    worldarray
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/JaneliaSciComp/worldarray" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    worldarray
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-placement-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The placement rule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-in-brief" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API in brief
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#origins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Origins
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="spec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-placement-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The placement rule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-in-brief" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API in brief
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#origins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Origins
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/JaneliaSciComp/worldarray/edit/main/docs/index.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="worldarray">worldarray</h1>
+<p>Chunked arrays in world coordinates, through tensorstore.</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>worldarray
+</code></pre></div>
+<h2 id="why">Why</h2>
+<p>Volumetric data lives in zarr v2, zarr v3, N5 and Neuroglancer precomputed stores, on local disks, S3, GCS and HTTP. Each format records <em>where the array sits</em>,
+its voxel size, origin, units and axes, in its own dialect, and the dialects disagree on
+the one thing that matters most: whether a stored origin means the centre of the first
+voxel or its corner. Get that wrong and every object is half a voxel out of place, which
+is invisible in a viewer and ruinous in a measurement.</p>
+<p>Reading such a volume correctly means parsing all those dialects, knowing the half-voxel
+rule for each, picking a pyramid level for a wanted resolution, and reading a region
+given in physical units as a plain numpy block, padded where the region leaves the data,
+resampled when no level matches, fast enough for a model server or a thousand cluster
+workers, with retries for flaky object stores and thread caps for shared hosts. No one
+package did all of that, so every tool wrote its own reader, and the readers drifted apart. worldarray is that reader, written once, with the rules stated and tested.</p>
+<p>Its dependencies are <code>tensorstore</code> and <code>numpy</code>. Since 0.2 it also writes the one thing
+every tool wrote for itself and got wrong in its own way: the OME-NGFF metadata of a placed
+array or pyramid level, and the array itself, created once and filled by aligned writes
+from any number of jobs. It never deletes, overwrites or downsamples. The
+<a href="https://janeliascicomp.github.io/worldarray/spec/">specification</a> is the contract it is
+built to; every rule below is a test.</p>
+<h2 id="quick-start">Quick start</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">worldarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">wa</span>
+
+<span class="n">vol</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s2">"s1"</span><span class="p">)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">voxel_size</span>      <span class="c1"># (8.0, 8.0, 8.0) nm, spatial axes</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">translation</span>     <span class="c1"># the centre of voxel 0, in nm</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">corner</span>          <span class="c1"># the lower corner of voxel 0</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">levels</span>
+
+<span class="n">box</span> <span class="o">=</span> <span class="p">((</span><span class="mf">1000.0</span><span class="p">,</span> <span class="mf">2000.0</span><span class="p">,</span> <span class="mf">3000.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">1512.0</span><span class="p">,</span> <span class="mf">2512.0</span><span class="p">,</span> <span class="mf">3512.0</span><span class="p">))</span>   <span class="c1"># [begin, end) in nm, half-open</span>
+<span class="n">arr</span> <span class="o">=</span> <span class="n">vol</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">box</span><span class="p">)</span>                            <span class="c1"># numpy, z y x; a voxel is read iff its centre lies in the box</span>
+<span class="n">arr</span> <span class="o">=</span> <span class="n">vol</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s2">"edge"</span><span class="p">)</span>            <span class="c1"># a box past the data comes back padded, never raises</span>
+<span class="n">arr</span> <span class="o">=</span> <span class="n">vol</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>   <span class="c1"># resampled on the fly</span>
+<span class="n">arr</span><span class="p">,</span> <span class="n">inside</span> <span class="o">=</span> <span class="n">vol</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>         <span class="c1"># True where the data was</span>
+
+<span class="c1"># a volume at a resolution the store does not have: the best level, resampled</span>
+<span class="n">six</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">on_mismatch</span><span class="o">=</span><span class="s2">"resample"</span><span class="p">)</span>
+
+<span class="c1"># one volume read onto another volume's grid, for masks, contact sites, statistics</span>
+<span class="n">onto</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="n">labels</span><span class="o">.</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">anchor</span><span class="o">=</span><span class="n">labels</span><span class="o">.</span><span class="n">corner</span><span class="p">)</span>
+<span class="n">onto</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">read_onto</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>   <span class="c1"># voxels [begin, end) of a Grid, exactly that shape</span>
+
+<span class="c1"># index space, native units: what an engine or a viewer wants</span>
+<span class="n">vol</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">meta</span>            <span class="c1"># shape, dtype, chunk_shape, axes, units, voxel_size, translation, attrs, ...</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">ts</span>              <span class="c1"># the tensorstore itself, C order, origin 0</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">read_index</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">padding</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">pyr</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open_pyramid</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>             <span class="c1"># every level, opened on first use</span>
+<span class="n">pyr</span><span class="o">.</span><span class="n">select</span><span class="p">((</span><span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">),</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"floor"</span><span class="p">)</span>  <span class="c1"># the level to read at 16 nm</span>
+
+<span class="c1"># writing: a placed level, its OME-NGFF group document written for it (zarr v3 + OME 0.5 here)</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="s2">"out.zarr/s0"</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"uint64"</span><span class="p">,</span>
+                <span class="n">voxel_size</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">translation</span><span class="o">=</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">))</span>
+<span class="n">out</span><span class="o">.</span><span class="n">write_index</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">block</span><span class="p">)</span>       <span class="c1"># whole chunks only: many jobs, no locks</span>
+<span class="n">out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>                                  <span class="c1"># or by world box</span>
+<span class="n">s1</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open_pyramid</span><span class="p">(</span><span class="s2">"out.zarr"</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r+"</span><span class="p">)</span><span class="o">.</span><span class="n">add_level</span><span class="p">(</span><span class="s2">"s1"</span><span class="p">,</span> <span class="n">factors</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>   <span class="c1"># placed and sized; you fill it</span>
+</code></pre></div>
+<h2 id="what-it-does">What it does</h2>
+<ul>
+<li><strong>Opens</strong> zarr v2, zarr v3 (sharded or not), N5 and precomputed (sharded or not) arrays
+  and pyramids by path, local or <code>s3://</code>, <code>gs://</code>, <code>http(s)://</code>, through tensorstore only.
+  Public buckets are read anonymously first, credentials only when refused; the way in is
+  remembered. <code>AWS_ENDPOINT_URL</code> points at S3-compatible stores.</li>
+<li><strong>Places</strong> every array by one written rule per format (below), reads axes and units as
+  stored, converts only where asked (nanometres by default on spatial axes), and keeps
+  voxel sizes as floats, never rounded.</li>
+<li><strong>Chooses a level</strong> by voxel size from the pyramid's own metadata, without opening the
+  levels, with four policies for a size no level has: error, resample, relabel (voxel <code>i</code>
+  stays voxel <code>i</code>, the grid rescaled), or keep the level.</li>
+<li><strong>Reads</strong> voxel boxes or world boxes as C-contiguous numpy in native byte order, padded
+  with any value or the edge voxel, with an optional mask of what was data, a per-read
+  <code>transform</code> applied before padding (or <code>post_transform</code> after resampling), and resampling by nearest neighbour or linear
+  interpolation anchored where you say. Adjoining block reads agree with one read across
+  both.</li>
+<li><strong>Behaves on a cluster</strong>: one shared tensorstore context per process, its threads sized
+  from <code>WORLDARRAY_THREADS</code> (a job script's share for each worker), <code>OMP_NUM_THREADS</code> or
+  the LSF job's slots instead of the node's cores, or a capped one per worker; reads and
+  writes retried with backoff and size-aware timeouts on transient store errors, a
+  cancelled future on timeout, and every context's thread pools nudged once a second
+  against a tensorstore bug that can leave a queued task with no thread, so a stuck
+  operation recovers or fails loudly instead of hanging the job.</li>
+<li><strong>Carries the geometry</strong>: <code>Box</code> with <code>intersect</code>, <code>union</code>, <code>contains</code>, <code>grow</code>, <code>shift</code>,
+  <code>snap</code> to a grid, and the voxel indices a world box selects.</li>
+<li><strong>Writes placed arrays</strong> (0.2): the OME-NGFF 0.4 or 0.5 document from voxel size, centre
+    translation, axes and units, with each level's placement explicit or derived from
+  factors and an origin; <code>create</code> following the container's format and writing the group
+  documents an output needs down from its <code>.zarr</code> root, with explicit chunks and codecs,
+  and only two answers to "it exists": raise, or adopt an identical array after checking;
+  whole-unit writes from many processes with no coordination; <code>add_level</code> as metadata plus
+  an empty array; chunk keys for every format. Nothing is ever deleted or overwritten.</li>
+<li><strong>Plans outputs and blocks</strong> (0.3): a store-less <code>Grid</code> with the same geometry as an
+  array, so an output is planned, cut into blocks and only then created; <code>blocks</code> tiling an
+  array or a box into write boxes with context-grown read boxes, in C order, as plain
+  picklable records a cluster job takes by id; the anisotropy-aware pyramid schedule; every
+  input read onto that grid by its voxel indices (0.4). Nothing is scheduled or run.</li>
+</ul>
+<h2 id="the-placement-rule">The placement rule</h2>
+<p>A translation is where the centre of voxel 0 is. Index <code>i</code> sits at
+<code>translation + i * voxel_size</code> and covers half a voxel either side, so the array's corner
+is <code>corner = translation - voxel_size / 2</code>. With 8 nm voxels and the corner at 0, the
+translation is 4: voxel 0 covers 0 to 8 nm around its centre at 4, voxel 1 covers 8 to
+16 nm around 12. That is how OME-NGFF defines it and how Neuroglancer draws it.</p>
+<p>The centre is the model because a voxel is a sample taken at a point. Everything that
+compares or resamples grids (picking a level, reading one volume onto another's grid,
+interpolating) works on those points, and the box a voxel covers follows from its point.
+The read rule follows too: a voxel is read iff its centre lies in the box, so boxes that
+adjoin never share a voxel or drop one.</p>
+<p>Dialects that store the corner are moved half a voxel on reading:</p>
+<table>
+<thead>
+<tr>
+<th>Stored</th>
+<th>Means</th>
+<th>Read as <code>translation</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OME-NGFF <code>translation</code></td>
+<td>centre</td>
+<td>as is</td>
+</tr>
+<tr>
+<td>COSEM <code>transform.translate</code></td>
+<td>centre</td>
+<td>as is</td>
+</tr>
+<tr>
+<td><code>offset</code> beside <code>resolution</code> / <code>voxel_size</code> (<code>offset</code> missing: 0)</td>
+<td>corner</td>
+<td><code>offset + voxel_size / 2</code></td>
+</tr>
+<tr>
+<td>N5 <code>pixelResolution</code> or <code>resolution</code> with <code>downsamplingFactors f</code>, no offset</td>
+<td>corner at the origin at every level, as Neuroglancer draws N5</td>
+<td><code>f / 2 * base</code></td>
+</tr>
+<tr>
+<td>precomputed <code>voxel_offset</code></td>
+<td>corner</td>
+<td><code>(voxel_offset + 1/2) * resolution</code></td>
+</tr>
+<tr>
+<td>nothing</td>
+<td>a plain array</td>
+<td>voxels of 1, corner at the origin</td>
+</tr>
+</tbody>
+</table>
+<p>Axes are the store's C order; N5 and precomputed are transposed to it. Unlisted or
+conflicting attributes warn; a voxel size that disagrees with the OME scale raises, since
+that is how stale metadata is caught. Metadata the parser did not consume stays available
+raw. The full precedence per format, the half-voxel rules, and every read behaviour are
+in the <a href="https://janeliascicomp.github.io/worldarray/spec/">specification</a>.</p>
+<h2 id="api-in-brief">API in brief</h2>
+<div class="highlight"><pre><span></span><code><span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">level_mode</span><span class="o">=</span><span class="s2">"floor"</span><span class="p">,</span> <span class="n">on_mismatch</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span>
+        <span class="n">padding</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span> <span class="n">select</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata_conflicts</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span> <span class="n">base_voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">base_units</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">anchor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strict_units</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WorldArray</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">open_pyramid</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Pyramid</span>          <span class="c1"># .names .levels .by_name() .select() .placements() .metas(): no opens needed</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">open</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayMeta</span>   <span class="c1"># open=False: from documents alone</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">missing_ok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Node</span>      <span class="c1"># format, array or group, raw attrs</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">open_tensorstore</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                    <span class="c1"># retries= times out and retries document reads and the open, as it does data reads</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">shared_context</span><span class="p">(</span><span class="n">cache_bytes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fsync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="s2">"none"</span><span class="p">,</span> <span class="n">file_io_floor</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">Retry</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">capped_context</span><span class="p">(</span><span class="n">cache_bytes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">concurrency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">file_io</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fsync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="s2">"none"</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">thread_budget</span><span class="p">()</span>                              <span class="c1"># the shared context's decoding threads: WORLDARRAY_THREADS, OMP_NUM_THREADS,</span>
+                                                <span class="c1">#   the job's slots, or CPUs; file I/O gets at least file_io_floor (8);</span>
+                                                <span class="c1">#   threads=N limits both to N, threads=0 leaves tensorstore's sizes</span>
+                                                <span class="c1"># contexts made here write without fsync or OS file locks; fsync=True, locking="os" restore them</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">list_chunk_keys</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">separator</span><span class="o">=</span><span class="s2">"."</span><span class="p">)</span>        <span class="c1"># chunk indices from keys alone, no metadata needed</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">Box</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">units</span><span class="o">.</span><span class="n">TABLE</span>
+
+<span class="c1"># writing (0.2)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=...</span><span class="p">,</span> <span class="n">shards</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+          <span class="n">fill_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">codecs</span><span class="o">=</span><span class="s2">"zstd"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">group_attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span> <span class="n">store_fill</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WorldArray</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r+"</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">open_pyramid</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r+"</span><span class="p">)</span><span class="o">.</span><span class="n">add_level</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">factors</span><span class="o">=</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">ome_multiscales</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="n">units</span><span class="p">,</span> <span class="n">levels</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"0.5"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">level_placement</span><span class="p">(</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="n">factors</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">level_shape</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">factors</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">chunk_key</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">parse_chunk_key</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">ensure_group_entry</span><span class="p">(</span><span class="n">group_path</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">)</span>   <span class="c1"># list an array you made yourself</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">units</span><span class="o">.</span><span class="n">ome_name</span><span class="p">(</span><span class="s2">"nm"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"nanometer"</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">codecs_of</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">codecs</span><span class="p">,</span> <span class="n">shards</span><span class="p">)</span>
+
+<span class="c1"># grids and blocks (0.3)</span>
+<span class="n">g</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">Grid</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shards</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># or Grid.from_meta(meta, voxel_size=)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">grid</span><span class="o">=</span><span class="n">g</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"uint64"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">wa</span><span class="o">.</span><span class="n">blocks</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">block_shape</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">box</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>   <span class="c1"># also vol.blocks() and g.blocks()</span>
+    <span class="n">b</span><span class="o">.</span><span class="n">begin</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">end</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">read_begin</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">read_end</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">inner</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">at_end</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">id</span>    <span class="c1"># plain records; blocks[id] is O(1)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">level_factors</span><span class="p">(</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">ratio</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">max_levels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stop_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">units</span><span class="o">.</span><span class="n">abbreviation</span><span class="p">(</span><span class="s2">"nanometer"</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">"s0"</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">parent</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+</code></pre></div>
+<p><code>WorldArray</code>: <code>ts</code>, <code>meta</code>, <code>grid</code>, <code>shape</code>, <code>dtype</code>, <code>axes</code>, <code>voxel_size</code>, <code>translation</code>,
+<code>corner</code>, <code>box</code>, <code>levels</code>, <code>level_name</code>, <code>level_path</code>, <code>source_voxel_size</code>, <code>source_translation</code>, <code>resampled</code>,
+<code>writable</code>, <code>write_shape</code>;
+<code>read(box, voxel_size=, padding=, method=, mask=, anchor=, transform=, post_transform=, select=, strict=)</code>,
+<code>read_index(begin, end, padding=, mask=, select=, transform=)</code>, <code>read_onto(grid, begin=, end=, ...)</code>, <code>index_box(box)</code>,
+<code>chunks_covering(begin, end, write=)</code>, <code>list_chunks()</code>, <code>chunk_key(index)</code>, <code>parse_chunk_key(key)</code>,
+<code>write_index(begin, end, data, partial=, retries=)</code> and <code>write(box, data, partial=, retries=)</code> (<code>data</code> an array or a
+scalar), <code>reopen(context=)</code>.</p>
+<p>A box is a <code>(begin, end)</code> pair of floats in your units, half-open per axis, over the
+spatial axes or every axis; any object with <code>.begin</code>/<code>.end</code> or <code>.offset</code>/<code>.shape</code> also
+works. There is no <code>offset</code> attribute, because that word means the corner in some dialects
+and the centre in others: <code>translation</code> and <code>corner</code> are the two names for the two things.</p>
+<h2 id="origins">Origins</h2>
+<p>The vocabulary, an array that knows its <code>voxel_size</code>, where it sits and its axis names, and
+is read by a box in world units, follows funlib.persistence's <code>Array</code>, which many of the
+tools this serves were built on. The placement rules were consolidated from the readers
+those tools had each written, in cellmap-flow, cellmap-analyze, mesh-n-bone and
+chunkmirage, whose conventions document and conformance tests seeded this one; their
+authors' sessions trialled every change here on their own data. The voxel-centre
+convention is OME-NGFF's and ITK's, and is what Neuroglancer draws. tensorstore does the
+work underneath.</p>
+<h2 id="development">Development</h2>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>dev<span class="w"> </span>--group<span class="w"> </span>docs
+uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>src<span class="w"> </span>tests<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>src<span class="w"> </span>tests
+uv<span class="w"> </span>run<span class="w"> </span>mkdocs<span class="w"> </span>serve
+</code></pre></div>
+<p>BSD-3-Clause, Howard Hughes Medical Institute.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.sections", "content.code.copy", "content.action.edit"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

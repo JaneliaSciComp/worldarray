@@ -1,0 +1,1010 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Chunked arrays in world coordinates, through tensorstore.">
+      
+      
+      
+        <link rel="canonical" href="https://janeliascicomp.github.io/worldarray/changelog/">
+      
+      
+        <link rel="prev" href="../spec/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - worldarray</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="worldarray" class="md-header__button md-logo" aria-label="worldarray" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            worldarray
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/JaneliaSciComp/worldarray" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    worldarray
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="worldarray" class="md-nav__button md-logo" aria-label="worldarray" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    worldarray
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/JaneliaSciComp/worldarray" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    worldarray
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#090-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.9.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#080-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.8.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#071-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.1 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#050-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#040-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4.0 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.1 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.0 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.1 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-10-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 (2026-10-21)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#090-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.9.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#080-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.8.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#071-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.1 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#050-2026-10-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.0 (2026-10-23)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#040-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4.0 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.1 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.0 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.1 (2026-10-22)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-10-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 (2026-10-21)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/JaneliaSciComp/worldarray/edit/main/docs/changelog.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="changelog">Changelog</h1>
+<h2 id="090-2026-10-23">0.9.0 (2026-10-23)</h2>
+<p>A job script can size each worker's threads. No placement change, no unit table change, and
+no default changes: with <code>WORLDARRAY_THREADS</code> unset and no <code>file_io_floor</code>, every context
+is what 0.8 made.</p>
+<ul>
+<li><code>thread_budget()</code> reads <code>WORLDARRAY_THREADS</code> ahead of <code>OMP_NUM_THREADS</code> and the job's
+  slots, for a job script to give each dask worker its share of the job's cores where
+  <code>OMP_NUM_THREADS</code> stays 1 for numpy and <code>LSB_DJOB_NUMPROC</code> counts the whole job (for
+  example <code>max(1, ncpus // processes)</code>). A handle opened on the driver on the shared
+  context is sized in each worker by that worker's value. Anything but a positive integer
+  raises <code>ValueError</code>; blank is unset.</li>
+<li><code>shared_context(file_io_floor=)</code> sets the least the file I/O pool takes under the thread
+  budget (default <code>FILE_IO_FLOOR</code>, 8); <code>1</code> keeps file I/O at the budget. A pickle carries
+  it, and with <code>threads=N</code> or <code>threads=0</code> it is ignored.</li>
+</ul>
+<h2 id="080-2026-10-23">0.8.0 (2026-10-23)</h2>
+<p>Faster writes from the contexts the package makes, and the create open timed out. No
+placement change and no unit table change. <strong>Requires tensorstore 0.1.68 or later</strong> (was
+0.1.60), the first with the <code>file_io_locking</code> setting.</p>
+<ul>
+<li><code>shared_context</code> and <code>capped_context</code> write without fsync (<code>file_io_sync: false</code>) and
+  without OS file locks (<code>file_io_locking</code> mode <code>"none"</code>); <code>fsync=True</code> and <code>locking="os"</code>
+  restore tensorstore's defaults. A whole-unit write stays atomic, a temporary file renamed
+  into place; only concurrent read-modify-writes of one unit (<code>partial=True</code>) lose their
+  guarantee, which was never given (Behaviour 13). fsync cost 6.5 ms a chunk on a local
+  disk and nothing on NFS; the locks cost about 10 ms a chunk on NFS.</li>
+<li>The default context's file I/O pool is <code>thread_budget()</code> or 8, whichever is larger;
+  decoding stays at <code>thread_budget()</code>. File I/O threads wait on storage rather than
+  compute, and one of them wrote a block's chunk files one NFS round trip after another.
+  <code>capped_context(file_io=)</code> sizes it apart from <code>concurrency</code> (default unchanged).</li>
+<li>From one-thread workers through the default context, against 0.7: a 64^3 label chunk to
+  NFS 23 to 12.2 ms (zarr-python 2: 13.1), an 8-chunk label block 159 to 66.5 ms
+  (zarr-python 2: 102), an 8-chunk EM block 330 to 202 ms; to a local disk a label block
+  51.5 to 4.1 ms. Through <code>capped_context(1, network=False)</code> the NFS label block went 166
+  to 91 ms; <code>file_io=8</code> gives it the rest.</li>
+<li>The open that creates an array is timed out and retried under <code>retries</code> (Behaviour 6). A
+  retry that finds the array made by an attempt of its own that timed out adopts it after
+  the usual comparison, even under <code>exists="error"</code>. That open keeps OS locking, so
+  create-if-absent stays atomic.</li>
+</ul>
+<h2 id="071-2026-10-23">0.7.1 (2026-10-23)</h2>
+<p>Faster opens over http. No placement change, no unit table change, no API change.</p>
+<ul>
+<li>The documents a call needs from one directory are read at once instead of in turn. An
+  http open of a zarr v2 level made its eight requests one after another (five probe keys,
+  the level's <code>.zattrs</code>, the parent's <code>zarr.json</code> and <code>.zattrs</code>); now they go in three
+  rounds. At 10 ms an answer, <code>wa.open</code> took 98 ms and takes 52 (cellmap-flow's
+  measurement). A server that never answers still costs one key's attempts, not five.</li>
+</ul>
+<h2 id="070-2026-10-23">0.7.0 (2026-10-23)</h2>
+<p>Opens time out. No placement change and no unit table change.</p>
+<ul>
+<li>Every metadata document read or written and every store opened is timed out and
+  retried under <code>Retry</code>, as data reads are (Behaviour 6): by default 5 s times the attempt,
+  ten attempts. A server that accepts a connection and never answers held <code>wa.open</code> and
+  <code>wa.metadata</code> forever before; it now raises <code>TimeoutError</code> naming the URL and the
+  attempts (cellmap-flow, 2026-10-23). The policy is the call's <code>retries</code>, which
+  <code>wa.metadata</code>, <code>wa.detect</code> and <code>wa.open_tensorstore</code> now take as <code>wa.open</code>,
+  <code>wa.open_pyramid</code> and <code>wa.create</code> already did. Listings and the open that creates an
+  array are not timed out.</li>
+</ul>
+<h2 id="060-2026-10-23">0.6.0 (2026-10-23)</h2>
+<p>One new argument, at chunkmirage's request. No placement change and no unit table change;
+nothing changes for a caller that does not pass it.</p>
+<ul>
+<li><code>wa.shared_context(cache_bytes, threads=)</code>: <code>None</code> (the default) limits the decoding and
+  file I/O pools to <code>thread_budget()</code> as in 0.5, a positive number limits them to that many,
+  and <code>0</code> writes no limit, so tensorstore sizes them itself (every CPU on the node). Each
+  <code>(cache_bytes, threads)</code> is one watched context for the process, so a server can share
+  one cache pool across every store it opens at the thread count it chose, without building
+  and watching its own context. A pickled handle on such a context comes back on the same
+  one; <code>threads=None</code> still lets the other process size by its own job.</li>
+<li>Documented what a pool of one thread costs (spec Behaviour 7, <code>capped_context_spec</code>):
+  nothing on one-chunk blocks; on 8-chunk blocks, half the speed of 4 in a two-slot job
+  but only 7 to 19% slower in a one-slot one (c-elegans on /nrs), so a worker per slot
+  loses little at the default.</li>
+</ul>
+<h2 id="050-2026-10-23">0.5.0 (2026-10-23)</h2>
+<p>Two bugs that hung or crashed cellmap-analyze 0.6 on /nrs (salamander's and c-elegans'
+runs, 2026-10-22), and tensorstore's threads sized to the job. No placement change and no
+unit table change.</p>
+<ul>
+<li>A read whose first attempt timed out raised <code>IndexError</code> instead of retrying: the
+  warning took the first line of the error's message, and tensorstore's <code>TimeoutError()</code>
+  has none. The warning now names the error's type when the message is empty, and the
+  error after the last attempt names the operation, the path and the attempts.</li>
+<li>Every context the package makes or opens a store on is watched: once a second a daemon
+  thread gives its decoding and file I/O pools one no-op task each (an in-memory copy and
+  a local read of a missing key; no store is touched). tensorstore up to at least 0.1.85
+  can strand a queued task: a pool worker idle for 20 ms exits as the task arrives, and
+  the task never runs (fixed upstream in google/tensorstore ed51718085, in no release
+  yet). With <code>data_copy</code> and <code>file_io</code> capped at 1, as cellmap-analyze's workers were,
+  dozens of workers per run waited forever in <code>write_index</code> with no tensorstore thread
+  alive, and reads timed out into the <code>IndexError</code> above. One more task on the same pool
+  wakes it, which salamander's and c-elegans' sessions proved on live stuck workers, so a
+  stranded task now runs within about a second, at any concurrency, whoever waits on it:
+  worldarray, <code>vol.ts</code> directly or <code>await</code>. Reproduced on purpose on tensorstore 0.1.75,
+  0.1.78 and 0.1.85 (opt-in <code>tests/test_lost_wakeup.py</code>): cellmap-analyze's block loop
+  gave 29 <code>IndexError</code>s and 55 writes stuck past 20 s on 0.4.0, none on 0.5.0, slowest
+  0.98 s. Spec open question 14 says when this goes.</li>
+<li><code>write_index</code>, <code>write</code> and <code>write_chunk</code> are timed out and retried as reads are
+  (Behaviour 6), by a new <code>retries=</code> argument or the handle's <code>retries</code>. A write used to
+  wait on its future with no timeout at all.</li>
+<li>Without <code>context</code>, the shared context's decoding and file I/O pools are limited to the
+  new <code>wa.thread_budget()</code>: <code>OMP_NUM_THREADS</code> when set (dask sets 1 in each worker), else
+  the job's slots (<code>LSB_DJOB_NUMPROC</code>, <code>SLURM_CPUS_PER_TASK</code>, <code>NSLOTS</code>), else the CPUs the
+  process may run on. A server that wants more threads than its job's slots asks for more
+  slots or passes its own context.
+  tensorstore alone sizes both to every CPU on the node, whatever <code>bsub -n</code> asked for, so
+  a dask worker's tensorstore now takes the same one thread as its numpy (pinned to one
+  CPU, tensorstore's default context started 43 to 45 pool threads, the capped one 4 to 5).
+  Against cellmap-analyze 0.5.0's own block I/O on NFS (128^3 uint64 label blocks, each
+  one chunk), its 0.6.1 on this release reads a block in 26 ms instead of 40 and writes it
+  in 45 ms instead of 62 from one process at one thread per pool, and about 1.15 times
+  faster from 8. Speed gains grow with blocks of several chunks and more threads.</li>
+</ul>
+<h2 id="040-2026-10-22">0.4.0 (2026-10-22)</h2>
+<p>cellmap-analyze's three asks, so it can call worldarray directly with no wrapper, and two
+of cellmap-flow's. No placement change and no unit table change.</p>
+<ul>
+<li><code>vol.read_onto(grid, begin=None, end=None, ...)</code> reads voxels <code>[begin, end)</code> of a
+  <code>Grid</code>'s spatial axes from the array, exactly that shape (Behaviour 20). It is the
+  <code>read</code> of the grid's index box at the grid's voxel size anchored at its corner, so at
+  the array's own voxel size nothing is resampled, whatever the sub-voxel offset, and
+  otherwise the array is resampled onto the grid. The grid's units are converted.</li>
+<li>A pickled handle, and <code>reopen</code>, use the path resolved against the working directory at
+  open, so a worker that changes directory before unpickling opens the same store; it
+  used to raise <code>FileNotFoundError</code> for a relative path.</li>
+<li><code>write_index</code>, <code>write</code> and <code>write_chunk</code> take a scalar, which fills the box. It is
+  converted to the dtype only when its value survives (<code>0</code> into <code>uint8</code>; <code>300</code>, <code>-1</code>, <code>0.5</code>
+  and NaN raise), and the fill value over whole units leaves them absent.</li>
+<li><code>vol.source_translation</code>: the stored level's translation in <code>units</code>, beside
+  <code>source_voxel_size</code>, under resample and relabel too (cellmap-flow's <code>stored_placement</code>).</li>
+<li><code>create(exists="adopt")</code> also compares the keys of <code>attrs</code> with the existing array's
+  attributes and raises naming each that differs or is missing; keys not given are not
+  compared. An adopt given different <code>attrs</code> used to keep the old ones silently, as funlib's
+  <code>prepare_ds</code> kept an old offset (cellmap-flow's <code>_refuse_another_region</code>).</li>
+</ul>
+<h2 id="031-2026-10-22">0.3.1 (2026-10-22)</h2>
+<ul>
+<li><code>source_voxel_size</code> reports the stored level's voxel size under <code>on_mismatch="relabel"</code>,
+  as the spec says; it reported the relabelled size (cellmap-flow's report). Reads,
+  <code>voxel_size</code>, <code>translation</code> and <code>corner</code> are unchanged.</li>
+<li><code>box</code> of an array opened with a resample target is the extent of the target voxels
+  <code>shape</code> counts, as the spec's <code>[corner, corner + shape * voxel_size)</code> says and as
+  <code>Grid.from_meta(meta, voxel_size=t).box</code> already was; it was the stored data's extent, so
+  <code>read(box)</code> could return fewer voxels than <code>shape</code> (cellmap-flow's 7 voxels of 8 nm at
+  24 nm: box ended at 56 nm, now 72). No voxel moves.</li>
+<li><strong>Unit table change.</strong> The unit table knows kilometres (<code>kilometer</code>, <code>kilometre</code>, <code>km</code>,
+  1e3 m), so they convert, abbreviate to <code>km</code> and are written as OME's <code>kilometer</code>
+  (chunkmirage's ask). This should have been a minor release (spec section 8): cellmap-flow
+  exports the table and its CI failed until it moved its pin to <code>&gt;=0.3.1</code>.</li>
+<li>README: the placement rule gains the corner formula, a worked example, why the centre
+  is the model, and how the read rule follows from it.</li>
+</ul>
+<h2 id="030-2026-10-22">0.3.0 (2026-10-22)</h2>
+<p>Grids and blocks, built to spec draft 3 (Behaviours 17 to 19). Nothing on the read or
+write side changes.</p>
+<ul>
+<li><code>blocks(shape, block_shape, context=0, box=None, clip=True)</code>: the array (or a voxel
+  box, which may reach past the array) cut into write boxes that tile it with no overlap
+  and no gap, each with a read box grown by <code>context</code> (one int, one per axis, or
+  <code>(before, after)</code> pairs) and clipped to the array when <code>clip</code>; C order, <code>len</code>,
+  <code>blocks[id]</code> in O(1), <code>index_of(begin)</code>; a <code>Block</code> carries <code>index</code>, <code>id</code>, <code>begin</code>,
+  <code>end</code>, <code>read_begin</code>, <code>read_end</code>, <code>at_start</code> and <code>at_end</code> per axis and <code>inner</code>, the write
+  box's slices inside the read box. Plain picklable records; nothing is scheduled.
+  <code>vol.blocks()</code> defaults the block to <code>write_shape</code>, so default blocks are aligned writes.
+  <code>vol.write_chunk(index, data)</code> writes one whole unit.</li>
+<li><code>Grid(shape, voxel_size, translation, axes, units, chunks, shards)</code>: a <code>WorldArray</code>
+  without a store, with <code>box</code>, <code>corner</code>, <code>index_box</code>, <code>chunks_covering</code>, <code>write_shape</code>,
+  <code>blocks</code> and <code>meta(dtype)</code>; <code>Grid.from_meta(meta, voxel_size=)</code> is an existing array's
+  grid or the resample target grid over it. <code>create(path, grid=g, dtype=)</code> creates from it.</li>
+<li><code>level_factors(voxel_size, ratio=1.5, ...)</code>: the anisotropy-aware pyramid schedule
+  mesh-n-bone and cellmap-analyze share, per level.</li>
+<li><code>units.abbreviation</code>, and <code>store.join</code>, <code>store.parent</code>, <code>store.basename</code> as public
+  URL-aware path helpers.</li>
+</ul>
+<h2 id="020-2026-10-22">0.2.0 (2026-10-22)</h2>
+<p>Metadata and placed creation, built to spec draft 3 (Behaviours 10 to 16). Nothing on the
+read side changes.</p>
+<ul>
+<li><code>ome_multiscales(axes, units, levels, version)</code> builds the complete OME-NGFF 0.4 or 0.5
+  group document with one explicit placement per level; <code>level_placement</code> and
+  <code>level_shape</code> derive a level from factors and an origin (Convention 1's rule inverted,
+    so a level built from a ROI origin is placed from it; <code>level_shape</code> absorbs float-noise
+  factors such as <code>0.3 / 0.1</code>). Units are written in OME's names (<code>"nm"</code> becomes
+  <code>"nanometer"</code>; <code>units.ome_name</code>), an unknown unit as given; the multiscale's <code>type</code> is
+  written when given. Expected documents are pinned in <code>tests/fixtures/write.json</code>, shared
+  with chunkmirage's TypeScript builder, each case with its resolved per-axis units and
+  types, fifteen cases.</li>
+<li><code>create(path, shape, dtype, voxel_size, translation, chunks=..., ...)</code> writes the group
+  document (made when absent, else its one dataset entry added or replaced, every other
+  attribute kept) and then the array, as zarr v2 with OME 0.4 or zarr v3 with OME 0.5
+  following the group's format. <code>chunks</code> is required, codecs are explicit with a zstd
+  level 3 default, shards are a zarr v3 option. <code>exists</code> is <code>"error"</code> or <code>"adopt"</code> (an
+  identical array is opened for writing, a different one raises naming every difference,
+  a creation lost to another process is adopted after a short backoff). Nothing is ever
+    deleted, truncated or overwritten. Write units equal to the fill value are not stored
+  unless <code>store_fill=True</code>, and a stored unit written so loses its key, as zarr-python's
+  <code>write_empty_chunks=False</code> does. <code>create</code> also writes a bare group document for every
+  missing ancestor down from the <code>.zarr</code> root and follows the nearest existing ancestor's
+  zarr version, so a level made in a zarr v2 container is zarr v2 with OME 0.4 and the
+  hierarchy browses (cellmap-analyze, cellmap-flow). Adopting an identical array writes no
+  group document; after a write the document is read again and a lost entry is written
+  again, then raises (registration-station's concurrent block jobs).</li>
+<li><code>ensure_group_entry</code> is public: list an array the package did not create, such as a
+  symlinked <code>s0</code> (mesh-n-bone), or a level filled before it is listed.</li>
+<li><code>open(path, mode="r+")</code> opens an existing array for writing; a <code>WorldArray</code> pickles by
+  its arguments and its context's spec and reopens in the receiving process, a capped
+  context staying capped (mesh-n-bone's workers). <code>write.codecs_of</code> takes a path.</li>
+<li><code>write_index(begin, end, data)</code> writes whole write units only (the shard when sharded,
+  else the chunk; the clipped last unit allowed), so writers in different processes need
+  no coordination; <code>partial=True</code> does tensorstore's read-modify-write. <code>write(box, data)</code>
+  maps a world box by the centre rule first. No cast, no padding, no resampling on write.</li>
+<li><code>open_pyramid(path, mode="r+").add_level(name, factors=, origin=)</code> creates a level's
+  entry and empty array, placed and sized from the level below with its dtype, chunks,
+  shards, codecs and fill value copied; the downsampling itself stays with the caller.</li>
+<li><code>chunk_key</code> and <code>parse_chunk_key</code> for zarr v2, zarr v3 (both encodings, sharded arrays
+  keyed by shard), N5 and precomputed, as free functions and on <code>WorldArray</code>;
+  <code>list_chunks</code> uses the same parser. <code>write_shape</code>, <code>ArrayMeta.shard_shape</code>,
+  <code>chunks_covering(write=True)</code>.</li>
+</ul>
+<h2 id="011-2026-10-22">0.1.1 (2026-10-22)</h2>
+<ul>
+<li>funlib <code>voxel_size</code>/<code>offset</code> on the parent group place an array that carries none, for
+  zarr and N5 alike; funlib's keys on an N5 array are read in the array's C order, as
+  zarr-python's N5 store writes them (both from mesh-n-bone's review of its PR #48).</li>
+<li>A precomputed path that names a scale is that scale under <code>level=0</code> or <code>"first"</code> too;
+  other levels warn and are ignored, as on an array path.</li>
+<li>The GCE metadata guard is applied only off Google Cloud (decided from the DMI product
+  name and the <code>GCE_METADATA_*</code> variables), so metadata-server credentials keep working on
+  a Google VM.</li>
+<li><code>Pyramid.placements()</code>, <code>voxel_sizes()</code> and <code>translations()</code> read the group document when
+  the pyramid was opened through one of its level paths too; they used to open every level
+  from there, and a missing level made them raise.</li>
+<li><strong>Placement change.</strong> An N5 level with <code>downsamplingFactors</code> and no offset now sits with
+  its corner at the origin at every level, as Neuroglancer draws N5: translation
+  <code>f / 2 * base</code>. 0.1.0 followed BigDataViewer for <code>pixelResolution</code> pyramids, centring the
+  base's voxel 0 on the origin (<code>(f - 1) / 2 * base</code>, half a base voxel lower), while
+  placing <code>resolution</code> pyramids with the corner at the origin, so the two disagreed. Two
+  shared fixture cases move and are renamed: <code>n5_group_pixelresolution_and_downsampling_factors_corner_at_origin</code>
+  (translation 4, 4, 4) and <code>n5_bigstitcher_resolution_with_downsampling_factors_corner_at_origin</code>
+  (0.5, 0.157, 0.157).</li>
+</ul>
+<h2 id="010-2026-10-21">0.1.0 (2026-10-21)</h2>
+<ul>
+<li>First version, built to <code>docs/spec.md</code>: open zarr v2, zarr v3, N5 and Neuroglancer
+  precomputed arrays and pyramids through tensorstore; one metadata precedence per format
+  with the voxel-centre rule for translations; index-space and world-box reads with
+  padding; level selection; nearest and linear resampling; retries; shared and capped
+  tensorstore contexts.
+  Built and trialled in one day against the readers it replaces in cellmap-flow,
+  cellmap-analyze, mesh-n-bone and chunkmirage, and checked on their own data by the
+  CineMap, liconn-err, registration-station and salamander repos; see <code>docs/spec.md</code>,
+  "Trial status". Hot-path reads cost 0.1 to 0.2 ms over a raw tensorstore read.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

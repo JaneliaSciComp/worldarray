@@ -1,0 +1,2347 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Chunked arrays in world coordinates, through tensorstore.">
+      
+      
+      
+        <link rel="canonical" href="https://janeliascicomp.github.io/worldarray/spec/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../changelog/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Specification - worldarray</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#specification" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="worldarray" class="md-header__button md-logo" aria-label="worldarray" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            worldarray
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Specification
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/JaneliaSciComp/worldarray" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    worldarray
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="worldarray" class="md-nav__button md-logo" aria-label="worldarray" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    worldarray
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/JaneliaSciComp/worldarray" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    worldarray
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-why-this-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. Why this exists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-public-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Public API
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Public API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#02-metadata-and-placed-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2: metadata and placed creation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#03-grids-and-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3: grids and blocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#04-reading-onto-a-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4: reading onto a grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#05-writes-that-cannot-hang" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5: writes that cannot hang
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Conventions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-behaviour-each-statement-is-a-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Behaviour (each statement is a test)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-tests-behavioural-synthetic-stores-in-tmp_path-one-optional-network-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Tests (behavioural; synthetic stores in tmp_path; one optional network test)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-consumers-and-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Consumers and migration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Consumers and migration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trial-status-2026-10-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trial status, 2026-10-21
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writers-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writers, 2026-10-22
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#census-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Census, 2026-10-22
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-why-this-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. Why this exists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-public-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Public API
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Public API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#02-metadata-and-placed-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2: metadata and placed creation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#03-grids-and-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3: grids and blocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#04-reading-onto-a-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4: reading onto a grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#05-writes-that-cannot-hang" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5: writes that cannot hang
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Conventions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-behaviour-each-statement-is-a-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Behaviour (each statement is a test)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-tests-behavioural-synthetic-stores-in-tmp_path-one-optional-network-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Tests (behavioural; synthetic stores in tmp_path; one optional network test)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-consumers-and-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Consumers and migration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Consumers and migration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trial-status-2026-10-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trial status, 2026-10-21
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writers-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writers, 2026-10-22
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#census-2026-10-22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Census, 2026-10-22
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/JaneliaSciComp/worldarray/edit/main/docs/spec.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="specification">Specification</h1>
+<p>worldarray is built to this document. Sections 1 to 5 are also the README; every
+statement under "Behaviour" and "Tests" is something a test pins. Code that is not needed
+to make a statement here true does not go in; a behaviour not stated here is not
+implemented without adding the statement first.</p>
+<p>Draft 3, 2026-10-22. Written from a reading of every existing reader in David Ackerman's
+repos and the answers of the chunkmirage, cellmap-flow, cellmap-analyze, mesh-n-bone,
+CineMap, liconn-err, registration-station, salamander and cellmap-analyze-scripts
+sessions; the write side (0.2) and the grid side (0.3) were added on 2026-10-22 from the
+five writer sessions' answers and the line census in section 6. Decisions still open are
+in section 7. Version map: 0.1 reads (Behaviours 1 to 9); 0.2 metadata and placed
+creation (10 to 16); 0.3 grids and blocks (17 to 19). Nothing in 0.2 or 0.3 changes a
+0.1 behaviour.</p>
+<h2 id="0-why-this-exists">0. Why this exists</h2>
+<p>Seven readers across those repos open the same zarr v2, zarr v3, N5 and precomputed
+volumes through tensorstore and each parses the OME-NGFF, COSEM N5 and precomputed
+metadata by hand: cellmap-flow (<code>image_data_interface.py</code> plus <code>io/</code>, 2.7k lines),
+cellmap-analyze (765), mesh-n-bone (346), chunkmirage (<code>tensorstore_source.py</code>, 649),
+CineMap (<code>slice_loader.py</code>), liconn-err (<code>dataset.py</code>) and registration-station
+(zarr-python, by hand); salamander's analysis scripts parse OME multiscales by hand three
+more times. They disagree on the one rule that matters, the half voxel between a stored
+corner and a stored centre: all of them place an OME translation at voxel 0's centre, but
+mesh-n-bone also reads funlib's <code>offset</code> and precomputed's <code>voxel_offset</code> as centres (both
+store the corner) and ignores COSEM <code>translate</code> and <code>downsamplingFactors</code>, CineMap's
+<code>extent_nm()</code> and c-elegans' camera code treat the translation as a corner while their
+reads treat it as the centre, cellmap-flow learned the OME rule in PR #103 after shipping
+without it (salamander's predictions were half a voxel off until then), and chunkmirage's
+TypeScript twin handles N5 differently from its Python.</p>
+<p>funlib.persistence has the right vocabulary but the wrong backend for these consumers.
+What its <code>Array</code> lacks, per cellmap-flow's session: tensorstore (s3, gs and http
+throughput, the precomputed and zarr v3 drivers; <code>Array</code> reads through zarr-python and
+dask, and a dask scheduler has no place in a per-chunk model server); reads that run past
+the array and come back padded (<code>Array.__getitem__</code> raises on a Roi outside the data;
+model halos at a volume's edge need the padding); level selection by target voxel size
+with an explicit mismatch policy; the OME centre rule (funlib's Roi offset is a corner);
+per-read retries and one shared, capped tensorstore context. Add the zarr-python
+major-version split across the repos (cellmap-flow pins 2.18.4; cellmap-analyze and
+mesh-n-bone pin &gt;= 3.0.8; cellmap-analyze dropped funlib.persistence in 2026-04 because it
+lacked zarr v3), the integer-only <code>Coordinate</code>, and pymongo, psycopg2 and dask as
+dependencies of a reader. Nothing outside Janelia fills the niche: webknossos-libs,
+neu-vol, cloud-volume, brainhops, yaozarrs and xarray-tensorstore were all checked on
+2026-10-21 and each is a pipeline or a different model, not this dependency.</p>
+<p>So: one small package, one class that serves both kinds of consumer, one written rule for
+the half voxel, and conformance tests the TypeScript side can run too.</p>
+<p>The write side has the same disease in a smaller body. Measured on 2026-10-22: five repos
+generate OME multiscales documents by hand (cellmap-analyze, mesh-n-bone, cellmap-flow,
+registration-station, chunkmirage; 440 lines between them), five create placed arrays with
+five different answers to "it already exists" (an unverified adopt zeroed 180 rows of a
+registration-station field), four encode chunk keys, and every write-side bug their
+sessions could name was a metadata bug: a scale factor that ignored the corner
+(cellmap-analyze #93), a level translation that ignored the ROI origin (mesh-n-bone, on
+master), OME 0.4 attributes inside zarr v3 groups (two repos), a hard-coded nanometre, a
+funlib <code>offset</code> holding a centre. The bytes were never the problem: they go through
+tensorstore or zarr-python and nobody reported a byte-level bug. So 0.2 takes the metadata
+and the placed creation, and nothing else of writing.</p>
+<h2 id="1-scope">1. Scope</h2>
+<p>One class, <code>WorldArray</code>, with two faces. No legacy names: <code>ImageDataInterface</code>,
+<code>open_ds_tensorstore</code> and <code>to_ndarray_ts</code> are not in this package; each migrating repo keeps
+whatever shim it needs in its own subclass, for as long as it needs it.</p>
+<ul>
+<li><strong>Index space, native units</strong> (<code>units=None</code>): <code>.ts</code>, <code>.meta</code> and <code>read_index</code>. For
+  chunkmirage, CineMap, liconn-err, registration-station and any tool that works in its own
+  coordinate frame. The metadata is read exactly as chunkmirage's
+  <code>docs/concepts/formats.md</code> "Stored sources" specifies.</li>
+<li><strong>World coordinates</strong> (<code>units="nanometer"</code> by default, or any unit per axis kind):
+  <code>voxel_size</code>, <code>translation</code>, <code>corner</code>, level selection by voxel size, <code>read</code> of world
+  boxes with padding, optional resampling and retries. For cellmap-flow, cellmap-analyze and
+  mesh-n-bone, which all speak nm and Rois today, and equally for a <code>(t, c, z, y, x)</code>
+  light-microscopy series or a <code>(time, lat, lon)</code> climate array.</li>
+</ul>
+<p>Neither face assumes microscopy or three dimensions. Any number of axes, any axis names,
+any units: what the store says is what the package reports, converted only on the axes it
+is asked to convert.</p>
+<p>0.1 reads. 0.2 adds the write side's metadata and placed creation (Behaviours 10 to 16):
+the OME document builder and the level rule, chunk keys, <code>create</code>, opening for write,
+aligned writes, <code>add_level</code>. 0.3 adds grids (Behaviours 17 to 19): a store-less <code>Grid</code>,
+the block iterator every blockwise repo writes for itself, <code>write_chunk</code>, the factor
+schedule and the public path helpers. Dependencies at every version: <code>tensorstore</code>
+(<code>&gt;=0.1.60</code>; <code>&gt;=0.1.68</code> from 0.8, the first with <code>file_io_locking</code>), <code>numpy</code>. <strong>No <code>zarr</code>, no <code>dask</code>, no <code>pydantic</code>, no <code>funlib</code>.</strong> The package is float-only; a
+consumer that works in integer Rois builds them in its own subclass (section 6). Python &gt;=
+3.10 with no 3.11-only syntax, no upper bounds on numpy or tensorstore.</p>
+<p>The package never deletes, truncates or overwrites: there is no <code>overwrite</code>, <code>delete</code> or
+<code>mode="w"</code> anywhere in its API (Behaviour 11). What it writes is OME-NGFF zarr, v2 with OME
+0.4 or v3 with OME 0.5, and nothing else (Convention 6).</p>
+<p>Not in scope, by decision, each with its consumer named so it is not forgotten:</p>
+<table>
+<thead>
+<tr>
+<th>Out of scope</th>
+<th>Who asked</th>
+<th>Where it lives instead</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deleting or overwriting arrays and groups, following symlinks, "rmtree before rerun"</td>
+<td>every writer repo, by consensus on 2026-10-22</td>
+<td>each repo's own policy: cellmap-analyze's <code>delete_tmp_dir_blockwise</code>, mesh-n-bone's <code>_safely_remove_pyramid</code>, cellmap-flow's never-delete rules</td>
+</tr>
+<tr>
+<td>Downsampling and its reducers (mode, mean, median, min, max, majority vote), the pyramid compute</td>
+<td>cellmap-analyze #90, mesh-n-bone, registration-station, cellmap-flow</td>
+<td>each repo, per block, through <code>write_index</code>; <code>add_level</code> writes a level's metadata and empty array only</td>
+</tr>
+<tr>
+<td>Block scheduling: dask, daisy, LSF, OOM retry, memory sizing</td>
+<td>every blockwise repo</td>
+<td>each repo; 0.3's iterator yields boxes and runs nothing</td>
+</tr>
+<tr>
+<td>Writing N5 or precomputed; serving-policy documents (<code>.zarray</code> codecs, <code>info</code>); writing exactly the bytes served</td>
+<td>chunkmirage</td>
+<td>chunkmirage's frontends and <code>materialize</code>, which call the builder and <code>chunk_key</code> for the placement half</td>
+</tr>
+<tr>
+<td>Arbitrary affines, BigStitcher XML, OME 0.6 coordinate systems and RFC-5 transforms</td>
+<td>liconn-err, chunkmirage</td>
+<td>liconn-err; chunkmirage's <code>ngff.py</code> and <code>scene://</code>. The reader takes an OME 0.6 group's intrinsic system (Convention 4) and no more</td>
+</tr>
+<tr>
+<td>Oblique-plane sampling, chunk-grouped gather</td>
+<td>CineMap</td>
+<td>CineMap, on top of <code>.ts</code> and <code>chunks_covering</code></td>
+</tr>
+<tr>
+<td>CF packing (<code>scale_factor</code>, <code>add_offset</code>, <code>_FillValue</code>), xarray coordinate arrays</td>
+<td>chunkmirage</td>
+<td>chunkmirage, from <code>ArrayMeta.attrs</code>, <code>group_attrs</code> and <code>parent</code>, which the package exposes raw</td>
+</tr>
+<tr>
+<td>HDF5, GeoTIFF</td>
+<td>chunkmirage</td>
+<td>chunkmirage</td>
+</tr>
+<tr>
+<td>Normalisation chains, model-facing defaults</td>
+<td>cellmap-flow</td>
+<td>a <code>cellmap_flow</code> subclass of <code>WorldArray</code></td>
+</tr>
+<tr>
+<td>The integer-scaled frame</td>
+<td>cellmap-analyze</td>
+<td>dropped, not moved: its commands work in voxel indices of their own output grid and read inputs with <code>read(box, voxel_size=, anchor=)</code> (its session's decision, 2026-10-22); mesh-n-bone and cellmap-flow keep their own funlib bridges</td>
+</tr>
+<tr>
+<td>Legacy write documents (funlib <code>voxel_size</code>/<code>offset</code>, COSEM <code>transform</code>) as package output</td>
+<td>cellmap-analyze, whose outputs dacapo may read through funlib</td>
+<td>the <code>attrs</code> passthrough of <code>create</code>; Open question 5</td>
+</tr>
+<tr>
+<td>Decoded-chunk caches beyond tensorstore's pool, demand queues, serving</td>
+<td>chunkmirage</td>
+<td>chunkmirage</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-public-api">2. Public API</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">worldarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">wa</span>
+
+<span class="n">vol</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">,</span>                <span class="c1"># an array, a level under a multiscale group, or a group</span>
+    <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>          <span class="c1"># a level name ("s1"), a position (0 = the first listed, "first"), or None;</span>
+                         <span class="c1">#   ignored, with a warning, for an array path</span>
+    <span class="n">voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>     <span class="c1"># the size to read at, in `units`: picks the level (level_mode); see on_mismatch</span>
+    <span class="n">level_mode</span><span class="o">=</span><span class="s2">"floor"</span><span class="p">,</span>  <span class="c1"># "floor" | "finer" | "exact" | "nearest" | "resample" (Behaviour 3)</span>
+    <span class="n">on_mismatch</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span> <span class="c1"># when no level has `voxel_size`: "error" (list the levels) | "resample" (read the</span>
+                         <span class="c1">#   level `level_mode` picks and resample it, Behaviour 4) | "relabel" (read it voxel</span>
+                         <span class="c1">#   for voxel and call its voxels `voxel_size`; no resampling, the grid is relabelled;</span>
+                         <span class="c1">#   cellmap-flow's default, which its finetune reads rely on) | "keep" (the level</span>
+                         <span class="c1">#   `level_mode` picks, at its own voxel size: cellmap-analyze's target_voxel_size)</span>
+    <span class="n">padding</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>           <span class="c1"># any value the dtype holds (0, NaN, a uint64 sentinel) | "edge": what fills the</span>
+                         <span class="c1">#   part of a box outside the data</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>    <span class="c1"># "nearest" | "linear": the resampling kernel; no dtype heuristic (Behaviour 5)</span>
+    <span class="n">select</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>         <span class="c1"># {"c": 0, "t": 0}: pin non-spatial axes to one index; else they are kept whole</span>
+    <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span>   <span class="c1"># what world coordinates are in on spatial axes; a dict per axis kind</span>
+                         <span class="c1">#   ({"space": "micrometer", "time": "second"}); None keeps the store's own units</span>
+    <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># a tensorstore.Context; default shared_context(0)</span>
+    <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># a Retry; default Retry()</span>
+    <span class="n">metadata_conflicts</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span>  <span class="c1"># a per-array voxel_size disagreeing with the OME scale: "error" | "warn"</span>
+    <span class="n">base_voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># declare level 0's true voxel size (in base_units): every level's spatial voxel</span>
+    <span class="n">base_units</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>       <span class="c1">#   size and translation scale with it, for stores whose metadata is in voxels or unitless</span>
+    <span class="n">anchor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>           <span class="c1"># where a target voxel corner lies when resampling; the source corner by default</span>
+    <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># a callable applied to stored values before resampling and padding (a norm chain)</span>
+                         <span class="c1">#   read(..., post_transform=) runs one after resampling instead, still before padding</span>
+    <span class="n">strict_units</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>     <span class="c1"># False: an unknown unit ("pixel") is taken as the target unit, with a warning</span>
+<span class="p">)</span>
+
+<span class="n">vol</span><span class="o">.</span><span class="n">ts</span>             <span class="c1"># tensorstore.TensorStore: C-order axes, origin 0, selected axes dropped</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">meta</span>           <span class="c1"># ArrayMeta in the store's own units</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">grid</span>           <span class="c1"># ArrayMeta in the requested units, every axis</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">spatial</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">level_name</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">levels</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">remote</span>
+                   <span class="c1"># shape is the stored shape, or with a resample target the target voxels covering the data</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">source_voxel_size</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">source_translation</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">resampled</span>
+                   <span class="c1"># the stored level's voxel size and translation (0.4), also under resample and relabel; whether</span>
+                   <span class="c1">#   reads resample to a target</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">list_chunks</span><span class="p">()</span>  <span class="c1"># the chunk indices that exist in storage, by listing keys (zarr v2/v3, N5, unsharded precomputed)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">path</span>           <span class="c1"># what the caller passed (a group, say); vol.level_path is the array actually opened</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">voxel_size</span>     <span class="c1"># tuple[float] in `units`, spatial axes, the array's order (zyx for a volume)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">translation</span>    <span class="c1"># tuple[float] in `units`: the CENTRE of voxel 0        (OME-NGFF's word, OME-NGFF's meaning)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">corner</span>         <span class="c1"># tuple[float] in `units`: translation - voxel_size / 2 (what funlib, daisy, Neuroglancer call the offset)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">retries</span>        <span class="c1"># settable after construction (cellmap-analyze scales the timeout per handle)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="n">vol</span><span class="o">.</span><span class="n">method</span>   <span class="c1"># the defaults `read` uses; settable</span>
+
+<span class="n">vol</span><span class="o">.</span><span class="n">read_index</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">select</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                                    <span class="c1"># select pins axes for this read only; begin/end cover the rest</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">anchor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+         <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">post_transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">select</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># select pins non-spatial axes for this read</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">index_box</span><span class="p">(</span><span class="n">box</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>  <span class="c1"># the voxels a world box selects on this grid, for snapping a box first</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">chunks_covering</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>     <span class="c1"># chunk indices a voxel box touches</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">reopen</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WorldArray</span>   <span class="c1"># the same array on another context (a worker changing its concurrency)</span>
+
+<span class="n">pyr</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open_pyramid</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span> <span class="n">select</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">pyr</span><span class="o">.</span><span class="n">names</span><span class="p">;</span> <span class="n">pyr</span><span class="o">.</span><span class="n">levels</span><span class="p">;</span> <span class="n">pyr</span><span class="o">.</span><span class="n">by_name</span><span class="p">(</span><span class="s2">"s1"</span><span class="p">);</span> <span class="n">pyr</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"floor"</span><span class="p">)</span>
+<span class="n">pyr</span><span class="o">.</span><span class="n">metas</span><span class="p">()</span> <span class="p">;</span> <span class="n">pyr</span><span class="o">.</span><span class="n">level_meta</span><span class="p">(</span><span class="s2">"s1"</span><span class="p">)</span>   <span class="c1"># ArrayMeta per level from the documents alone: shape, dtype, chunks (a sharded</span>
+                    <span class="c1">#   array's inner chunk), fill and placement, with no tensorstore opened</span>
+<span class="n">pyr</span><span class="o">.</span><span class="n">placements</span><span class="p">()</span>    <span class="c1"># (name, spatial voxel size, spatial translation) per level from the group's own document</span>
+<span class="n">pyr</span><span class="o">.</span><span class="n">voxel_sizes</span><span class="p">()</span> <span class="p">;</span> <span class="n">pyr</span><span class="o">.</span><span class="n">translations</span><span class="p">()</span>   <span class="c1">#   where it lists the levels (OME-NGFF, COSEM N5, precomputed), so</span>
+                    <span class="c1">#   choosing or placing a level opens nothing, whether the pyramid was opened by its</span>
+                    <span class="c1">#   group path or by one of its level paths; else by opening each level</span>
+
+<span class="n">wa</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">open</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayMeta</span>   <span class="c1"># open=False: from the documents alone</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">missing_ok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Node</span> <span class="o">|</span> <span class="kc">None</span>   <span class="c1"># format, kind (array|group), path, docs, scale_key; .attrs (raw user</span>
+                                                   <span class="c1">#   attributes), .multiscales (OME 0.5's `ome` unwrapped)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">open_tensorstore</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">tensorstore</span><span class="o">.</span><span class="n">TensorStore</span>   <span class="c1"># reads no world metadata, so an</span>
+                                                   <span class="c1">#   array with odd placement attributes (a coordinate array) still opens</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">corner_to_centre</span><span class="p">(</span><span class="n">corner</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">default_axes</span><span class="p">(</span><span class="n">ndim</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">index_range</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">units</span><span class="o">.</span><span class="n">TABLE</span>      <span class="c1"># the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">select_level</span><span class="p">(</span><span class="n">levels</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">Box</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">Retry</span><span class="p">(</span><span class="n">max_attempts</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">base_delay</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">shared_context</span><span class="p">(</span><span class="n">cache_bytes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fsync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="s2">"none"</span><span class="p">,</span> <span class="n">file_io_floor</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">capped_context</span><span class="p">(</span><span class="n">cache_bytes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">concurrency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">file_io</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fsync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="s2">"none"</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">capped_context_spec</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+                    <span class="c1"># threads: None = thread_budget() for decoding and at least file_io_floor for file I/O (0.8; the</span>
+                    <span class="c1">#   argument 0.9), N = that many, 0 = tensorstore's own pool sizes (0.6); fsync and locking:</span>
+                    <span class="c1">#   tensorstore's file_io_sync and file_io_locking mode, off and "none" in every context the</span>
+                    <span class="c1">#   package makes (0.8, Behaviour 7)</span>
+                    <span class="c1"># network=False caps decoding and local file I/O only, leaving tensorstore's request pools alone</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">list_chunk_keys</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">separator</span><span class="o">=</span><span class="s2">"."</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># chunk indices present under a path, from its keys alone: no</span>
+                    <span class="c1">#   metadata document needed, so a directory of chunk files with no .zarray lists too</span>
+</code></pre></div>
+<p><code>ArrayMeta</code> is a frozen dataclass with one entry per axis, in the array's C order, and
+deliberately the same field names as chunkmirage's <code>ArrayInfo</code>: <code>shape</code>, <code>dtype</code>,
+<code>chunk_shape</code> (tensorstore's read chunk), <code>axes</code> (as stored; <code>("t","c","z","y","x")[-ndim:]</code>
+when the store names none), <code>axes_named</code>, <code>units</code> (as stored, any string; <code>""</code> when none),
+<code>voxel_size</code> (one index step, in <code>units</code>; 1.0 on unitless axes), <code>translation</code> (the centre
+of voxel 0, in <code>units</code>; 0.0 where the store gives none), <code>format</code>, <code>path</code> (normalised),
+<code>parent</code>, <code>attrs</code> and <code>group_attrs</code> (raw), and <code>placed_by</code>: which rule gave <code>voxel_size</code> and
+<code>translation</code>, one of <code>ome</code>, <code>cosem</code>, <code>funlib</code>, <code>n5</code>, <code>precomputed</code>, <code>dimension_units</code>, or
+None when nothing placed the array (then voxel size is 1 with the <strong>corner at the origin</strong>,
+translation 0.5, as Neuroglancer draws a plain zarr), and <code>fill_value</code> as the store reports
+it. Derived: <code>ndim</code>, <code>spatial</code> (indices of the axes
+named z, y or x when any are; else the last three), <code>corner</code>, <code>in_units(space=, time=)</code>,
+<code>in_nm()</code>, <code>drop_axis</code>.</p>
+<p>A <strong>box</strong> for <code>read</code> is any of: a <code>(begin, end)</code> pair of float tuples in <code>units</code>, half-open
+per axis, over the spatial axes, or over every axis when it has one entry per axis (a time
+window and a spatial box at once); anything with <code>.begin</code> and <code>.end</code>, or <code>.offset</code> and
+<code>.shape</code> (so a funlib <code>Roi</code> works, duck-typed, without the package importing funlib); or
+<code>wa.Box</code>. <code>Box</code> carries funlib's Roi vocabulary on floats, half-open: <code>shape</code>, <code>centre</code>,
+<code>empty</code>, <code>intersect</code>, <code>union</code>, <code>contains</code> (a point or a box), <code>grow(before, after=None)</code>,
+<code>shift</code>, <code>snap(voxel_size, translation, mode="grow" | "shrink" | "closest")</code> to a grid's
+voxel corners, <code>to_index</code> (the centre rule) and <code>Box.from_index</code>; <code>vol.box</code> is the array's
+own extent on the spatial axes, <code>[corner, corner + shape * voxel_size)</code>, what funlib calls
+the array's roi; with a resample target, the target voxels <code>shape</code> counts, so <code>read(vol.box)</code>
+returns <code>shape</code> and equals <code>Grid.from_meta(meta, voxel_size=t).box</code>. So <code>vol.read(vol.box.intersect(roi).snap(vol.voxel_size, vol.translation))</code>
+is the migration of a clipped, snapped Roi read, without funlib.</p>
+<p>There is no <code>offset</code> attribute anywhere in this API, because that word means the corner in
+funlib and the centre in OME; <code>translation</code> and <code>corner</code> are the two names for the two
+things. <code>path</code> names the array that is read: an array path is that array whatever <code>voxel_size</code>
+asks for (it resamples or relabels in place, never hops to a sibling level); only a group
+path chooses a level. <code>level="first"</code> or <code>0</code> on an array path is silently the array.
+There is no funlib <code>Roi</code> on the way out either: an integer corner-based Roi cannot
+hold a 10.48 nm grid, nor a 5 nm grid with translation 0 (corner -2.5), so a bridge that
+returned one would raise on inputs cellmap-analyze reads every day. A consumer that works
+in integer Rois builds them from <code>corner</code>, <code>voxel_size</code> and <code>shape</code> in its own subclass,
+where it also chooses the integer scale factor that makes the corner whole.</p>
+<p><code>shared_context(cache_bytes, threads=None)</code> is one <code>tensorstore.Context</code> per budget and
+thread limit for the process, so the levels of a pyramid and repeat opens share one cache
+pool; the default budget is 0. Its decoding pool is sized by <code>thread_budget()</code> (0.5) and
+its file I/O pool by that or <code>file_io_floor</code> (8), whichever is larger (0.8; the argument
+0.9), or both by <code>threads</code> when given, <code>0</code> leaving tensorstore's own sizes (0.6, Behaviour 7).
+<code>capped_context</code> is mesh-n-bone's worker-process context (every tensorstore concurrency
+resource limited, cache off); it returns a <strong>new</strong> context per call, as those workers
+inline the spec into every open today, and <code>capped_context_spec</code> exports the dict for
+callers building their own opens, writers included. <code>Retry</code> sizes the per-attempt timeout
+from the read when none is given (Behaviour 6).</p>
+<h3 id="02-metadata-and-placed-creation">0.2: metadata and placed creation</h3>
+<p>Module <code>worldarray.write</code>, re-exported at the top level. Nothing here is imported by the
+read side, so a read-only consumer sees no change.</p>
+<div class="highlight"><pre><span></span><code><span class="n">doc</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">ome_multiscales</span><span class="p">(</span>
+    <span class="n">axes</span><span class="p">,</span>                 <span class="c1"># axis names in the array's C order: ("z","y","x"), ("c","z","y","x"), ("t","c","z","y","x")</span>
+        <span class="n">units</span><span class="p">,</span>                <span class="c1"># per axis ("nanometer"; "" on a channel axis) or by kind {"space": "nanometer", "time": "second"};</span>
+                          <span class="c1">#   written in OME's names ("nm" -&gt; "nanometer", wa.units.ome_name), an unknown unit as given</span>
+    <span class="n">levels</span><span class="p">,</span>               <span class="c1"># [("s0", voxel_size, translation), ...]: one explicit placement per level over the spatial axes</span>
+                          <span class="c1">#   (or every axis). Never derived here: levels in the wild carry their own translations and</span>
+                          <span class="c1">#   non-whole factors (chunkmirage's pyramids)</span>
+    <span class="n">version</span><span class="o">=</span><span class="s2">"0.5"</span><span class="p">,</span>        <span class="c1"># "0.5" (zarr v3: attributes["ome"]) | "0.4" (zarr v2: attributes["multiscales"])</span>
+    <span class="n">axis_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># per axis "space" | "time" | "channel"; default from the name (z y x space, t time, c channel)</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>   <span class="c1"># the multiscale's own fields; `type` (the downsampling method) written when given</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span>                 <span class="c1"># the complete group attributes to write; `wa.metadata` reads them back exactly (Behaviour 10)</span>
+
+<span class="n">wa</span><span class="o">.</span><span class="n">level_placement</span><span class="p">(</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="n">factors</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">)</span>
+                          <span class="c1"># the level whose voxel j covers source voxels origin + j f .. origin + (j + 1) f - 1 on each axis:</span>
+                          <span class="c1">#   (voxel_size * f, translation + voxel_size * (origin + (f - 1) / 2)). Convention 1's BigDataViewer</span>
+                          <span class="c1">#   rule inverted, and the centre Behaviour 4's block mean produces</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">level_shape</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">factors</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">shape</span>    <span class="c1"># ceil((n - origin) / f) per axis, the quotient snapped to a whole</span>
+                                                     <span class="c1">#   number within 1e-6 first (0.3 / 0.1 is a factor of 3)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">units</span><span class="o">.</span><span class="n">ome_name</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>   <span class="c1"># OME's name for any spelling the unit table knows ("nanometer" for "nm"); unknown raises</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">ensure_group_entry</span><span class="p">(</span><span class="n">group_path</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span> <span class="n">axis_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                      <span class="n">group_attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># list an array the package did not create (a symlinked s0, a level</span>
+                          <span class="c1">#   filled before it is listed): the group document's entry for `name` added or replaced, the</span>
+                          <span class="c1">#   document and missing ancestors created, nothing written when the entry already says the same</span>
+                          <span class="c1">#   (Behaviour 12). `create` and `add_level` call this</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">codecs_of</span><span class="p">(</span><span class="n">path_or_node</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">codecs</span><span class="p">,</span> <span class="n">shards</span><span class="p">)</span>   <span class="c1"># an array's codecs in its format's dialect and its shard shape, for</span>
+                          <span class="c1">#   a mirror created like it (cellmap-flow's sync)</span>
+
+<span class="n">vol</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">,</span>                 <span class="c1"># ".../vol.zarr/s0": the last component is the level, its parent the multiscale group, made if absent</span>
+    <span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span>
+    <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span>   <span class="c1"># spatial placement in `units`, or one entry per axis</span>
+    <span class="n">axes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span>   <span class="c1"># as ome_multiscales; axes default to default_axes(ndim)</span>
+    <span class="n">chunks</span><span class="o">=...</span><span class="p">,</span>           <span class="c1"># required: the storage chunk (the inner chunk when sharded). The package never picks a chunk shape</span>
+    <span class="n">shards</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>          <span class="c1"># zarr v3 only: the shard shape, a whole number of chunks per axis</span>
+    <span class="n">fill_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">codecs</span><span class="o">=</span><span class="s2">"zstd"</span><span class="p">,</span>        <span class="c1"># "zstd" (level 3, which is what zarr-python's default `zstd(level=0)` means) | "none" | the format's</span>
+                          <span class="c1">#   own JSON: a zarr v2 `compressor` dict or a zarr v3 `codecs` list</span>
+        <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>          <span class="c1"># "zarr3" | "zarr2"; default the nearest existing ancestor group's format, else "zarr3"; missing</span>
+                          <span class="c1">#   ancestors up to the ".zarr" root get bare group documents (Behaviour 11).</span>
+                          <span class="c1">#   OME 0.5 goes with v3 and 0.4 with v2, always</span>
+    <span class="n">attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>           <span class="c1"># extra array attributes, merged into the array's own</span>
+    <span class="n">group_attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>     <span class="c1"># extra group attributes, merged; no one else's key is dropped or rewritten (Behaviour 12)</span>
+    <span class="n">exists</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span>       <span class="c1"># "error": anything already at `path` raises | "adopt": an identical array (shape, dtype, chunks,</span>
+                          <span class="c1">#   shards, placement within rtol 1e-6, and from 0.4 every key of `attrs` holding the value given)</span>
+                          <span class="c1">#   is opened for writing; a different one raises naming each</span>
+                                                    <span class="c1">#   difference. There is no third value. An adopt writes no group document when the entry</span>
+                          <span class="c1">#   already says the same (Behaviour 12)</span>
+    <span class="n">store_fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>     <span class="c1"># True stores write units equal to fill_value instead of leaving them absent</span>
+    <span class="n">separator</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>       <span class="c1"># zarr v2 dimension_separator, zarr v3 chunk-key separator; the format's default when None</span>
+    <span class="n">axis_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># as ome_multiscales</span>
+    <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WorldArray</span>           <span class="c1"># writable; every read-side property and method as before</span>
+
+<span class="n">vol</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r+"</span><span class="p">,</span> <span class="n">store_fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>   <span class="c1"># an existing array for writing; vol.writable; the metadata</span>
+                                                                                                                <span class="c1">#   rules of mode "r" unchanged; a handle pickles by its arguments</span>
+                                                        <span class="c1">#   and its context's spec (Behaviour 11)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">write_index</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>   <span class="c1"># whole write units only (Behaviour 13) unless partial</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>                <span class="c1"># a world box by Behaviour 2, then write_index; no padding, no resampling</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">write_shape</span>                                    <span class="c1"># the unit one writer may own: the shard shape when sharded, else the chunk shape</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">chunks_covering</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">write</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>       <span class="c1"># write=True: on the write-unit grid</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">chunk_key</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="p">;</span> <span class="n">vol</span><span class="o">.</span><span class="n">parse_chunk_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>   <span class="c1"># storage keys of write units (Behaviour 15)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">chunk_key</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="n">separator</span><span class="o">=</span><span class="s2">"/"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"default"</span><span class="p">,</span> <span class="n">chunk_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">parse_chunk_key</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>    <span class="c1"># the same from the array's facts alone, for an array that is</span>
+                                                   <span class="c1">#   served from nowhere (chunkmirage) or not yet created</span>
+
+<span class="n">pyr</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">open_pyramid</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r+"</span><span class="p">)</span>
+<span class="n">pyr</span><span class="o">.</span><span class="n">add_level</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">factors</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">translation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">shards</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">codecs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fill_value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="s2">"error"</span><span class="p">,</span> <span class="n">from_level</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WorldArray</span>
+                          <span class="c1"># the level's dataset entry and its empty array: placement by level_placement over `from_level`</span>
+                          <span class="c1">#   (the finest listed when None) unless given explicitly, shape by level_shape, dtype, chunks,</span>
+                          <span class="c1">#   shards, codecs and fill copied from that level unless given; no voxel data; one process at a time</span>
+</code></pre></div>
+<h3 id="03-grids-and-blocks">0.3: grids and blocks</h3>
+<p>Module <code>worldarray.grid</code>, re-exported at the top level.</p>
+<div class="highlight"><pre><span></span><code><span class="n">g</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">Grid</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">translation</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"nanometer"</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shards</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                          <span class="c1"># a store-less grid with box, corner, index_box, chunks_covering, write_shape and blocks as on a</span>
+                          <span class="c1">#   WorldArray, and meta(dtype) -&gt; ArrayMeta; wa.create(path, grid=g, dtype=...) creates from it</span>
+<span class="n">g</span> <span class="o">=</span> <span class="n">wa</span><span class="o">.</span><span class="n">Grid</span><span class="o">.</span><span class="n">from_meta</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># another array's grid, or Behaviour 4's target grid over it at `voxel_size`</span>
+
+<span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">wa</span><span class="o">.</span><span class="n">blocks</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">block_shape</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">box</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>   <span class="c1"># also vol.blocks(...) and g.blocks(...)</span>
+    <span class="n">b</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">id</span>         <span class="c1"># position on the block grid in C order, and its linear id</span>
+    <span class="n">b</span><span class="o">.</span><span class="n">begin</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">end</span>        <span class="c1"># the write box: these tile [0, shape), or `box`, with no overlap and no gap; the last one clipped</span>
+    <span class="n">b</span><span class="o">.</span><span class="n">read_begin</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">read_end</span>   <span class="c1"># the write box grown by `context` on each side, clipped to the array when `clip`</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span> <span class="p">;</span> <span class="n">blocks</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="p">;</span> <span class="n">blocks</span><span class="o">.</span><span class="n">index_of</span><span class="p">(</span><span class="n">begin</span><span class="p">)</span>   <span class="c1"># count, by linear id, by a block's first voxel</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">write_chunk</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>       <span class="c1"># one whole write unit by its index; data's shape is that unit's (clipped) shape</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">level_factors</span><span class="p">(</span><span class="n">voxel_size</span><span class="p">,</span> <span class="n">ratio</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">max_levels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stop_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span>
+                          <span class="c1"># per level, factor 2 on every axis within `ratio` of the finest voxel size and 1 elsewhere, compounding,</span>
+                          <span class="c1">#   until max_levels or until a level fits stop_shape (mesh-n-bone's schedule, adopted by cellmap-analyze #90)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="n">parts</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">parent</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="p">;</span> <span class="n">wa</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>   <span class="c1"># URL-aware path helpers, public</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">units</span><span class="o">.</span><span class="n">abbreviation</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>   <span class="c1"># the OME short form, "nm" for any spelling of nanometre the table knows</span>
+</code></pre></div>
+<h3 id="04-reading-onto-a-grid">0.4: reading onto a grid</h3>
+<div class="highlight"><pre><span></span><code><span class="n">vol</span><span class="o">.</span><span class="n">read_onto</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">begin</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">post_transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">select</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                          <span class="c1"># voxels [begin, end) of a Grid's spatial axes (all of it when None), read from this array:</span>
+                          <span class="c1">#   exactly that shape, by the centre rule at the array's voxel size, else resampled onto the</span>
+                          <span class="c1">#   grid anchored at its corner (Behaviour 20)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">write_index</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="p">;</span> <span class="n">vol</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="p">;</span> <span class="n">vol</span><span class="o">.</span><span class="n">write_chunk</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                          <span class="c1"># a scalar fills the box, converted to the dtype only when its value survives (Behaviour 13)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">source_translation</span>    <span class="c1"># the stored level's translation in `units`, beside source_voxel_size, under resample and relabel</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">attrs</span><span class="o">=</span><span class="p">{</span><span class="o">...</span><span class="p">},</span> <span class="n">exists</span><span class="o">=</span><span class="s2">"adopt"</span><span class="p">)</span>   <span class="c1"># an adopt also compares the keys of `attrs` (Behaviour 11)</span>
+</code></pre></div>
+<h3 id="05-writes-that-cannot-hang">0.5: writes that cannot hang</h3>
+<div class="highlight"><pre><span></span><code><span class="n">vol</span><span class="o">.</span><span class="n">write_index</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">vol</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="p">;</span> <span class="n">vol</span><span class="o">.</span><span class="n">write_chunk</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                          <span class="c1"># timed out and retried as reads are: `retries`, else the handle's (Behaviour 6)</span>
+<span class="n">wa</span><span class="o">.</span><span class="n">thread_budget</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="c1"># threads for tensorstore's decoding and file I/O in this process: WORLDARRAY_THREADS (0.9),</span>
+                          <span class="c1">#   else OMP_NUM_THREADS, else LSB_DJOB_NUMPROC, else the CPUs it may run on (Behaviour 7)</span>
+                          <span class="c1"># every context the package makes or opens a store on is kicked once a second, whoever</span>
+                          <span class="c1">#   waits on it (Behaviour 6)</span>
+</code></pre></div>
+<h2 id="3-conventions">3. Conventions</h2>
+<p>These are the rules the package exists to hold in one place. They match chunkmirage's
+<code>docs/concepts/formats.md</code>, "Stored sources", which its TypeScript twin follows too; where
+this document and that one differ, fix one of them.</p>
+<ol>
+<li><strong>A translation is where voxel 0's centre is</strong>, as in OME-NGFF, COSEM's <code>transform</code> and
+   CF coordinates. Index <code>i</code> on an axis sits at <code>translation + i * voxel_size</code>; voxel <code>i</code>
+   covers <code>[translation + (i - 1/2) * voxel_size, translation + (i + 1/2) * voxel_size)</code>.
+   Formats that store voxel 0's <strong>corner</strong> are moved half a voxel along the spatial axes
+   on reading. An N5 level with <code>downsamplingFactors</code> and no offset sits as Neuroglancer
+   draws it, a pure scale of the base grid with every level's corner at the origin: level-L
+   voxel <code>i</code> covers full-resolution voxels <code>f*i .. f*i+f-1</code>, so its centre is <code>f*i + f/2</code>
+   full-resolution voxels from the origin and its translation <code>f / 2 * base</code>. BigDataViewer
+   centres voxel 0 on the origin instead, half a base voxel lower at every level; the shift
+   between levels, <code>(f - 1) / 2</code> base voxels, is the same in both and is the imglib2 rule
+   liconn-err and registration-station use. (Decided 2026-10-22, when mesh-n-bone found
+   that <code>pixelResolution</code> and <code>resolution</code> pyramids disagreed; 0.1.0 followed BigDataViewer
+   for <code>pixelResolution</code>.) The shift
+   applies only along axes named <code>z</code>, <code>y</code> or <code>x</code>, or the last three when axes are unnamed;
+   never along channel or time.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Stored</th>
+<th>Means</th>
+<th>Read as <code>translation</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OME-NGFF <code>translation</code> (zarr v2/v3)</td>
+<td>centre of voxel 0</td>
+<td>as is</td>
+</tr>
+<tr>
+<td>COSEM <code>transform.translate</code> (N5 or zarr)</td>
+<td>centre (fibsem-tools wrote it as the first sample's position; Neuroglancer ignores <code>transform</code> and <code>offset</code> on N5 entirely)</td>
+<td>as is</td>
+</tr>
+<tr>
+<td>funlib <code>offset</code> with <code>resolution</code>/<code>voxel_size</code> (N5 or zarr; <code>offset</code> missing = 0)</td>
+<td>corner</td>
+<td><code>offset + voxel_size / 2</code></td>
+</tr>
+<tr>
+<td>N5 <code>pixelResolution</code> or <code>resolution</code> x <code>downsamplingFactors f</code>, no offset</td>
+<td>corner at the origin at every level, as Neuroglancer draws N5</td>
+<td><code>f / 2 * pixelResolution</code></td>
+</tr>
+<tr>
+<td>precomputed <code>voxel_offset</code> x <code>resolution</code></td>
+<td>corner</td>
+<td><code>+ resolution / 2</code></td>
+</tr>
+<tr>
+<td>CF coordinate array (xarray zarr)</td>
+<td>sample position = centre</td>
+<td>as is (chunkmirage layers this)</td>
+</tr>
+<tr>
+<td>nothing at all</td>
+<td>Neuroglancer draws a plain array with its corner at the origin</td>
+<td>voxels of 1, translation 0.5</td>
+</tr>
+</tbody>
+</table>
+<p>Stored numbers are never rounded onto a grid: a funlib <code>offset</code> of 4 at 8 nm stays 4
+   (cellmap-flow rounded it to 8). A group's <code>multiscales</code> transform for an array outranks
+   the array's own <code>resolution</code> (chunkmirage's documented order), and an OME scale outranks
+   a per-array <code>voxel_size</code>.</p>
+<p>Neuroglancer does the same, so placement by <code>translation</code> matches what Neuroglancer
+   shows. Its zarr datasource (<code>src/datasource/zarr/ome.ts</code>, verified 2026-10-21) says: "In
+   OME's coordinate space, the origin of a voxel is its center, while in Neuroglancer it is
+   the 'lower' (in coordinates) corner. Translate by the physical size of half a voxel",
+   and does so. Its precomputed datasource draws voxel <code>i</code> over
+   <code>[(voxel_offset + i), (voxel_offset + i + 1)) * resolution</code>, whose centre is the table's
+   <code>(voxel_offset + 1/2) * resolution</code>. <code>corner</code> is Neuroglancer's internal lower corner of
+   voxel 0; a tool computing extents or camera positions from <code>translation</code> as if it were a
+   corner is half a voxel off from the viewer.</p>
+<ol>
+<li>
+<p><strong>Axis order is the store's C order; N5 and precomputed are transposed to it</strong> on read,
+   so <code>(z, y, x)</code> for a volume, <code>(c, z, y, x)</code> with channels, <code>(t, c, z, y, x)</code> for OME
+   0.5. Nothing is reordered beyond that transposition; <code>select</code> pins non-spatial axes. A
+   non-zero stored origin (precomputed <code>voxel_offset</code>) is moved to 0 in <code>.ts</code> and carried in
+   <code>translation</code>. \1 Sharded stores (zarr v3 <code>sharding_indexed</code>, sharded precomputed) read like any
+   other through tensorstore; <code>chunk_shape</code> is the inner read chunk, not the shard. Unnamed axes are called <code>("t", "c", "z", "y", "x")[-ndim:]</code> (chunkmirage's
+   default) with <code>axes_named</code> False, so a consumer can apply its own default instead.</p>
+</li>
+<li>
+<p><strong>Units are kept as stored and converted only on the axes a caller asks to convert</strong>
+   (<code>ArrayMeta.in_units(space=, time=)</code>, <code>in_nm()</code>, the <code>units</code> argument), through one table:
+   for length, American and British spellings, <code>nm</code>, <code>um</code>, <code>µm</code> (U+00B5), <code>μm</code> (U+03BC),
+   <code>mm</code>, <code>cm</code>, <code>m</code>, <code>km</code>, <code>angstrom</code>/<code>Å</code>, <code>pm</code>; for time, <code>s</code>/<code>second</code>, <code>ms</code>, <code>us</code>/<code>µs</code>, <code>ns</code>,
+   <code>minute</code>, <code>hour</code>, <code>day</code>. Any unit string on any axis is accepted and never rejected until
+   a conversion is asked for (<code>"s"</code>, <code>"m"</code>, <code>"degrees_north"</code>, <code>""</code>). A spatial axis with no
+   unit is taken as nanometres, with a <strong>warning once per array</strong> (every repo assumed this
+   silently; a BigDataViewer N5 whose unitless <code>resolution</code> is in micrometres would be read
+   a thousandfold too small, and the warning is what tells you; <code>base_voxel_size</code> is the
+   fix); an unknown unit string on an axis being converted is a <code>ValueError</code>, never silently the target unit; an axis not
+   being converted keeps its string. Voxel sizes and translations are floats and are never
+   rounded or truncated by the package: a 10.48 nm voxel stays 10.48. <code>snap_integral</code> is
+   used only to absorb float noise such as 9.9999999 before comparing or ceiling.</p>
+</li>
+<li>
+<p><strong>Metadata precedence per format, first match wins</strong> (chunkmirage's table):</p>
+</li>
+<li>zarr v2 / v3: the OME-NGFF <code>multiscales[0].datasets</code> entry whose <code>path</code> is this array,
+     matched <strong>by name never by position</strong>, in the parent group or, when the dataset path
+     has more than one component (<code>"seg/s0"</code>), in an ancestor up to four levels above; the
+     parent is read in both zarr formats, because a zarr v3 array inside a v2 group whose
+     <code>.zattrs</code> holds the multiscales is a layout in the wild. A parent that lists levels but
+     not this array warns, and the array is placed by its own attributes or not at all; composed with the
+     multiscale-level <code>coordinateTransformations</code> when present (0.4 and 0.5; under
+     <code>attributes.ome</code> in 0.5). An OME 0.6 group with <code>coordinateSystems</code> is read for its
+     intrinsic system and never raises, chunkmirage's rule: take the coordinate system named
+     by the dataset's first transformation's <code>output</code>, else the first system; read axes and
+     units from it; compose only the dataset's own <code>scale</code> and <code>translation</code>, unpacking a
+     <code>sequence</code>; ignore the multiscale-level transforms (they lead to other systems, which
+     chunkmirage's <code>scene://</code> applies itself) and any other transform type. Else the array's
+     own <code>resolution</code> / <code>voxel_size</code>, <code>offset</code>, <code>units</code>, <code>axis_names</code> (funlib) or <code>transform</code>
+     (COSEM), C order; else the same funlib keys on the parent group when the array carries
+     none (mesh-n-bone's inputs); else tensorstore's <code>dimension_units</code> attribute (zarr v3). Axes from
+     OME <code>axes</code>, <code>dimension_names</code> (zarr v3), <code>_ARRAY_DIMENSIONS</code> (xarray) or <code>axis_names</code>.</li>
+<li>N5: the array's <code>transform</code> (COSEM; C order unless <code>ordering: "F"</code>); else the parent's
+     <code>multiscales[].datasets[].transform</code> for this path; else funlib's <code>voxel_size</code> and
+     <code>offset</code> (array, else group), which zarr-python's N5 store leaves in the array's C
+     order, read by the zarr funlib rule above; else <code>pixelResolution</code> (both the
+     <code>{dimensions, unit}</code> form and a bare list) or <code>resolution</code>, from the array else the
+     group, times the level's <code>downsamplingFactors</code>; plus <code>offset</code>; axes from the <code>axes</code>
+     attribute. These lists are x-first. Without an <code>offset</code> the corner is at the origin at
+     every level whichever key gave the base (BigStitcher writes <code>resolution</code> and
+     <code>downsamplingFactors</code>; funlib writes <code>resolution</code> alone): translation <code>f / 2 * base</code>,
+     half a voxel of the level (Convention 1).</li>
+<li><strong>Short lists.</strong> A funlib, COSEM or N5 per-axis list shorter than the array (a 3-entry
+     <code>voxel_size</code> on a <code>(c, z, y, x)</code> prediction, which funlib's <code>prepare_ds(num_channels=)</code>
+     writes) covers the trailing axes; the leading axes get voxel size 1, translation 0,
+     unit <code>""</code> and the default axis names. OME lists must match the array exactly. A zarr
+     <code>offset</code> with no voxel size places the array with voxels of 1.</li>
+<li>
+<p>precomputed: <code>resolution</code> (nm, xyz) and <code>voxel_offset</code> (voxels, the corner) of the
+     scale; levels are the <code>scales</code> entries in order, chosen by <code>scale_index</code>, by key, or by
+     the last path segment when the path names a scale.
+   Everything the parser did not consume stays available in <code>attrs</code> and <code>group_attrs</code>.
+   When an array carries both an OME <code>translation</code> and an <code>offset</code>, the OME translation
+   wins and the <code>offset</code> is checked against it. Two values pass silently, because both are
+   written in the wild: <code>offset + voxel_size / 2 == translation</code> (funlib's <code>prepare_ds</code>
+   writes the corner <code>offset</code> beside the centre <code>translation</code> on <code>s0</code>) and
+   <code>offset == translation</code> (cellmap-analyze's <code>create_multiscale_dataset</code> writes the centre
+   as <code>offset</code>). Anything else logs a warning naming the path and both values; it is never
+   an error (cellmap-analyze raised on the funlib case until its PR #87 and salamander hit
+   that). Voxel size is stricter: an OME <code>scale</code> and a per-array <code>voxel_size</code> /
+   <code>resolution</code> that disagree beyond <code>rtol 1e-6</code> raise <code>ValueError</code>, as cellmap-analyze does
+   deliberately, because that is how stale attributes are caught and no choice between
+   them is safe; <code>metadata_conflicts="warn"</code> lets a server show the image anyway, with the
+   OME scale.</p>
+</li>
+<li>
+<p><strong>Stores are read through tensorstore's kvstore only</strong>, never zarr-python: <code>zarr.json</code>,
+   <code>.zarray</code>, <code>.zattrs</code>, <code>.zgroup</code>, <code>attributes.json</code>, <code>info</code>. Format detection probes keys
+   in this order: <code>zarr.json</code>, <code>.zarray</code>, <code>.zgroup</code>, <code>info</code>, <code>attributes.json</code>, the reads
+   begun all at once and the order deciding which document wins (0.7.1: one round trip
+   where an http open made five in a row, cellmap-flow's measurement); when none is
+   found, the parent is probed for <code>info</code> and the last path segment is taken as a
+   precomputed scale key (mesh-n-bone's case), then <code>s0</code> is probed so a group with no
+   document of its own (an N5 directory holding <code>s0, s1, ...</code>) is still a group. The
+   filesystem root, a URL's host root and a bucket root are never probed, and an ancestor
+   that answers anything but a document (a server root's 301) ends the search for a
+   multiscales entry quietly. Off Google Cloud, <code>GCE_METADATA_ROOT</code> is pointed at a name that
+   fails at once before the first <code>gs://</code> open, because tensorstore's probe of the GCE
+   metadata server otherwise stalls every open for seconds; "off Google Cloud" is decided
+   with no network call, from the machine's DMI product name and the <code>GCE_METADATA_HOST</code> and
+   <code>GCE_METADATA_ROOT</code> variables, and on a Google machine the variable is left alone so the
+   credentials the real metadata server issues keep working (<code>store.GUARD_GCE_METADATA</code>
+   turns the guard off). A <code>precomputed://</code> prefix is accepted and
+   dropped. The <code>.n5</code> or <code>.zarr</code> suffix is never used to decide the format. A zarr v2
+   compressor carrying members tensorstore rejects (the <code>checksum</code> newer numcodecs writes
+   for zstd) is opened without them. Access: a path with no scheme is a local file; <code>s3://</code>
+   is tried anonymously then with default credentials; <code>gs://</code> with default credentials then
+   through the bucket's public https URL (<code>TENSORSTORE_GCS_HTTP_URL</code> overrides);
+   <code>http(s)://</code>, <code>file://</code>, <code>memory://</code> one way. <code>AWS_ENDPOINT_URL_S3</code> or <code>AWS_ENDPOINT_URL</code> names an
+   S3-compatible endpoint (MinIO, moto, a mirror) and <code>AWS_REGION</code> or <code>AWS_DEFAULT_REGION</code>
+   the region, as the AWS tools read them; <code>TENSORSTORE_GCS_HTTP_URL</code> is tensorstore's own
+   redirect for <code>gs://</code>, and the opened-kvstore cache is keyed on it, so a process that
+   changes it between opens reads the right host. An N5 <code>units</code> written once as a string
+   is read as that unit on every axis; tensorstore is given only the array members of
+   <code>attributes.json</code>, so attributes it would reject do not stop the open. The next way is tried only when the error
+   starts <code>PERMISSION_DENIED</code> or <code>UNAUTHENTICATED</code>; the way that worked is remembered per
+   (driver, bucket) for the process. Format probing runs all probe keys under one way before
+   moving to the next: a bucket with listing off answers 403 for a missing key, so a 403 on
+   one probe key counts as "missing" when another probe key was read under the same way,
+   and only when every probe key is refused is the next way tried (see Open question 4).
+   Metadata reads retry for about five seconds in total (<code>max_retries 5, initial_delay
+   0.2s, max_delay 2s</code>); data reads keep tensorstore's defaults plus <code>Retry</code>, and each
+   document read and store open is also timed out under <code>Retry</code> (0.7, Behaviour 6).</p>
+</li>
+<li>
+<p><strong>Writing is reading inverted, in one format.</strong> The package writes OME-NGFF zarr only:
+   zarr v2 with OME 0.4 (<code>.zgroup</code>, and <code>.zattrs</code> holding <code>multiscales</code>, each entry with
+   <code>"version": "0.4"</code>) or zarr v3 with OME 0.5 (<code>zarr.json</code> with <code>attributes.ome.version</code>
+   <code>"0.5"</code> and <code>attributes.ome.multiscales</code>). Never OME 0.4 inside zarr v3, which two repos
+   write today and both Neuroglancer (<code>ome.ts</code> line 731 falls back to <code>attrs.multiscales</code>)
+   and this reader tolerate; never N5 or precomputed, because Convention 4's N5 precedence
+   has no unambiguous inverse and chunkmirage must write exactly the documents it serves.
+   A written <code>translation</code> is voxel 0's centre, written always, zeros included; <code>scale</code> is
+   the voxel size; every number is written as the float it was given, never rounded. Axes
+   get <code>type</code> from their name unless told otherwise and <code>unit</code> on space and time axes only;
+   a zarr v3 array's <code>dimension_names</code> are the axis names. No legacy document is written
+   unless the caller passes one through <code>attrs</code>. Reading back what was written returns the
+   same <code>voxel_size</code>, <code>translation</code>, <code>axes</code> and <code>units</code> with <code>placed_by == "ome"</code>: that round
+   trip is the test every writer repo lacked.</p>
+</li>
+</ol>
+<h2 id="4-behaviour-each-statement-is-a-test">4. Behaviour (each statement is a test)</h2>
+<ol>
+<li>
+<p><strong>Index reads clip, read, pad.</strong> <code>read_index(begin, end, padding)</code> returns an array of
+   shape <code>end - begin</code>; the part inside the data is the stored values; the rest is
+   <code>padding</code> (a value) or the nearest stored voxel (<code>"edge"</code>). Padding is never resampled or
+   scaled. A box entirely outside the data returns the fill without touching storage. With
+   <code>mask=True</code> a boolean array of the same shape, True inside the data, is returned as well
+   (cellmap-analyze's <code>return_valid_mask</code>). The result is C-contiguous in native byte order
+   (mesh-n-bone byte-swaps big-endian stores after every read today). <code>padding</code> and the box
+   are per-read arguments, never only constructor state, because one cached handle per
+   worker serves different kinds of reads (mesh-n-bone's meshing reads blocks it has grown
+   by one output voxel per side; its pyramid builder reads ungrown blocks). <code>padding</code> is the
+   fill only. There is no context or halo argument: a caller that wants context grows its
+   own box. <code>transform</code> is applied to the stored values before padding.</p>
+</li>
+<li>
+<p><strong>World boxes select voxels by their centres.</strong> For a box <code>[b, e)</code> on an axis with voxel
+   size <code>s</code> and translation <code>t</code>, the voxels read are <code>i</code> with <code>ceil((b - t) / s) &lt;= i &lt;
+   ceil((e - t) / s)</code>, after <code>snap_integral</code> on both quotients: a quotient within <code>1e-6</code> of a
+   whole number of voxels is that whole number, so a centre-aligned begin that computes to
+   <code>k + 1e-12</code> is <code>k</code>, not <code>k + 1</code>. A voxel is read iff its centre lies in the box.
+   Consequences the tests pin: a box of extent <code>m * s</code> returns exactly <code>m</code> voxels whatever
+   its alignment; a box aligned to voxel <strong>corners</strong> (every cellmap-analyze block, every
+   cellmap-flow Roi) maps to exactly the voxels it covers; a box aligned to voxel
+   <strong>centres</strong> (mesh-n-bone's blocks begin at <code>translation + k * s</code>) maps to voxels
+   <code>k .. k + m - 1</code>, also exactly, because the interval is half-open at the centres and
+   nothing is rounded; the read of the volume's own extent <code>[corner, corner + shape * s)</code> is
+   the whole array with no padding. A box aligned to neither is still well defined by the
+   centre rule; <code>read(..., strict=True)</code> raises instead for callers who want to be told.</p>
+</li>
+<li>
+<p><strong>Level selection</strong> (<code>select_level</code>, <code>Pyramid.select</code>, <code>open(voxel_size=)</code>) follows
+   cellmap-flow's four modes plus one: <code>floor</code> (the level at that voxel size, else the
+   <strong>coarsest</strong> level that is no coarser than the target on any axis, else the first),
+   <code>finer</code> (as <code>floor</code>, but an error instead of the fallback to the first level, for
+   callers that would rather fail than read coarser data than asked), <code>exact</code> (that level or
+   <code>ValueError</code> listing the levels), <code>nearest</code> (closest on a log scale summed over
+   axes, finer on a tie), <code>resample</code> (the level to resample from). Voxel sizes compare as
+   floats with <code>rtol 1e-6</code>, so 10.48 is not 10. A group path without <code>level</code> or
+   <code>voxel_size</code> raises with the level list; a level name that does not exist raises with
+   the list; an array path, or a precomputed path naming a scale, is that array or scale
+   under <code>level=0</code> or <code>"first"</code> silently and warns and ignores any other <code>level</code>. When no level has the
+   requested <code>voxel_size</code>, <code>on_mismatch</code> decides: <code>"error"</code> raises with the list;
+   <code>"resample"</code> reads the level <code>level_mode</code> picks and resamples (Behaviour 4); <code>"relabel"</code>
+   reads that level voxel for voxel and reports <code>voxel_size</code> as the requested size with
+   <strong>voxel <code>i</code> staying voxel <code>i</code></strong>: every world quantity, the translation and the corner
+   included, scales by the ratio of the sizes (cellmap-flow's rule, which chunkmirage's
+   server relies on), so a box of <code>m</code> requested voxels returns <code>m</code> stored voxels of the level,
+   and <code>source_voxel_size</code> still reports the level's own size; <code>"keep"</code> reads the chosen level at its own voxel size (a level pick, nothing
+   more). <code>relabel</code> and <code>nearest</code> are different things and both exist: one is a grid
+   policy, the other a resampling kernel. <code>level</code> also takes a position, <code>0</code> or <code>"first"</code>
+   for the first listed level. The pyramid an array belongs to is found through
+   its parent's <code>multiscales</code>; a group without <code>multiscales</code> is probed for <code>s0, s1, ...</code>.</p>
+</li>
+<li>
+<p><strong>Resampling</strong> (<code>voxel_size=</code> with no level at it and <code>on_mismatch="resample"</code>, or
+   <code>read(voxel_size=)</code>) follows cellmap-flow's <code>io/resample.py</code>: the target grid's voxel 0
+   starts at the source <strong>corner</strong>, has <code>ceil(n * s / t)</code> voxels, and target voxel <code>j</code> is
+   centred at <code>corner + (j + 1/2) * t</code>, which is source index <code>p = (j + 1/2) * t / s - 1/2</code>.
+   <code>"nearest"</code> takes the source voxel whose extent <code>[corner + i * s, corner + (i + 1) * s)</code>
+   holds the target centre: nearest neighbour as ITK defines it, and the same half-open
+   rule as Behaviour 2. A centre on a voxel boundary, which every even whole factor
+   produces, belongs to the upper voxel, so a factor of 2 reads source voxels <code>1, 3, 5, ...</code>
+   where a stride read <code>0, 2, 4, ...</code>; the stride is a half-block bias and the change is
+   intended. The target grid is <strong>anchored</strong> at the source corner unless <code>anchor</code> names
+   another world position for a target voxel corner; passing another volume's <code>corner</code>
+   reads this volume onto that volume's grid, which is what contact sites, masks and
+   intensity statistics need (cellmap-analyze's case: an 8 nm array with translation 0
+   read onto a 4 nm grid with corner -2 gives <code>0, 1, 1, 2, 2, 3, 3, 4</code>, where the
+   source-anchored read gives <code>0, 0, 1, 1, 2, 2, 3, 3</code>, half a voxel off). <code>"linear"</code> takes the block mean when <code>t / s</code> is a whole number &gt;= 2; a block cut short
+   by the end of the data is the mean of what it has (a pyramid's last block), and a block
+   that overlaps no data is outside; else linear interpolation between the two neighbours
+   with the border voxel repeated past the first and last centre; a whole factor with an anchor off the
+   source grid also interpolates. Integer dtypes are rounded back to their
+   dtype. The source voxels read are derived from the first and last <strong>target centres</strong> of
+   the box, not from the box edges, then grown by the kernel radius (0 for nearest, 1 for
+   linear) and clamped to the data with the border repeated; a block mean on a box aligned
+   to the target grid needs no margin. Hence a target voxel's value depends only on its
+   index and the source array, never on where the read starts or ends: two adjoining reads
+   agree with one read across both (the chunk independence property, tested on boundaries
+   at every method; cellmap-analyze's current resampler fails it). Target voxels whose
+   centres lie outside the data get the fill (with <code>"edge"</code>, the border voxel for nearest
+   and linear, the last block holding data for the mean), and the mask marks them. With a
+   resample target, <code>shape</code> reports the target voxels covering the data on each spatial
+   axis. A <code>transform</code> (a normalisation chain) is applied to the stored values before
+   resampling and before padding, so padding is never transformed and the output takes the
+   transform's dtype; <code>post_transform</code> runs after resampling and the cast back to the
+   stored dtype, still before padding, for a normalisation that wants the resampled block.
+   A box entirely inside the array is returned as tensorstore's own block, without a copy,
+   a mask or a fill, under every padding mode; the mask is built only when asked for.
+   Measured on a 4 MiB block with the page cache warm, <code>read_index</code> and <code>read</code> cost 0.1 to
+   0.2 ms over a raw tensorstore read, about half of what the reader they replace cost
+   (Tests: the benchmark script in the trial notes, not part of the suite). Block means over
+   blocks that tile the read are one <code>reduceat</code> pass.</p>
+</li>
+<li>
+<p><strong>No dtype heuristic.</strong> The package never decides that an array holds labels. <code>method</code>
+   defaults to <code>"nearest"</code>, which invents no values and is correct for labels and acceptable
+   for intensities; <code>"linear"</code> is opt-in. cellmap-flow's subclass sets <code>padding="edge"</code>,
+   <code>on_mismatch="relabel"</code> and picks <code>method</code> with its own <code>is_label_dtype</code> rule;
+   cellmap-analyze passes <code>method</code> from its <code>interpolation_order</code>.</p>
+</li>
+<li>
+<p><strong>Retries</strong> apply to data reads and data writes, with mesh-n-bone's formula, which its
+   tests already pin: attempt <code>k</code> (from 1) waits <code>timeout * k</code> seconds on <code>.result()</code>, where
+   <code>timeout</code> is the given value or, when <code>None</code>, <code>clamp(MiB / 16, 5, 120)</code> for a remote
+   store (<code>gs://</code>, <code>s3://</code>, <code>http(s)://</code>) and <code>clamp(MiB / 256, 5, 30)</code> for a local one
+   (<code>file</code>, <code>memory</code>), <code>MiB</code> being the size of the in-bounds part of the read after
+   clipping, or of the box written; between attempts the sleep is <code>base_delay * 1.3 ** (k - 1)</code> plus <code>U(0, 1)</code>
+   seconds; at most <code>max_attempts</code> (default 10). Retried: <code>TimeoutError</code>, and a tensorstore
+   error whose message starts with <code>UNAVAILABLE</code>, <code>DEADLINE_EXCEEDED</code> or
+   <code>RESOURCE_EXHAUSTED</code> or carries an HTTP 5xx or 429. Any other error is raised at once. A
+   timed-out tensorstore future is cancelled before the next attempt starts; a write may
+   still land after its cancel, with the same bytes the next attempt writes. Each retry is
+   logged as a warning naming the error's first line, or its type when the message is
+   empty (tensorstore's timeout is <code>TimeoutError()</code>); when every attempt times out the
+   <code>TimeoutError</code> names the operation, the path and the attempts. The policy is a
+   per-handle attribute and a per-read and per-write argument, never only constructor
+   state.</p>
+</li>
+</ol>
+<p>Documents and opens (0.7): every metadata document read or written and every store
+   opened is timed out and retried the same way, as an operation of no bytes (by default
+   5 s times the attempt, ten attempts), with tensorstore's own request retries
+   (Convention 5) running inside each attempt. A server that accepts a connection and
+   never answers used to hold <code>wa.open</code> and <code>wa.metadata</code> forever: cellmap-flow's picker
+   kept a 5 s probe of its own in front of them (2026-10-23). The policy is the <code>retries</code>
+   of the public call doing the reading: <code>open</code>, <code>open_pyramid</code>, <code>create</code>, <code>metadata</code>,
+   <code>detect</code> and <code>open_tensorstore</code>, which all take it; a document read later outside such
+   a call (a zarr v2 <code>.zattrs</code> read on demand, a pyramid placing its levels) waits under
+   <code>Retry()</code>. Listings are not timed out, their size being unknown. The open that creates
+   an array is (0.8, cellmap-analyze's question): its second attempt may find the array its
+   first made before timing out, so after a timed-out attempt <code>ALREADY_EXISTS</code> is not an
+   error even under <code>exists="error"</code>, and <code>create</code> adopts the array only if it matches what
+   was asked for (the comparison an adopt makes), since an identical array that appeared
+   after our own attempt is ours. That open keeps tensorstore's <code>"os"</code> file locking whatever
+   the caller's context says, as create-if-absent is a conditional write.</p>
+<p>The watchdog (0.5): tensorstore up to at least 0.1.85 can strand a queued task. A pool
+   worker idle for 20 ms exits, and a task queued as it exits gets no thread while the pool
+   counts itself full (fixed upstream in google/tensorstore ed51718085, in no release yet).
+   The future then waits forever with no tensorstore thread alive, on a read, a write or an
+   open. A pool limited to one thread meets it most; cellmap-analyze 0.6 hung on /nrs with
+   <code>data_copy</code> and <code>file_io</code> at 1, and one more task on the same context woke the pool
+   within seconds (salamander's and c-elegans' live tests, 2026-10-22, with un-kicked
+   workers staying stuck). cellmap-analyze's read retries of June 2025 ("it sometimes
+   hangs") worked for the same reason: each attempt is a new task. So every context the
+   package makes (<code>shared_context</code>, <code>capped_context</code>, a rebuilt one) or opens a store on is
+   watched, weakly: one daemon thread, started on first use, gives each live watched
+   context's decoding and file I/O pools one no-op task every second (an in-memory array
+   copy and a local read of a key that does not exist; no store is touched, about 0.3 ms
+   of CPU). A stranded task then runs within about a second whoever waits on it: the
+   package, <code>vol.ts</code> directly, or <code>await</code>, at any concurrency. The retry stays the outer
+   net. Open question 14 says when the watchdog goes.</p>
+<ol>
+<li><strong>Contexts.</strong> Without <code>context</code>, every open in the process shares <code>shared_context(0)</code>:
+   tensorstore's cache is off and the levels of one pyramid share one context. Its
+   <code>data_copy_concurrency</code> limit is <code>thread_budget()</code>: the first of <code>OMP_NUM_THREADS</code> (dask sets 1 in every worker it spawns; a cluster job script
+   sets its slots) and <code>LSB_DJOB_NUMPROC</code> (an LSF job's slots) that holds a positive
+   integer, else the CPUs <code>sched_getaffinity</code> allows: the cap every other threaded library
+   in the job already takes, as Janelia's cluster guidance asks. tensorstore alone sizes
+   both pools to every CPU of the node, whatever the job's slots, so each of twelve dask
+   workers in a twelve-slot job on a 96-core node could start 96 threads (0.5). A dask
+   worker therefore runs tensorstore on one thread of each pool, which Behaviour 6's
+   watchdog makes safe. SLURM's <code>SLURM_CPUS_PER_TASK</code> and SGE's <code>NSLOTS</code> stand in for
+   <code>LSB_DJOB_NUMPROC</code> elsewhere. Ahead of them all comes <code>WORLDARRAY_THREADS</code> (0.9), the
+   package's own variable, for a job script to give each worker its share of the job's
+   cores where <code>OMP_NUM_THREADS</code> stays 1 for numpy and <code>LSB_DJOB_NUMPROC</code> counts the whole
+   job: cellmap-analyze's prologue exports its CPUs over its worker processes, at least 1,
+   so a worker with spare cores uses them (in a two-slot job, pools of four against one
+   halved an 8-chunk block's time, below) and a worker per slot stays at one. A handle opened on
+   the driver before the cluster starts is then sized in each worker by that worker's
+   share, as a pickle carries <code>threads=None</code>, not a number (Behaviour 11). A value that is
+   not a positive integer raises <code>ValueError</code> rather than being skipped: nothing else sets
+   this variable, so a value worldarray cannot use is a mistake to report. Its
+   <code>file_io_concurrency</code> limit is that or <code>file_io_floor</code>, by default
+   <code>context.FILE_IO_FLOOR</code> (8), whichever is larger (0.8; the argument 0.9, <code>1</code> keeping
+   file I/O at the budget, cellmap-analyze's choice until eight is measured on /nrs at
+   scale): file I/O threads wait on storage
+   rather than compute, so they take no core from the job, and one of them serialises every
+   chunk file of a block on NFS's round trips. From one decoding thread, eight 64^3 label
+   chunks written to NFS took 166 to 176 ms with one file I/O thread and 83 to 89 ms with
+   four to sixteen (zarr-python 2 took 102); an 8-chunk EM read from /nrs was the same
+   either way, decoding bound. The cap is the default because the process that passes
+   no context is the one nobody tuned: a quick dask script over <code>wa.open(path)</code> is how a
+   job came to start a thousand threads on twelve slots. One thread per pool slows one
+   task (a 256^3 block write took 2.1 s against 1.3 s uncapped) but not a job of many
+   workers, whose throughput its cores bound either way (four writers: 1.8 s against
+   1.9 s). A process that wants more threads than its job has slots, a server under
+   <code>bsub -n 1</code> say, asks for more slots or says so: <code>shared_context(cache_bytes,
+   threads=N)</code> limits both pools to <code>N</code>, and <code>threads=0</code> writes no limit, leaving
+   tensorstore's own sizes (decided 2026-10-23, over chunkmirage's objection, once the
+   watchdog had removed the hang risk; the argument is 0.6, at chunkmirage's request, so
+   its server keeps one watched context per cache budget for every store it opens
+   instead of building its own). Each set of arguments is one context for the process,
+   made on first use and watched; <code>threads=None</code> and the number <code>thread_budget()</code> returns
+   are two contexts, as a pickle carries <code>None</code> for the other process to size by its own
+   job and a number as that number. <code>file_io_floor</code> sizes only the budget's pool, so with
+   a thread count of its own it is ignored and no second context is made.</li>
+</ol>
+<p>Writes (0.8). Every context the package makes (<code>shared_context</code>, <code>capped_context</code>)
+   sets tensorstore's <code>file_io_sync</code> to false and its <code>file_io_locking</code> mode to <code>"none"</code>,
+   the arguments <code>fsync=True</code> and <code>locking="os"</code> restoring tensorstore's defaults. fsync
+   cost 6.5 ms a chunk on a local NVMe disk (8.2 against 1.5 ms for a 64^3 chunk) and
+   nothing on NFS, whose client commits a file when it closes it; zarr-python and funlib,
+   every writer the repos used before, never synced, so a machine crash on a local disk
+   can lose the last seconds of chunks as it always could, and a killed process loses
+   nothing. <code>"os"</code> locking takes an advisory lock on a <code>.__lock</code> file for every write,
+   about 10 ms of NFS round trips a chunk (21.7 against 12.0 ms for a 64^3 label chunk on
+   /groups; zarr-python 2 took 12.7). With <code>"none"</code> a whole-unit write is still atomic, a
+   temporary file renamed into place, and only concurrent read-modify-writes of one unit
+   lose their guarantee, which Behaviour 13 never gave (<code>partial=True</code> is unsafe while
+   anything else writes the unit); a write interrupted mid-way may leave a temporary
+   <code>.__lock</code> file that costs space only. tensorstore's <code>"lockfile"</code> mode is not the
+   default because such a file left by a killed worker blocks every later write of its
+   unit. Together, from one-thread workers (<code>OMP_NUM_THREADS=1</code>) through the default
+   context: a 64^3 label chunk to NFS took 23 ms in 0.7 and 12.2 in 0.8, an 8-chunk label
+   block 159 and 66.5, an 8-chunk EM block 330 and 202; to a local disk the label block
+   took 51.5 and 4.1 ms.
+   <code>capped_context</code> sets <code>data_copy_concurrency</code>, <code>file_io_concurrency</code>,
+   <code>gcs_request_concurrency</code>, <code>s3_request_concurrency</code> and <code>http_request_concurrency</code> to
+   <code>concurrency</code> (<code>file_io_concurrency</code> to <code>file_io</code> when given, 0.8) and the cache to
+   <code>cache_bytes</code>, and returns a new context each call, so two
+   handles never share one capped pool unless the caller passes the same object twice; a
+   <code>concurrency</code> of 1 is safe under Behaviour 6's watchdog, but a read or write spanning
+   several chunks then handles them one at a time. On /nrs, from one process alternating
+   limits op by op (c-elegans, 2026-10-23): a one-chunk block (128^3 uint64) read in 18 to
+   19 ms and wrote in 51 ms at both 1 and 4. An 8-chunk block (256^3, what a downsampling
+   step reads) read in 157 ms against 73 and wrote in 312 ms against 158 in a two-slot
+   job, but in a one-slot job read in 147 ms against 119 and wrote in 325 ms against 302
+   (and that job still used 1.3 cores, LSF not pinning it). Most of the gain is a core the
+   worker was not given, so a worker per slot, as a dask job runs, loses little at 1. Both are plain tensorstore contexts; a caller may pass its own, at construction or through
+   <code>reopen(context=)</code> when a long-lived worker changes its concurrency (cellmap-analyze
+   reopens tensorstore on every read today for that reason).</p>
+<ol>
+<li>
+<p><strong>Thread safety.</strong> A <code>WorldArray</code> may be read from several threads at once; nothing in the
+   package holds a lock around a read. No dask anywhere.</p>
+</li>
+<li>
+<p><strong>Non-spatial axes.</strong> <code>read_index</code> works on all axes. <code>read</code> takes a box over the spatial
+   axes and keeps leading non-spatial axes whole unless <code>select</code> pinned them, or a box over
+   every axis, in which case Behaviour 2's centre rule applies along each axis in that
+   axis's converted unit (a time sample is a point too, so a window <code>[t0, t1)</code> in seconds
+   reads the samples whose times lie in it). The returned array's axes are <code>vol.axes</code>.</p>
+</li>
+</ol>
+<p>Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.</p>
+<ol>
+<li>
+<p><strong>Documents round-trip.</strong> <code>ome_multiscales(axes, units, levels, version)</code> returns the
+    complete group attributes. Written beside arrays and read back through <code>wa.metadata</code>,
+    any level reports the voxel size, translation, axes and units it was given, exactly,
+    for OME 0.4 and 0.5, for <code>(z, y, x)</code>, <code>(c, z, y, x)</code> and <code>(t, c, z, y, x)</code>, and for
+    levels with non-whole factors and their own translations (chunkmirage's case). The
+    documents equal the expected documents in <code>tests/fixtures/write.json</code> after JSON
+        normalisation, so chunkmirage's TypeScript builder can be held to the same output; each
+    case also carries its resolved per-axis units and types, and the call with those gives
+    the same document, so the TypeScript side need not reimplement the broadcasting. Units
+    are written in OME's names: any spelling the unit table knows (<code>"nm"</code>, <code>"µm"</code>,
+    <code>"nanometre"</code>) becomes <code>"nanometer"</code>, <code>"micrometer"</code> and so on (<code>wa.units.ome_name</code>),
+    and a unit the table does not know is written as given, Convention 3's welcome kept.
+    The multiscale's <code>name</code>, <code>metadata</code> and <code>type</code> are written when given. <code>level_shape</code>
+    snaps the quotient <code>(n - origin) / f</code> to a whole number within <code>1e-6</code> before the
+    ceiling, so a factor that is a ratio of float voxel sizes (<code>0.3 / 0.1 =
+    2.9999999999999996</code>, chunkmirage's case) gives 3 voxels for 9, not 4.
+    <code>level_placement</code> and <code>level_shape</code> invert Convention 1's BigDataViewer rule and agree
+    with Behaviour 4: the level a block mean by factor <code>f</code> from source voxel <code>origin</code>
+    produces has voxel 0 centred at <code>translation + voxel_size * (origin + (f - 1) / 2)</code>,
+    and a <code>read(voxel_size=f * s, method="linear")</code> of the source anchored at that level's
+    corner returns the level's values. With <code>origin &gt; 0</code> the translation moves by <code>origin</code>
+    source voxels: the mesh-n-bone bug that sized levels from an aligned ROI origin but
+    placed them from voxel 0 cannot be expressed through this API.</p>
+</li>
+<li>
+<p><strong><code>create</code> makes a placed level, and nothing is ever destroyed.</strong> <code>create</code> writes, in
+    this order, the group document (created when absent; when present, read, the dataset
+    entry for this level added or replaced with the datasets kept in order of voxel size,
+    everything else kept as it was) and then the array with its chunks, shards, codecs,
+        fill value, dimension names and <code>attrs</code>. The format follows the container: walking up
+    from the level's parent, the nearest existing node decides, a <code>.zgroup</code> group meaning
+    zarr v2 and OME 0.4, a <code>zarr.json</code> group zarr v3 and OME 0.5, an array, an N5 or a
+    precomputed node a <code>ValueError</code>; a <code>format</code> that contradicts it raises rather than
+    mixing versions. When no ancestor exists, the walk ends at the nearest ancestor named
+    <code>*.zarr</code>, the store root, <code>format</code> or zarr v3 decides, and every missing group from
+    that root down to the level's parent gets a document, bare above the parent, so
+    zarr-python browses the hierarchy and a level made in a zarr v2 container is zarr v2
+    (cellmap-analyze's <code>prepare_ds</code>, cellmap-flow's <code>box_n</code> groups); with no <code>.zarr</code>
+    ancestor either, only the parent gets a document. <code>chunks</code> is required (alignment is the
+    whole safety argument, so the package never picks a chunk shape); <code>shards</code> that are not
+    a whole number of chunks on every axis raise. <code>codecs</code> defaults to zstd level 3 in the
+    format's own dialect, what zarr-python's default <code>zstd(level=0)</code> means, so
+    cellmap-analyze's, mesh-n-bone's and registration-station's outputs keep their
+    compression; cellmap-flow's blosc stays blosc by passing it. There is no overwrite: with
+    <code>exists="error"</code> any document already at <code>path</code> raises <code>FileExistsError</code>; with
+    <code>exists="adopt"</code> an array whose shape, dtype, chunks, shards and placement match
+    (placement within <code>rtol 1e-6</code>), and whose attributes hold every key of <code>attrs</code> with the
+    value given as JSON stores it (keys not given are someone else's and not compared), is
+    opened for writing and its dataset entry ensured, and one that differs raises
+    <code>ValueError</code> listing every differing field and key with the value found and the value
+    wanted (cellmap-flow's <code>_refuse_another_region</code>, registration-station's
+    missing check, which let a shorter last band's chunk grid win a creation race). A
+    creation that loses a race, the store reporting the array present after the probe said
+    absent, is re-read with backoff, 5 attempts at <code>0.5 s * attempt</code>, and then treated as an
+    adopt (registration-station's <code>shared_array</code>, written because metadata appears late on
+    NRS). The package deletes, truncates and follows no symlink, ever; a caller that wants a
+        fresh array removes the old one with its own code first. Write units whose values all
+    equal <code>fill_value</code> are not stored unless <code>store_fill=True</code>, so chunk presence stays the
+    signal cellmap-flow's trainer and manifest read; a stored unit written so loses its
+    key, as zarr-python's <code>write_empty_chunks=False</code> does, the one key a write may remove
+    being the one it replaces. <code>create</code> returns a writable <code>WorldArray</code>;
+    <code>wa.open(path, mode="r+")</code> opens an existing one with every rule of Conventions 3 to 5
+    unchanged, and a handle pickles by its arguments and its context's spec, so each worker
+    process opens its own cheaply (a local path goes resolved against the working directory
+    at open, so a worker that changes directory before unpickling, as cellmap-analyze's dask
+    workers do, opens the same store; <code>reopen</code> uses it too), on the shared context when the handle had one (the same
+    <code>threads</code>, and the same cache budget), else on a context rebuilt once per process from the same spec, so a capped context stays
+    capped (mesh-n-bone's per-process cache and thread caps).</p>
+</li>
+<li>
+<p><strong>Group attributes belong to everyone.</strong> The package rewrites only the <code>multiscales</code>
+    list (0.4) or <code>ome.multiscales</code> (0.5), and within it only the dataset entry whose <code>path</code>
+    is the level being created or added; other multiscales, other datasets and every other
+    key of the group and of the array (<code>fs</code>, a registry record, <code>y0</code>/<code>y1</code>, anything) come
+        back unchanged. The group's attributes before and after a <code>create</code> differ in that one
+    entry, and not at all when the entry already says the same: adopting an identical array
+    (placement within rtol 1e-6) reads the document, compares and writes nothing, so
+    registration-station's twenty block jobs calling <code>create(exists="adopt")</code> on one output
+    write the document in the first creation only. Rewriting a group document is a
+    read-modify-write with no lock, so <code>create</code> and <code>add_level</code> of different levels in one
+    group are called from one process at a time, the coordinator, never from block jobs;
+    the docstrings say so. After a write the document is read again and, when this level's
+    entry is missing because another process's write landed in between, merged and written
+    again, up to 5 times, then <code>RuntimeError</code>: a lost update becomes a repair or an error
+    where the store shows it, never a misplaced level. <code>ensure_group_entry</code> is this listing
+    step on its own, public, for an array the package did not create (mesh-n-bone's
+    symlinked <code>s0</code>) or one listed only after it is filled; it follows the same rules,
+    ancestors included.</p>
+</li>
+<li>
+<p><strong>Aligned writes need no coordination.</strong> <code>write_index(begin, end, data)</code> requires
+    <code>data.shape == end - begin</code>, <code>data.dtype == vol.dtype</code> (no silent cast; <code>ValueError</code>),
+    or <code>data</code> a scalar (a number or a 0-d array) that fills the box: it is converted to the
+    dtype only when its value survives, so an integer or bool array takes whole numbers in
+    its range and a float array any number it does not overflow, rounded to its precision
+    (<code>0</code> into <code>uint8</code> is written; <code>300</code>, <code>-1</code>, <code>0.5</code> and NaN raise), and a scalar equal to
+    <code>fill_value</code> over whole units leaves them absent as an all-fill array does (cellmap-analyze
+    writes a constant for every empty or masked-out block). The box must be a union of whole write units: every bound a multiple of
+    <code>write_shape</code> on its axis or the array's end on that axis, so the clipped last unit is
+    allowed; otherwise <code>ValueError</code> names the axis, the bound and the unit size. A unit
+    written whole is one put, so writers in different processes writing different units
+    need no lock and no ordering, which is what every writer repo does today by
+    construction. <code>partial=True</code> lifts the check and does tensorstore's read-modify-write
+    of the touched units, documented as unsafe while anything else writes the same unit
+    (cellmap-flow's paint slabs, which it serialises itself). A write commits before the
+    call returns, timed out and retried by Behaviour 6 (0.5; before, it was not, and a
+    stranded write waited forever). <code>write(box,
+    data)</code> maps a world box by Behaviour 2 and then calls <code>write_index</code>; a box reaching
+    outside the array raises (nothing is padded on write) and <code>voxel_size</code> is not an
+    argument (nothing is resampled on write).</p>
+</li>
+<li>
+<p><strong><code>add_level</code> is metadata plus an empty array.</strong> On a pyramid opened for writing,
+    <code>add_level(name, factors=, origin=)</code> creates <code>group/name</code> through <code>create</code> with
+    placement from <code>level_placement</code> over <code>from_level</code> (the finest listed when None) and
+    shape from <code>level_shape</code>, copying dtype, chunks, shards, codecs and fill value from that
+    level unless given, or with an explicit <code>voxel_size</code> and <code>translation</code>. The dataset
+    entry is inserted so the list stays ordered finest to coarsest and an entry of the same
+    name is replaced; the group's other content is untouched (Behaviour 12). It writes no
+    voxel data: downsampling is the caller's, per block, through <code>write_index</code>, labels by
+    mode and images by mean as each repo decides. <code>exists</code> means what it means for <code>create</code>.</p>
+</li>
+<li>
+<p><strong>Chunk keys.</strong> <code>chunk_key(index)</code> is the key, relative to the array, of the write unit
+    at <code>index</code>: zarr v2 indices joined by the array's <code>dimension_separator</code> (<code>0.1.2</code>); zarr
+    v3 by the stored <code>chunk_key_encoding</code>, <code>default</code> giving <code>c/0/1/2</code> with its separator and
+    <code>v2</code> giving <code>0.1.2</code>; N5 <code>2/1/0</code>, x first; precomputed <code>x0-x1_y0-y1_z0-z1</code> in the scale's
+    voxel coordinates with <code>voxel_offset</code> included and the last range clipped to the shape;
+    a sharded zarr v3 array keys its shards, so <code>index</code> is on the shard grid.
+    <code>parse_chunk_key</code> inverts each and returns None for a key that is not a chunk
+    (<code>zarr.json</code>, <code>.zarray</code>, <code>attributes.json</code>, <code>info</code>, a <code>c/</code> key of the wrong arity).
+    <code>list_chunk_keys</code> and <code>list_chunks</code> use the same parser. The free functions take the
+    format and the array's facts instead of an open array, for an array served from nowhere
+    (chunkmirage's frontends) or about to be created.</p>
+</li>
+<li>
+<p><strong>Write units.</strong> <code>write_shape</code> is the shard shape of a sharded zarr v3 array, else the
+    chunk shape; <code>ArrayMeta.shard_shape</code> is None when unsharded; <code>chunk_shape</code> stays the
+    inner read chunk (Convention 2). <code>chunks_covering(begin, end, write=True)</code>,
+    <code>list_chunks</code> and <code>chunk_key</code> run on the write grid. A planner that sizes jobs from
+    <code>write_shape</code> (registration-station's y-bands, cellmap-analyze's blocks) produces only
+    aligned writes.</p>
+</li>
+<li>
+<p><strong>Blocks tile, context grows, nothing runs.</strong> <code>blocks(shape, block_shape, context, box,
+    clip)</code> yields, in C order, blocks whose write boxes <code>[begin, end)</code> partition <code>[0,
+    shape)</code>, or <code>box</code> (a voxel box, the grid anchored at its begin) when given, with no
+    overlap and no gap, the last block on an axis clipped to the box. <code>box</code> may reach past
+    the array on any side (a ROI rounded outward to a factor multiple, mesh-n-bone's halo
+    mode): the write boxes tile it exactly, outside the array too. A block's read box is
+    its write box grown by <code>context</code> on each side, where <code>context</code> is one int, one per
+    axis, or a <code>(before, after)</code> pair per axis, clipped to the <strong>array</strong> (never to <code>box</code>,
+    never a write box) when <code>clip=True</code> (the default; cellmap-analyze's <code>create_block</code> edge
+    rule) and left unclipped when <code>clip=False</code> for a padded <code>read_index</code> (its
+    <code>neg_with_edge_pos</code> mode, which reads past the array for fill). A block also carries
+    <code>at_start</code> and <code>at_end</code> per axis, whether it is the first or last block on that axis,
+    so a caller adds context at the array's far faces itself, and <code>inner</code>, the slices of
+    the write box inside the read box, correct also when <code>clip=False</code> lets <code>read_begin</code>
+    go below 0. <code>len(blocks)</code>, <code>blocks[b.id]</code> (O(1)), <code>blocks.index_of(b.begin)</code> and
+    <code>b.index</code> agree. <code>vol.blocks()</code> defaults <code>block_shape</code> to <code>write_shape</code>, so default
+    blocks are aligned writes. Nothing is scheduled: the iterable and its blocks are plain,
+    picklable records, and the iterable pickles without its blocks, so a worker takes an
+    id. One grid per call: a consumer that writes several levels from one block derives
+    the per-level boxes itself (mesh-n-bone's direct mode, two lines). <code>write_chunk(index,
+    data)</code> writes the unit at <code>index</code> whole; <code>data.shape</code> must equal that unit's clipped
+    shape.</p>
+</li>
+<li>
+<p><strong>A <code>Grid</code> is a <code>WorldArray</code> without a store.</strong> <code>Grid(shape, voxel_size, translation,
+    axes, units, chunks, shards)</code> answers <code>box</code>, <code>corner</code>, <code>index_box</code>, <code>chunks_covering</code>,
+    <code>write_shape</code> and <code>blocks</code> exactly as a <code>WorldArray</code> of those facts does, and
+    <code>g.meta(dtype)</code> agrees with <code>wa.create(path, grid=g, dtype=dtype).meta</code> in every
+    field a grid has: shape, dtype, chunk and shard shape, axes, units, voxel size and
+    translation (a grid has no path, format, documents or fill value), so a pipeline plans
+    its output before anything exists. <code>Grid.from_meta(meta, voxel_size=t)</code> is Behaviour
+    4's target grid over that array: anchored at its corner with <code>ceil(n * s / t)</code> voxels,
+    so a <code>read(voxel_size=t)</code> of the source fills it exactly, and its <code>box</code> is the target
+    grid's extent, which may reach past the source's own <code>box</code> by less than one target
+    voxel; this is the output grid cellmap-analyze's commands compute today in the integer
+    frame.</p>
+</li>
+<li>
+<p><strong>Schedules and helpers.</strong> <code>level_factors(voxel_size, ratio, max_levels, stop_shape,
+    shape)</code> returns per level the per-axis factors, 2 on every axis whose current voxel size
+    is within <code>ratio</code> of the smallest and 1 elsewhere, compounding level over level until
+    <code>max_levels</code> or until the level's shape (from <code>shape</code>) fits within <code>stop_shape</code>;
+    isotropic data gives all 2s at every level. <code>store.join</code>, <code>parent</code> and <code>basename</code> are
+    the URL-aware path helpers Convention 5 already uses, made public. <code>units.abbreviation</code>
+    returns the OME short form for any spelling the table knows and raises for one it does
+    not.</p>
+</li>
+<li>
+<p><strong>Reading onto a grid.</strong> <code>vol.read_onto(grid, begin, end)</code> returns voxels <code>[begin, end)</code>
+    of a <code>Grid</code>'s spatial axes, all of it when <code>begin</code> and <code>end</code> are None, read from this
+    array, with exactly <code>end - begin</code> voxels on those axes; the array's other axes are read
+    as <code>read</code> reads them (whole, or pinned by <code>select</code>), the open-time <code>padding</code>, <code>method</code>,
+    <code>retries</code> and <code>transform</code> apply, and <code>mask</code> marks the grid voxels that held data. It is
+    <code>read(Box.from_index(begin, end, grid voxel size, grid translation), voxel_size=grid
+    voxel size, anchor=grid corner)</code>, so Behaviours 2 and 4 decide every voxel: at the
+    array's own voxel size (within level selection's rtol 1e-6) nothing is resampled,
+    whatever the offset between the grids, and each grid voxel takes the stored voxel whose
+    centre lies in it, never an interpolation, with <code>method="linear"</code> too; at any other
+    voxel size the array is resampled onto the grid, anchored at its corner. Adjoining
+    <code>[begin, end)</code> reads therefore agree with one read across both. The grid's spatial axes
+    must be named as the array's are (<code>ValueError</code> otherwise), and its units are converted
+    to the array's <code>units</code>. This is cellmap-analyze's per-operation grid: blocks come from
+    one <code>Grid</code>, every input is read onto it, and outputs are created on it.</p>
+</li>
+</ol>
+<h2 id="5-tests-behavioural-synthetic-stores-in-tmp_path-one-optional-network-test">5. Tests (behavioural; synthetic stores in <code>tmp_path</code>; one optional network test)</h2>
+<p>Conformance, one tiny store each, checking <code>voxel_size</code>, <code>translation</code>, <code>axes</code>,
+<code>axes_named</code>, <code>units</code>, <code>shape</code> and, where stated, <code>dtype</code>, the raw attributes and a
+read-back. Stores and expected values live in <code>tests/fixtures/metadata.json</code> so
+chunkmirage's TypeScript side can build and run the same cases; a case whose values
+chunkmirage derives from raw attributes carries a <code>layered</code> note beside the package's
+<code>expect</code>:</p>
+<ul>
+<li>chunkmirage's cases: N5 transposed to C order with <code>resolution</code> and <code>offset</code>; N5 COSEM
+  <code>transform</code> C order; N5 group <code>pixelResolution</code> and <code>downsamplingFactors</code>
+  (the corner at the origin at every level, as Neuroglancer); N5 group <code>multiscales</code> transform matched by path; OME levels matched by
+  path; OME top-level transforms applied after each dataset; an OME-unlisted array borrows
+  no other level's scale; zarr legacy array attrs as a corner; a zarr3 OME 0.5 group with a
+  channel axis; precomputed <code>voxel_offset</code> as a centre translation; xarray dimensions and
+  packing exposed raw with the dtype as stored.</li>
+<li>chunkmirage's additions: N5 with a bare-list <code>pixelResolution</code>; an OME 0.6
+  <code>coordinateSystems</code> group (reads the intrinsic system, never raises); a zstd <code>.zarray</code>
+  carrying <code>checksum</code>; and, from the trials: short funlib, COSEM and N5 lists on a 4-D
+  array; N5 <code>resolution</code> without <code>offset</code>; the N5 <code>axes</code> attribute; a zarr <code>offset</code> with no
+  voxel size; a zarr v3 array in a v2 OME group; a dataset path with two components. Every
+  case states <code>placed_by</code>.</li>
+<li>units: <code>µm</code>, <code>μm</code>, <code>um</code>, <code>micrometre</code>, <code>nanometer</code>, missing (nm), unknown (<code>ValueError</code>
+  only when converted; a factor of 1 with a warning under <code>strict_units=False</code>); an N5
+  <code>units</code> string; a <code>scale</code> attribute as a voxel size.</li>
+<li>an array with both an OME <code>translation</code> and an <code>offset</code> equal to it, or to it less half a
+  voxel, reads the translation silently; any other pair warns and still reads the
+  translation; an OME <code>scale</code> disagreeing with a per-array <code>voxel_size</code> raises.</li>
+<li>access fallback, offline, with a fake attempt function: a refusal moves to the next way,
+  any other error raises at once, the way that worked is tried first next time for that
+  bucket, and a 403 on one probe key with another probe key readable does not trigger the
+  fallback; detection ignores the directory suffix and finds a precomputed scale key.</li>
+</ul>
+<p>Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed through
+<code>s0</code>, integer and <code>"first"</code> levels, <code>detect(missing_ok=True)</code>, <code>index_box</code>; funlib keys on
+the parent group of an attribute-less zarr and N5 array, and funlib <code>voxel_size</code>/<code>offset</code> on
+an N5 array in C order; a precomputed path naming a scale kept under <code>level="first"</code>; the
+GCE guard left alone on a Google machine; a pyramid opened through one of its level paths
+placing every level from the group document while one level's array is missing; <code>read_index</code>
+with <code>select</code>; <code>base_voxel_size</code> rescaling a BigStitcher-style pyramid; <code>AWS_ENDPOINT_URL</code>,
+<code>AWS_ENDPOINT_URL_S3</code> and the region reaching the S3 specs and the GCS redirect keying the
+kvstore cache; an array path kept under <code>voxel_size</code>; relabel keeping the corner; a
+<code>transform</code> applied before padding and before resampling; <code>list_chunks</code> on zarr v2, zarr v3
+and N5; a pyramid choosing a level from the group document without opening one; a
+precomputed <code>s&lt;N&gt;</code> path; the centre rule on a 10.48 nm grid with
+translation 3.7 at indices around 1e5, corner- and centre-aligned (mesh-n-bone's float-noise
+case); a <code>(t, c, z, y, x)</code> OME 0.5 store read with a time window and a spatial box, and with
+<code>select</code>.</p>
+<p>Resampling: <code>"nearest"</code> takes the source voxel holding each target centre (factor 2 reads
+<code>1, 3, 5, 7</code>; a 5 nm read of 4 nm voxels reads <code>0, 1, 3, 4, ...</code>); the anchored read onto
+another grid from Behaviour 4, and its two halves agree with the whole; <code>"linear"</code> at a whole factor is the block mean; two adjoining
+reads agree with one read across both at both methods and at whole and non-whole factors; a
+2x <code>"nearest"</code> read of an integer label volume introduces no new values and pads outside
+the data; a resample target set at open reports the target voxel size with the same corner.</p>
+<p>Placement: the same cube stored four ways, as OME-NGFF with a <code>translation</code>, as N5 with
+funlib <code>resolution</code>/<code>offset</code>, as N5 with a COSEM <code>transform</code>, and as precomputed with a
+<code>voxel_offset</code>, reads back with the same <code>translation</code> and the same bytes for the same
+world box, within <code>0.1 * voxel_size</code>; and an N5 level 1 with <code>downsamplingFactors</code> sits where the
+equivalent OME level 1 does, both pyramids' s0 corner at the origin.</p>
+<p>Network (skipped without it; not yet written): one public OpenOrganelle volume with a
+non-integer z spacing (4.56 or 5.24 nm), read anonymously from s3: the package reports the
+float voxel size at every level where cellmap-flow's <code>Coordinate</code> wrapping reports 5 and
+10, and one corner-aligned box returns the same bytes as cellmap-flow's reader.</p>
+<p>Writing (0.2): Behaviour 10's round trip for both OME versions and the three axis sets,
+against <code>tests/fixtures/write.json</code>, which the TypeScript side also checks; <code>level_placement</code>
+against the reader's BigDataViewer case and against a block-mean <code>read</code> anchored at the
+level's corner, with origin 0 and 16; <code>create</code> following a v2 and a v3 group, refusing a
+contradicting <code>format</code>, requiring <code>chunks</code>, rejecting shards that are not whole chunks,
+raising on an existing path, adopting an identical array, listing every difference of a
+different one, keeping foreign group and array attributes byte for byte, storing no
+fill-only unit; a lost creation race simulated by a store that reports the array present
+after the probe; <code>write_index</code> accepting whole units and the clipped end, naming the axis
+of a misaligned bound, refusing a dtype cast, <code>partial=True</code> writing an arbitrary box; two
+processes writing disjoint units of one array (multiprocessing) produce the expected
+array; <code>write(box)</code> by the centre rule, raising outside the array; <code>add_level</code> placing and
+sizing from factors and origin, inserting in order, replacing a same-named entry, copying
+dtype, chunks and codecs, writing no data; <code>chunk_key</code> and <code>parse_chunk_key</code> round trips
+for zarr v2 with <code>.</code> and <code>/</code>, zarr v3 <code>default</code> with both separators and <code>v2</code>, N5,
+precomputed with a <code>voxel_offset</code> and a clipped last chunk, and sharded zarr v3, with
+<code>list_chunk_keys</code> agreeing; <code>write_shape</code> on sharded and unsharded arrays; units written in
+OME's names and an unknown unit as given, <code>type</code> when given, <code>level_shape</code> on a float-noise
+factor; missing ancestor documents down from the <code>.zarr</code> root and none above it, the nearest
+ancestor's format followed and a contradiction refused, an array in the way refused; an
+adopt writing no document and a changed placement writing one; a lost entry written again
+and the error after the attempts; <code>ensure_group_entry</code> on a foreign array, idempotent; a
+pickled handle keeping a capped context's spec and sharing the shared one, and a relative
+path reopening after a <code>chdir</code>; <code>codecs_of</code> by path; an all-fill write removing its own key;
+a scalar filling a box through <code>write_index</code>, <code>write</code> and <code>write_chunk</code>, refused when it
+does not fit the dtype. 0.5: a read and a write whose first attempts never finish (a future
+nothing resolves) cancelled and retried, the warning naming <code>TimeoutError</code>, and the error
+after the last attempt; a capped context and a caller's context passed to an open both
+kicked by the watchdog, a dead context no longer watched, and a kick landing on a capped
+context's own pools; <code>thread_budget</code> from each variable, a bad value skipped, and the
+shared context's limits. 0.6: <code>shared_context(threads=)</code> at <code>None</code>, <code>N</code> and <code>0</code>, one
+context per pair, a negative count refused, and a pickled handle coming back on the same
+shared context. 0.7: <code>metadata</code>, <code>open</code> and <code>detect</code> against a server
+that accepts and never answers raising <code>TimeoutError</code> after the attempts. 0.8: the default
+and capped contexts' file I/O limit, sync and locking, <code>fsync</code> and <code>locking</code> carried
+through a pickle, and a create whose first attempt lands after its timeout adopting its own
+array under <code>exists="error"</code>. 0.9: <code>WORLDARRAY_THREADS</code> ahead of every other variable,
+blank as unset and a bad value refused; <code>file_io_floor</code> sizing file I/O under the budget,
+ignored with a thread count, and carried through a pickle; a handle pickled on the driver
+sized in a spawned worker by that worker's <code>WORLDARRAY_THREADS</code>.
+Opt-in (<code>WORLDARRAY_STRESS=1</code>, about a minute,
+<code>tests/test_lost_wakeup.py</code>): worker processes aim tasks at the moment a one-thread pool's
+worker exits idle, so a plain context strands some for good (13 of about 7,000 on
+tensorstore 0.1.78; 40 to 44 of 12,000 to 15,000 with 16 workers on 0.1.75 and 0.1.85)
+and a watched one strands none, its slowest task under a second. Run against cellmap-analyze's
+block loop (a chunk read, then a whole-chunk <code>write_index</code>, on its 0.6.1 context), 0.4.0
+gave 29 <code>IndexError</code>s and 55 writes stuck past 20 s, and 0.5.0 none, slowest 0.98 s.</p>
+<p>Grids (0.3): <code>blocks</code> partitioning with and without a box, <code>context</code> as an int, per axis
+and as before/after pairs, clipping on and off, <code>len</code>, <code>blocks[id]</code> and <code>index_of</code>;
+<code>write_chunk</code> of a middle and of a clipped unit; a <code>Grid</code> agreeing with the created array's
+<code>meta</code>, and <code>Grid.from_meta</code> agreeing with Behaviour 4's target shape; <code>level_factors</code>
+reproducing mesh-n-bone's anisotropic table (8, 8, 30 nm: z stays at 1 until y and x
+reach 32) and all 2s for isotropic data; <code>abbreviation</code> for every spelling in the table.</p>
+<p>Reading onto a grid (0.4): <code>read_onto</code> at the array's voxel size returning stored values
+under a sub-voxel offset with <code>method="linear"</code>, and the next voxel past a half-voxel one;
+onto a finer grid equal to the <code>read</code> it is defined as, in micrometres too, adjoining
+reads agreeing, the mask marking grid voxels before the data; its own grid at voxel sizes
+3.54, 4 and 5.3 returning the stored array exactly; a grid with other axis names refused.
+<code>source_translation</code> under relabel and resample and in micrometres; an adopt keeping keys
+it was not given and refusing a different or missing one, naming both values.</p>
+<p>Target: about 600 lines of test cases for 0.1 and about 300 more for 0.2 and 0.3, the
+store builders in <code>conftest.py</code> aside; no wording pins; no <code>/nrs</code>; no cluster.</p>
+<h2 id="6-consumers-and-migration">6. Consumers and migration</h2>
+<table>
+<thead>
+<tr>
+<th>Reader today</th>
+<th>Face used</th>
+<th>What moved into the package from it</th>
+<th>Migration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cellmap-flow <code>image_data_interface.py</code> + <code>io/</code></td>
+<td>world</td>
+<td>per its session: <code>io/paths</code>, <code>io/store</code>, <code>io/metadata</code> (ArrayMeta, <code>snap_integral</code>, <code>regularize_offset</code>, the unit table), <code>io/multiscale</code> (<code>select_level</code>), <code>io/geometry</code> (<code>Box</code>), <code>io/source</code> (<code>read_padded</code>), <code>io/resample</code> (<code>Resampling</code>), and <code>io/ome</code>'s reading half</td>
+<td>77 import sites on <code>main</code> at 02fa82e3 (18 of <code>image_data_interface</code>, 14 <code>io.geometry</code>, 12 <code>io.metadata</code>, 11 <code>io.ome</code>, 10 the package, 4 <code>io.source</code>, 4 <code>io.multiscale</code>, 2 <code>io.store</code>, 1 <code>io.resample</code>, 1 <code>io.paths</code>); none in <code>web/test/fixtures</code> or <code>web/build</code>. <code>io/*</code> becomes re-exports for one release. Stays: the input chain (<code>process_chain</code>, <code>apply_norms</code>, <code>LazyNormalization</code>, <code>with_input_norms</code>, <code>norms_to_apply</code>), <code>legacy_meta</code> (deprecated; <code>viewer/bootstrap.py</code> still reads it), the deprecated <code>output_voxel_size</code> and <code>custom_fill_value</code>, the mismatch warning texts, and <code>io/ome</code>'s writer half until a v2 writer. <code>ImageDataInterface</code> becomes a <code>WorldArray</code> subclass setting <code>padding="edge"</code>, <code>on_mismatch="relabel"</code> and its label heuristic, and applying the chain at read time. Own branch into cellmap-flow's <code>consolidate</code> after its wave A; <code>tests/utils/test_io_placement.py</code> kept for parity until done</td>
+</tr>
+<tr>
+<td>cellmap-analyze <code>util/image_data_interface.py</code> and the read side of <code>zarr_io.py</code>, <code>voxel_size_utils.py</code>, <code>io_util.py</code>, <code>precomputed_io.py</code></td>
+<td>world, through a local subclass</td>
+<td><code>read_with_retries</code> (per-handle tunable timeout), <code>return_valid_mask</code>, the <code>"edge"</code> and uint64-sentinel fills, <code>concurrency_limit</code> as a per-worker context, <code>target_voxel_size</code> (= <code>voxel_size</code> with <code>level_mode="floor"</code>) and <code>output_voxel_size</code> (= <code>on_mismatch="resample"</code>); read-side code to absorb: <code>_detect_zarr_driver</code>, <code>open_ds_tensorstore</code>, <code>io_util</code>'s path and kvstore helpers, <code>precomputed_io</code>, <code>voxel_size_utils</code> (<code>get_multiscales</code> with NGFF 0.5's <code>ome</code> nesting, <code>_select_ome_dataset</code> by path name, <code>_read_parent_attrs</code>, the PR #87 corner acceptance), <code>zarr_io.resolve_scale_path</code> and <code>_read_voxel_size_offset</code></td>
+<td><strong>Not an import swap.</strong> cellmap-analyze works in an integer-scaled frame: <code>voxel_size</code>, <code>roi</code>, <code>chunk_shape</code> and <code>output_voxel_size</code> are <code>Coordinate</code>s in nm times <code>voxel_size_scale_factor</code> (62, 21, 7 and 22 sites; <code>rescale_to_factor</code> 10 sites). Its IDI is also the write handle: about 17 sites write <code>output_idi.ds[block.write_roi] = data</code> on a zarr-python array opened <code>r+</code>. So it keeps a local subclass that owns the scaled frame (built from <code>corner</code>, <code>voxel_size</code> and <code>shape</code>, choosing a factor that makes the corner whole), the zarr-python <code>.ds</code> writer, the <code>chunk_shape</code> override (block size, not storage chunk) and the fill value, and delegates <code>to_ndarray_ts(roi)</code> (34 sites) to <code>read()</code> after dividing the box by the factor. Drop <code>to_ndarray_ds</code>; <code>interpolation_order</code> is never passed. Resampled reads change bytes (Behaviour 4), so parity is for unresampled reads only. Uses dask with its own block bookkeeping, not daisy; funlib.geometry is its only funlib dependency</td>
+</tr>
+<tr>
+<td>mesh-n-bone <code>util/image_data_interface.py</code> + the metadata half of <code>zarr_io.py</code></td>
+<td>world (functions)</td>
+<td><code>capped_context</code> and its spec, the size-and-locality timeout rule, remote detection, the <code>info</code>-in-parent probe, and <code>zarr_io</code>'s metadata resolution</td>
+<td><code>open_ds_tensorstore</code>, <code>read_with_retries</code>, <code>to_ndarray_tensorstore</code> kept as module functions with their exact current semantics (<code>index = (p - translation) / voxel_size</code>, no half-voxel term) for one release; <code>swap_axes</code> disappears because the package always returns C order; funlib <code>offset</code> and precomputed <code>voxel_offset</code> start being read as corners, COSEM <code>translate</code> is read, and <code>downsamplingFactors</code> levels gain the BDV shift: outputs move on those inputs (Open question 2); its session wants the change and no package-side flag</td>
+</tr>
+<tr>
+<td>chunkmirage <code>sources/tensorstore_source.py</code></td>
+<td>index</td>
+<td>access fallbacks, metadata retries, probe order, <code>corner_to_centre</code>, the N5 precedence rules, compressor cleaning, <code>shared_context</code>, the conformance tests</td>
+<td>a thin adapter <code>ArrayMeta -&gt; ArrayInfo</code>; CF packing and xarray coordinates layered from <code>attrs</code>, <code>group_attrs</code> and <code>parent</code>; planned, not optional: until then two Python parsers encode the half-voxel rule</td>
+</tr>
+<tr>
+<td>CineMap <code>slice_loader.py</code></td>
+<td>index</td>
+<td>zarr v2 <code>checksum</code> tolerance</td>
+<td>optional: open and metadata through the package, the oblique gather on <code>.ts</code> and <code>chunks_covering</code>; its <code>extent_nm()</code> is half a voxel off from Neuroglancer (Open question 3)</td>
+</tr>
+<tr>
+<td>liconn-err <code>dataset.py</code></td>
+<td>index</td>
+<td>nothing new</td>
+<td>optional: zarr3 and N5 opens and pyramid factors; affines stay</td>
+</tr>
+<tr>
+<td>registration-station</td>
+<td>index</td>
+<td>nothing new</td>
+<td>optional: metadata and slab reads; writes stay</td>
+</tr>
+<tr>
+<td>salamander scripts, c-elegans generators</td>
+<td>world</td>
+<td>nothing new</td>
+<td>optional: replace hand-parsed OME multiscales; both compute camera or extent positions from the translation as a corner today</td>
+</tr>
+<tr>
+<td>segmentation-challenge-meshes, cellpose scratch, skoots-mito, plasmodesmata, c-elegan-experiments, tier1_exp, dinov3_playground, cellmap-segmentation-challenge</td>
+<td>–</td>
+<td>nothing</td>
+<td>archive or leave; none is live</td>
+</tr>
+</tbody>
+</table>
+<p>Order: the package with tests and CI, tagged 0.1.0 on PyPI (every live consumer is itself
+a PyPI package, so a git dependency is not an option); mesh-n-bone and cellmap-analyze
+(smallest, and they hold the features the package absorbed, so they find API gaps
+cheaply); cellmap-flow; chunkmirage; the rest as their owners choose. Every consumer pins
+a version range (<code>&gt;=0.1,&lt;1</code>), never a commit; the commit pins that exist today exist only
+because chunkmirage was not on PyPI.</p>
+<h3 id="trial-status-2026-10-21">Trial status, 2026-10-21</h3>
+<p>Each repo's session put worldarray beside its environment and compared it with its own
+reader on its own data; none merged or pushed anything. Correct on every store tried, with
+byte-identical reads where compared: cellmap-analyze-scripts (one script; drops the
+scale-factor bookkeeping and its environment constraint), salamander (three arrays
+including a prepare_ds-written prediction; four scripts, 40 to 60 lines),
+registration-station (16 OME 0.5 levels; 1.5 to 2x faster than zarr-python cold, more
+warm; two parsers and ten diagnostics scripts), liconn-err (three tiles including a BDV
+N5; 33 of 148 lines; exposed two stores with wrong or missing units, hence the warning in
+Conventions 3 and <code>base_voxel_size</code>), CineMap (sharded zarr v3 over https; about 100 of
+486 lines), chunkmirage (323 of 326 tests, the other three deleted as covered;
+<code>tensorstore_source.py</code> 649 to 219 lines; found the short-list blocker and the N5
+<code>resolution</code> rule, both fixed), mesh-n-bone (320 passed; src +181/-1531 with
+<code>precomputed_io.py</code> gone and <code>zarr_io.py</code> 768 to 16; the five-way cube exact on all five;
+found the nested dataset path bug, fixed, and two placement bugs of its own, fixed on its
+branch), cellmap-analyze (317 passed, 7 failed of which 5 were worldarray gaps, all fixed
+here: the S3 endpoint, short lists, the hybrid layout, <code>keep</code> and <code>finer</code>, the resample
+anchor; about 800 lines deletable now, 640 more with three call-site edits; its re-run on
+the fixes: 329 passed, the 4 left being its own pins of intended changes), cellmap-flow
+(against the first build: <code>io/</code> shrinks by 1,035 of 2,201 lines, but 97 tests failed on
+real differences; its three blockers, the S3 endpoint variables, the GCS redirect cache
+key and an N5 <code>units</code> string, are fixed here, its convention points are decided above with
+Neuroglancer and fibsem-tools as the tie-breakers, and its mapping asks are in: an array
+path keeps its array, relabel keeps the corner, <code>shape</code> reports the target, a <code>transform</code>
+hook, <code>list_chunks</code>, level choice from the group document, <code>strict_units</code>, the public unit
+table, <code>fill_value</code>, <code>s&lt;N&gt;</code> precomputed paths). cellmap-flow's third run against the fixed build: 1,141 passed and one known failure of its own; its <code>io/</code> 2,201 to 1,065 lines; its 4 MiB block read re-measured within 0.1 to 0.5 ms of raw tensorstore and level with its base on both padding modes. Every live consumer's session has declared worldarray acceptable to publish. Every repo that writes asked for the v2 write API: create an OME
+0.5 multiscale group and array from voxel size, centre translation, axes and units;
+race-safe region writes from many jobs; add a level to a group; encode a chunk key. That
+became 0.2, below. 0.1.0 was published on PyPI on 2026-10-21; cellmap-flow merged its trial
+into <code>consolidate</code> (PR #150), cellmap-analyze merged #92, chunkmirage merged #48, and
+mesh-n-bone's PR #48 is open.</p>
+<h3 id="writers-2026-10-22">Writers, 2026-10-22</h3>
+<p>What each writer repo's own code does today and what 0.2 replaces, from the five sessions'
+answers to one questionnaire and the census below. Line counts are from the census.</p>
+<table>
+<thead>
+<tr>
+<th>Writer today</th>
+<th>Moves into the package</th>
+<th>Lines</th>
+<th>Stays in the repo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cellmap-analyze <code>zarr_io.prepare_ds</code>, <code>open_dataset</code>'s write role, <code>zarr_util.create_multiscale_dataset</code>, <code>generate_</code> and <code>write_multiscales_metadata</code>, <code>CellMapArray.__setitem__</code>, the metadata half of #90's <code>Multiscale</code>, <code>get_zarr_chunk_path_from_block_index</code>; 18 <code>output_idi.ds[roi] = data</code> sites</td>
+<td><code>create</code>, <code>open(mode="r+")</code>, <code>write</code>/<code>write_index</code>, <code>add_level(factors)</code>, <code>chunk_key</code>. Its outputs keep zstd and OME 0.4 in v2 containers, 0.5 in v3</td>
+<td>336 (and 705 that 0.1 already covers, 189 of them dead)</td>
+<td>block planning and dask, rmtree-before-rerun, the tmp dataset lifecycle, reducers and the factor choice; the integer frame is dropped</td>
+</tr>
+<tr>
+<td>mesh-n-bone <code>_create_zarr_array</code> and its two dtype maps, <code>build_</code> and <code>write_multiscales_metadata</code>, <code>_ts_handle_for_output</code>, three clip-to-bounds writes, the metadata half of <code>prepare_pyramid_metadata_and_arrays</code>, <code>_existing_pyramid_scales</code></td>
+<td><code>create</code>, <code>add_level(factors, origin)</code> (its ROI-origin bug becomes inexpressible), <code>open(mode="r+")</code>, <code>write_index</code>, <code>open_pyramid</code></td>
+<td>438 (and 121)</td>
+<td>the factor schedule and the super-chunk grids until 0.3, snap/halo alignment, reducers, dispatch, OOM retry, the s0 symlink and format matching, safe removal, the reuse policy. A v2 pyramid stays v2 because its s0 is a symlinked v2 array: <code>format</code> follows the group</td>
+</tr>
+<tr>
+<td>cellmap-flow blockwise <code>_create_output</code>, <code>_refuse_another_region</code> and <code>process_fn</code>'s funlib write; <code>create_volume_zarr</code>'s array and multiscales; <code>io/ome.py</code>'s writer half; <code>sync_zarr_group_metadata</code>; <code>CHUNK_KEY_RE</code>; the fill, instance and carry writes</td>
+<td><code>create(exists="adopt")</code> naming what it found, <code>write_index</code>, the writable <code>.ts</code> for its unaligned read-modify-write, <code>chunk_key</code>, and <code>write_chunk</code> in 0.3; funlib.persistence leaves its blockwise path, zarr-python stays for s3fs until worldarray writes reach MinIO (they do: Convention 5's endpoints apply to writes)</td>
+<td>508 (and 603)</td>
+<td>the volume root attributes, MinIO sync and ETag diffing, the never-delete rules, daisy, slab threading, the refusal wording; a channel axis is first-class in the builder</td>
+</tr>
+<tr>
+<td>registration-station <code>shared_array</code>, <code>field_ome</code>, <code>write_volume</code>, <code>write_multiscale_pyramid</code>'s metadata, <code>apply_field_to_s0</code>'s check-then-create, eight OME literals, five band planners</td>
+<td><code>create(exists="adopt")</code> with the backoff it wrote, <code>ome_multiscales</code>, <code>add_level</code>, <code>write_index</code>, <code>write_shape</code> for the planner; reads through 0.1 as well</td>
+<td>571 (and 339 by adopting 0.1 at all)</td>
+<td>the GPU warp, seam blending, the affine <code>.npy</code>, the 2x mean, Neuroglancer links; its <code>fs</code> and <code>fix_origin_um</code> sidecars become redundant (Open question 7)</td>
+</tr>
+<tr>
+<td>chunkmirage <code>frontends/_ome.py</code>, <code>ArrayInfo.rescaled</code>, <code>scene._explicit_grids</code>, <code>stitching.grids</code> and <code>level_to_base</code>, four <code>chunk_key</code>s and five chunk regexes, <code>materialize</code>'s create and metadata-first write</td>
+<td><code>ome_multiscales</code>, <code>level_placement</code>, <code>chunk_key</code> and <code>parse_chunk_key</code>, <code>create</code> for <code>materialize</code>'s target; the half-voxel rule, written at 15 sites in 12 of its functions, collapses to calls</td>
+<td>337 (and 382, 179 of them partial matches)</td>
+<td>serving-policy documents, codecs, N5 and precomputed generation, exact-bytes writes, the OME 0.6 graph, GeoTIFF, HDF5</td>
+</tr>
+</tbody>
+</table>
+<h3 id="census-2026-10-22">Census, 2026-10-22</h3>
+<p>Every function of I/O-type code in the five repos, classified against one rubric on the
+trees as they stood after the 0.1 merges (cellmap-analyze main after #92, mesh-n-bone PR</p>
+<h1 id="48-cellmap-flow-main-after-150-chunkmirage-main-after-48-registration-station">48, cellmap-flow main after #150, chunkmirage main after #48, registration-station</h1>
+<p>unadopted). Raw lines, docstrings included; treat as plus or minus ten percent.</p>
+<table>
+<thead>
+<tr>
+<th>Lines</th>
+<th>cellmap-analyze</th>
+<th>mesh-n-bone</th>
+<th>cellmap-flow</th>
+<th>registration-station</th>
+<th>chunkmirage</th>
+<th>total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>already delegates to worldarray</td>
+<td>154</td>
+<td>237</td>
+<td>712</td>
+<td>0</td>
+<td>71</td>
+<td>1,174</td>
+</tr>
+<tr>
+<td>duplicates worldarray 0.1</td>
+<td>705</td>
+<td>121</td>
+<td>603</td>
+<td>339</td>
+<td>382</td>
+<td>2,150</td>
+</tr>
+<tr>
+<td>goes with 0.2</td>
+<td>336</td>
+<td>438</td>
+<td>508</td>
+<td>571</td>
+<td>337</td>
+<td>2,190</td>
+</tr>
+<tr>
+<td>needs a further feature</td>
+<td>170</td>
+<td>662</td>
+<td>28</td>
+<td>17</td>
+<td>683</td>
+<td>1,560</td>
+</tr>
+<tr>
+<td>rightly local</td>
+<td>481</td>
+<td>541</td>
+<td>1,623</td>
+<td>247</td>
+<td>780</td>
+<td>3,672</td>
+</tr>
+</tbody>
+</table>
+<p>0.1 adoption had already removed about 3,400 lines from the four repos that took it. Of
+the 1,560 "further" lines, about 400 live ones in four repos are the block grid with
+context that 0.3's <code>blocks</code> replaces (cellmap-analyze 140, mesh-n-bone 240 plus 320
+reachable only from tests, cellmap-flow 20, chunkmirage 9), about 150 are the small
+helpers of Behaviour 19, and chunkmirage's 446 lines of OME 0.6, GeoTIFF and HDF5 are its
+own domain and stay. Three repos keep 80 to 140 lines each of float-to-integer-Roi bridge
+over funlib geometry, by this spec's own assignment.</p>
+<h2 id="7-open-questions">7. Open questions</h2>
+<ol>
+<li><strong>Published mesh sets.</strong> Measured on 2026-10-21 by meshing one cube (4 nm voxels, voxel
+   0's corner at the origin, label at voxels 8 to 23, so world 32 to 96 nm) stored five
+   ways and run through mesh-n-bone's own <code>Meshify</code> with its integration-test settings:
+   OME <code>translation</code> 2 and cellmap-analyze-style (<code>translation</code> 2 beside <code>offset</code> 2) meshed
+   at exactly 32 to 96; pure funlib (<code>resolution</code> + <code>offset</code> 0, no OME), prepare_ds-style
+   (<code>translation</code> 2 beside funlib <code>offset</code> 0) and precomputed (<code>voxel_offset</code> 0) meshed at
+   30 to 94, half a voxel low against where Neuroglancer draws those voxels. The mesher
+   itself is right (zmesh puts the surface on voxel faces around sample <code>i</code>); the error is
+   that mesh-n-bone reads a funlib <code>offset</code> and a precomputed <code>voxel_offset</code>, both corners,
+   as if they were the centre, and reads the array's <code>offset</code> before the parent's OME
+   translation. Under this spec those three inputs move by half a voxel to match
+   Neuroglancer. Must any published mesh set built from such input stay byte-compatible?
+   mesh-n-bone's session knows of none and wants the change without a compatibility flag.
+   The check script is <code>check_placement.py</code> in this session's scratchpad; it belongs in
+   mesh-n-bone's tests with a tolerance below half a voxel (its coordinate test uses one
+   whole voxel and cannot see this).</li>
+<li><strong>CineMap's convention.</strong> Its reads follow the centre rule and match Neuroglancer; its
+   <code>extent_nm()</code> treats the translation as a corner and does not. Which does CineMap follow?</li>
+<li><strong>Listing-off S3 buckets.</strong> The probing rule in Conventions 5 is written from
+   chunkmirage's description of the gotcha and tested offline with a fake store, not against
+   a real bucket with listing disabled. One network test before 0.1.0 may change the rule.</li>
+<li><strong>The network test</strong> against a non-integer-voxel OpenOrganelle volume (Tests) is not yet
+   written; it needs the dataset chosen from the catalog.</li>
+<li><strong>Legacy attributes on new outputs.</strong> Resolved 2026-10-23: nobody needs them, so there
+   is no <code>funlib_attrs</code>. cellmap-analyze stopped writing funlib <code>voxel_size</code> and <code>offset</code>
+   (which held the centre) in 0.6.0, whose outputs carry only the OME documents <code>create</code>
+   writes. cellmap-flow writes them through funlib's own <code>prepare_ds</code>, <code>offset</code> as the
+   corner beside an agreeing OME 0.4 translation, and is their only reader. dacapo reads
+   funlib attributes through <code>open_ds</code> (<code>ome_metadata=False</code> by default), but nothing feeds
+   it these outputs, and on a zarr v3 one funlib 0.7 silently reads voxel size 1 and
+   offset 0. cellmap-data and fibsem-tools read OME only, and both pin <code>zarr&lt;3</code>. funlib
+   0.6 and 0.7 also require integer offsets and voxel sizes, so a float helper here would
+   either refuse placements or write numbers funlib truncates; a repo that wants the keys
+   passes them through <code>create(attrs=)</code>. Found on the way, outside this package:
+   cellmap-data (main 356c3ac, <code>image.py</code>) takes an OME translation as voxel 0's corner,
+   half a voxel off on every OME-correct store, and funlib's <code>open_ome_ds</code> puts the
+   translation straight into its corner <code>offset</code>.</li>
+<li><strong>The block iterator's shape</strong> (Behaviour 17). Resolved 2026-10-22: both sessions
+   confirmed it. mesh-n-bone asked that <code>box</code> may reach past the array and that <code>clip</code>
+   clips read boxes only, and derives its per-level boxes from one grid itself;
+   cellmap-analyze asked for <code>at_start</code>/<code>at_end</code> per axis and <code>inner</code>, and confirmed that
+   <code>(before, after)</code> pairs cover its context modes and that <code>clip=False</code> with a padded
+   <code>read_index</code> is its edge-reading mode. All are in Behaviour 17.</li>
+<li><strong>Sidecar attributes.</strong> Resolved 2026-10-22: registration-station keeps <code>fs</code> and
+   <code>fix_origin_um</code> on the group through <code>group_attrs</code> and the part attributes (<code>y0</code>, <code>y1</code>,
+   <code>y0_core</code>, <code>y1_core</code>, <code>feather_vox</code>) on the array through <code>attrs</code>, all known at creation;
+   merge-on-create carries them and no attribute-update call is wanted.</li>
+<li><strong>Creation on NRS.</strong> The adopt-with-backoff numbers in Behaviour 11 (5 attempts, 0.5 s
+   times the attempt) are registration-station's and are tested here only against a fake
+   store. Validate from two LSF jobs on the cluster before anyone relies on them.</li>
+<li><strong>The codec default.</strong> Resolved 2026-10-22: cellmap-flow pins blosc explicitly (lz4
+   level 5 for blockwise outputs, zstd level 3 for annotation volumes) as zarr v2 compressor
+   dicts; cellmap-analyze, mesh-n-bone and registration-station take the zstd default, which
+   cellmap-analyze checked byte for byte against zarr-python's. No shortcut name is wanted.</li>
+<li><strong>Sharding.</strong> Nobody writes shards today. registration-station wants them because a
+   2.4 GB chunk makes Neuroglancer decompress a whole band for one slice; mesh-n-bone would
+   take them as an opt-in for v3 sources; cellmap-analyze would size blocks to shards. 0.2
+      offers <code>shards=</code> at creation and <code>write_shape</code> for planners and nothing more; whether
+   that is enough is learned from the first repo that uses it. registration-station checked
+   that a shard larger than the array is accepted and that band writes on shard edges,
+   the clipped last band included, go through.</li>
+<li><strong>Listing after filling.</strong> cellmap-analyze's #90 creates a level's array, fills it, and
+   lists it last, so a crashed job never leaves a half-filled level listed. <code>create</code> and
+   <code>add_level</code> list first. <code>ensure_group_entry</code> is the listing step, but a level created
+   unlisted has its placement nowhere until it is listed, so a <code>create(listed=False)</code>
+   handle, and its pickles, would carry the placement from its arguments alone. Decide
+   whether that is worth having, or whether an unlisted level should describe itself on
+   the array (an OME-shaped array attribute; funlib keys are out, open question 5).</li>
+<li><strong>Per-open object-store credentials.</strong> cellmap-flow's MinIO writers open with a
+   per-session key, secret and endpoint while the same process reads public S3
+   anonymously. tensorstore 0.1.85's <code>aws_credentials</code> takes no inline key and secret, and
+   its endpoint and profile settings are process-wide through the environment, so those
+   three writers stay on zarr-python and s3fs. Revisit when tensorstore takes static
+   credentials per open.</li>
+<li><strong>World boxes on blocks.</strong> cellmap-flow reads its input at one voxel size by a world
+   box grown by a context in nanometres and writes at another; <code>blocks</code> (0.3) gives index
+   boxes on one grid. <code>Grid.blocks</code> could carry world boxes too (<code>b.box</code>, <code>b.read_box</code> as
+   <code>Box</code>, a context in world units). Two lines on cellmap-flow's side today. Not planned
+   (2026-10-22): daisy does cellmap-flow's tiling and stays; reopen if cellmap-flow drops it.</li>
+<li><strong>When the watchdog goes.</strong> Behaviour 6's watchdog works around tensorstore's lost
+   wakeup, fixed upstream in google/tensorstore ed51718085 (2026-09-30, "Fix lost wakeups
+   in TaskGroup when workers block or exit") and in no release up to 0.1.85. When a release
+   contains it (<code>gh api repos/google/tensorstore/compare/ed51718085...vX.Y.Z</code> reports
+   "ahead" or "identical"), confirm it with <code>WORLDARRAY_STRESS=1 pytest
+   tests/test_lost_wakeup.py -s</code> (a plain context should strand nothing), require that
+   release, remove <code>watch</code>, <code>kick</code> and the watchdog thread from <code>context.py</code>, and keep the
+   write retries. That release
+   needs Python 3.11 or later, as tensorstore has since 0.1.81, so it also ends support for
+   3.10.</li>
+</ol>
+<h2 id="8-constraints-for-whoever-builds-on-this">8. Constraints for whoever builds on this</h2>
+<p>Branch off <code>main</code>, draft PRs, no "Test plan" section in PR bodies, never add Claude as git
+author or committer, <code>/nrs/cellmap/data</code> is read-only, no cluster jobs, few behavioural
+tests, minimal reusable code. The README is sections 1 to 5 of this file; a behaviour that
+is not stated here is not implemented without adding the statement first.</p>
+<p>Versioning. Every consumer pins a floating range and its CI installs the newest version in
+it within the hour of a release, so the version number says what a release can break. A
+<strong>patch</strong> release brings the code back to what this spec says, or reads more stores or
+reads them faster; it places nothing differently and adds nothing public. A <strong>minor</strong>
+release is anything else: it may move voxels or add API, and an entry added to, renamed in
+or removed from the unit table is API (<code>wa.units.TABLE</code> is public, and cellmap-flow exports
+it to its browser app behind a freshness test). Both were once shipped as patches and both
+turned cellmap-flow's CI red on every open PR within the hour: 0.1.1 moved offset-less N5
+pyramids by half a base voxel, and 0.3.1 added kilometres. A changelog entry starts with
+<strong>Placement change</strong> when voxels move and <strong>Unit table change</strong> when the table does, and the
+release message to each consumer repeats those lines; nothing before 1.0 promises more.
+Consumers that cannot absorb a move between CI runs pin <code>&gt;=0.x,&lt;0.(x+1)</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
