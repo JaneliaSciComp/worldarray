@@ -692,7 +692,15 @@ this document and that one differ, fix one of them.
    copy and a local read of a key that does not exist; no store is touched, about 0.3 ms
    of CPU). A stranded task then runs within about a second whoever waits on it: the
    package, `vol.ts` directly, or `await`, at any concurrency. The retry stays the outer
-   net. Open question 14 says when the watchdog goes.
+   net. The thread stops at exit (0.9.1): an `atexit` handler, which Python runs once the
+   program's other threads are joined and before it finalizes, ends it and waits for it
+   (at most the longest one kick takes), and no new one starts after that. Python up to
+   3.13 ends a daemon thread that takes the GIL back during finalization with
+   `pthread_exit`, and inside a tensorstore call that aborts the process with "terminate
+   called without an active exception" and exit 134 after all the work is done (once in
+   six of mesh-n-bone's Linux CI runs on Python 3.12, 2026-10-26; every time when a
+   process exits while the thread kicks flat out). Open question 14 says when the
+   watchdog goes.
 
 7. **Contexts.** Without `context`, every open in the process shares `shared_context(0)`:
    tensorstore's cache is off and the levels of one pyramid share one context. Its
@@ -1089,7 +1097,8 @@ through a pickle, and a create whose first attempt lands after its timeout adopt
 array under `exists="error"`. 0.9: `WORLDARRAY_THREADS` ahead of every other variable,
 blank as unset and a bad value refused; `file_io_floor` sizing file I/O under the budget,
 ignored with a thread count, and carried through a pickle; a handle pickled on the driver
-sized in a spawned worker by that worker's `WORLDARRAY_THREADS`.
+sized in a spawned worker by that worker's `WORLDARRAY_THREADS`. 0.9.1: a process whose
+finalization takes a while, exiting while the watchdog kicks flat out, exits cleanly.
 Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
 `tests/test_lost_wakeup.py`): worker processes aim tasks at the moment a one-thread pool's
 worker exits idle, so a plain context strands some for good (13 of about 7,000 on

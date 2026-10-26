@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1 (2026-10-26)
+
+A fix for exit. No placement change, no unit table change, and no default changes.
+
+- The watchdog thread stops at exit, before the interpreter finalizes. On Python up to
+  3.13 a process could abort once all its work was done ("terminate called without an
+  active exception", exit 134) when finalization began while the thread was inside a
+  tensorstore call; an LSF job that did this looked failed. Now an `atexit` handler,
+  which runs once the program's other threads are joined, ends the thread and waits
+  for it, and no new one starts after that.
+
 ## 0.9.0 (2026-10-23)
 
 A job script can size each worker's threads. No placement change, no unit table change, and

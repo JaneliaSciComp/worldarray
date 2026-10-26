@@ -21,11 +21,11 @@ every open today; pass the same object twice to share pools (spec, Behaviour 7).
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import tempfile
 import threading
-import time
 import weakref
 from typing import Any
 
@@ -50,12 +50,19 @@ _lock = threading.Lock()
 # `gh api repos/google/tensorstore/compare/ed51718085...vX.Y.Z` says "ahead" or "identical"
 # for a release that has it, and `WORLDARRAY_STRESS=1 pytest tests/test_lost_wakeup.py -s`
 # then strands nothing on a plain context.
+#
+# The thread stops at exit, before the interpreter finalizes. Python up to 3.13 ends a
+# daemon thread that takes the GIL back during finalization with pthread_exit, and inside
+# a tensorstore call that aborts the process: "terminate called without an active
+# exception", exit 134, once all the work is done (mesh-n-bone's CI, 2026-10-26).
 KICK_EVERY = 1.0
+KICK_TIMEOUT = 10.0
 _KICK_DIR = tempfile.gettempdir()
 _KICK_KEY = "worldarray-kick-no-such-key"
 _watched: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _watch_lock = threading.Lock()
 _watchdog: threading.Thread | None = None
+_stop = threading.Event()
 
 
 def _kickers(context: ts.Context) -> tuple:
@@ -63,7 +70,7 @@ def _kickers(context: ts.Context) -> tuple:
     decoding pool, reading a missing key from the other runs on its file I/O pool."""
     array = ts.open({"driver": "array", "array": [0], "dtype": "uint8"}, context=context)
     kv = ts.KvStore.open({"driver": "file", "path": _KICK_DIR + "/"}, context=context)
-    return array.result(timeout=10), kv.result(timeout=10)
+    return array.result(timeout=KICK_TIMEOUT), kv.result(timeout=KICK_TIMEOUT)
 
 
 def kick(context: ts.Context) -> list:
@@ -86,14 +93,15 @@ def kick(context: ts.Context) -> list:
 
 def watch(context: ts.Context | None) -> ts.Context | None:
     """Kick ``context``'s pools every ``KICK_EVERY`` seconds for as long as it lives, starting
-    the watchdog thread on first use. Returns ``context``."""
+    the watchdog thread on first use (not once it has stopped at exit). Returns
+    ``context``."""
     global _watchdog
     if context is None:
         return None
     with _watch_lock:
         if context not in _watched:
             _watched[context] = None
-        if _watchdog is None or not _watchdog.is_alive():
+        if not _stop.is_set() and (_watchdog is None or not _watchdog.is_alive()):
             _watchdog = threading.Thread(target=_watch, name="worldarray-kick", daemon=True)
             _watchdog.start()
     return context
@@ -101,14 +109,24 @@ def watch(context: ts.Context | None) -> ts.Context | None:
 
 def _watch() -> None:
     held: list = []
-    while True:
-        time.sleep(KICK_EVERY)
+    while not _stop.wait(KICK_EVERY):
         with _watch_lock:
             contexts = list(_watched.keys())
         held = [f for f in held if not f.done()]
         for context in contexts:
+            if _stop.is_set():
+                break
             held += kick(context)
         del contexts
+
+
+def _stop_watchdog() -> None:
+    """End every watchdog thread and wait for it, at exit: atexit runs once the program's
+    other threads are joined, so they are kicked to the end, and before finalization."""
+    _stop.set()
+    for thread in threading.enumerate():
+        if thread.name == "worldarray-kick" and thread is not threading.current_thread():
+            thread.join(2 * KICK_TIMEOUT)  # the longest one kick takes: two opens
 
 
 def _forget_watchdog() -> None:
@@ -118,6 +136,7 @@ def _forget_watchdog() -> None:
 
 if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_forget_watchdog)
+atexit.register(_stop_watchdog)
 
 
 THREADS_VAR = "WORLDARRAY_THREADS"
