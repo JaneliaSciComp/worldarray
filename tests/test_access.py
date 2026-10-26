@@ -8,6 +8,9 @@ import http.server
 import logging
 import os
 import socket
+import subprocess
+import sys
+import textwrap
 import threading
 import time
 import weakref
@@ -203,6 +206,32 @@ def test_every_context_the_package_touches_is_kicked(monkeypatch, tmp_path):
     del capped
     gc.collect()
     assert len(wa.context._watched) == n - 1  # a context that died is no longer watched
+
+
+def test_a_process_exits_cleanly_while_the_watchdog_kicks(tmp_path):
+    # Python up to 3.13 ends a daemon thread that takes the GIL back during finalization
+    # with pthread_exit, which aborts inside a tensorstore call; the watchdog stops at exit
+    script = tmp_path / "exit.py"
+    script.write_text(
+        textwrap.dedent("""
+            import time
+            import tensorstore as ts
+            from worldarray import context
+            context.KICK_EVERY = 0.0  # kick flat out
+            limits = [{"cache_pool": {"total_bytes_limit": i}} for i in range(20)]
+            contexts = [context.watch(ts.Context(spec)) for spec in limits]
+            class SlowExit:  # finalization takes a while, with the GIL free
+                def __del__(self):
+                    time.sleep(0.5)
+            slow = SlowExit()
+            time.sleep(0.2)
+        """)
+    )
+    done = subprocess.run(
+        [sys.executable, str(script)], capture_output=True, text=True, timeout=120
+    )
+    assert done.returncode == 0, done.stderr
+    assert "terminate" not in done.stderr
 
 
 class _StalledView:
