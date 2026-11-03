@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -143,10 +144,80 @@ class ArrayMeta:
             shard_shape=pick(self.shard_shape) if self.shard_shape is not None else None,
         )
 
+    def permuted(self, order: Sequence[int]) -> ArrayMeta:
+        """The same metadata with axis ``order[k]`` at place ``k``: every per-axis field moves
+        with its name."""
+        pick = lambda t: tuple(t[i] for i in order)  # noqa: E731
+        return replace(
+            self,
+            shape=pick(self.shape),
+            chunk_shape=pick(self.chunk_shape),
+            axes=pick(self.axes),
+            units=pick(self.units),
+            voxel_size=pick(self.voxel_size),
+            translation=pick(self.translation),
+            shard_shape=pick(self.shard_shape) if self.shard_shape is not None else None,
+        )
+
     @property
     def write_shape(self) -> tuple[int, ...]:
         """The unit one writer may own: the shard shape when sharded, else the chunk shape."""
         return self.shard_shape if self.shard_shape is not None else self.chunk_shape
+
+
+AxesOrder = str | Sequence[str]
+
+
+def check_axes_order(order: AxesOrder) -> str | tuple[str, ...]:
+    """``"stored"``, ``"zyx"`` or a tuple of axis names (Conventions 2)."""
+    if isinstance(order, str):
+        if order not in ("stored", "zyx"):
+            raise ValueError(
+                f"axes_order is 'stored', 'zyx' or a sequence of axis names, not {order!r}"
+            )
+        return order
+    names = tuple(str(a) for a in order)
+    if len(set(names)) != len(names):
+        raise ValueError(f"axes_order {names} names an axis twice")
+    return names
+
+
+def axes_permutation(
+    axes: Sequence[str], order: AxesOrder = "stored", fixed: Sequence[str] = ()
+) -> tuple[int, ...]:
+    """The axis of ``axes`` at each place once ``order`` presents them (Conventions 2):
+    ``"stored"`` keeps them; ``"zyx"`` moves the axes named z, y and x last, in that order,
+    the others first in stored order; a sequence of names is that order. Axes named in
+    ``fixed`` (selected ones, still in a key index or a pyramid's ``level_meta``) keep their
+    places, and the others fill the rest in order."""
+    axes = tuple(axes)
+    order = check_axes_order(order)
+    movable = [i for i, a in enumerate(axes) if a not in fixed]
+    if order == "stored":
+        ranked = movable
+    elif order == "zyx":
+        named = sorted(
+            (i for i in movable if axes[i] in SPATIAL_NAMES), key=lambda i: "zyx".index(axes[i])
+        )
+        ranked = [i for i in movable if axes[i] not in SPATIAL_NAMES] + named
+    else:
+        names = [axes[i] for i in movable]
+        if sorted(order) != sorted(names):
+            raise ValueError(f"axes_order {order} must name each of the axes {tuple(names)} once")
+        ranked = [movable[names.index(a)] for a in order]
+    places = iter(ranked)
+    return tuple(i if axes[i] in fixed else next(places) for i in range(len(axes)))
+
+
+def spatial_order(axes: Sequence[str], order: AxesOrder = "stored") -> tuple[int, ...]:
+    """The spatial axes of ``axes`` in the order ``order`` presents them."""
+    axes = tuple(axes)
+    sp = spatial_axes(axes)
+    others = tuple(a for i, a in enumerate(axes) if i not in sp)
+    order = check_axes_order(order)
+    if not isinstance(order, str):
+        order = tuple(a for a in order if a in {axes[i] for i in sp})
+    return tuple(i for i in axes_permutation(axes, order, fixed=others) if i in sp)
 
 
 def spatial_axes(axes: tuple[str, ...]) -> tuple[int, ...]:
@@ -730,29 +801,32 @@ def _precomputed(info: dict, scale_index: int, ndim: int) -> _Resolved:
 
 
 def light_voxel_sizes(
-    group: Node, names: list[str], space: str | None
+    group: Node, names: list[str], space: str | None, axes_order: AxesOrder = "stored"
 ) -> list[tuple[str, tuple[float, ...]]] | None:
-    levels = light_levels(group, names, space)
+    levels = light_levels(group, names, space, axes_order)
     return None if levels is None else [(name, vs) for name, vs, _ in levels]
 
 
 def light_levels(
-    group: Node, names: list[str], space: str | None
+    group: Node, names: list[str], space: str | None, axes_order: AxesOrder = "stored"
 ) -> list[tuple[str, tuple[float, ...], tuple[float, ...]]] | None:
     """``(name, spatial voxel size)`` for every level of a group, from the group's own
     document, in ``space`` units (native when None): OME-NGFF datasets, COSEM N5
     ``multiscales[].datasets[].transform`` and precomputed ``scales``. None when the
     document does not say (then the levels have to be opened), or when a unit cannot be
     converted. ``light_levels`` adds each level's spatial translation (the centre of its
-    voxel 0, in the same units), so a pyramid can be placed without opening any level."""
+    voxel 0, in the same units), so a pyramid can be placed without opening any level.
+    Both on the spatial axes in the order ``axes_order`` presents them."""
     try:
         if group.format == "precomputed":
             f = U.factor("nm", space) if space else 1.0
+            order = spatial_order(("z", "y", "x"), axes_order)
             out = []
             for i, scale in enumerate(group.docs["info"]["scales"]):
                 res = [float(v) * f for v in scale["resolution"]][::-1]
                 vo = [float(v) for v in scale.get("voxel_offset", [0, 0, 0])][::-1]
                 tr = [(o + 0.5) * r for o, r in zip(vo, res)]
+                res, tr = [res[k] for k in order], [tr[k] for k in order]
                 out.append((str(scale.get("key", i)), tuple(res), tuple(tr)))
             return out
         multiscales = group.multiscales
@@ -788,7 +862,7 @@ def light_levels(
             axes = found.axes or default_axes(ndim)
             units = found.units or ("",) * ndim
             sizes, trs = [], []
-            for i in spatial_axes(axes):
+            for i in spatial_order(axes, axes_order):
                 f = U.factor(units[i], space, missing_as=U.NANOMETER) if space else 1.0
                 sizes.append(found.voxel_size[i] * f)
                 trs.append((found.translation[i] if found.translation is not None else 0.0) * f)

@@ -29,11 +29,16 @@ from .geometry import Box, index_range, is_aligned
 from .levels import LevelRef, Mode, discover, discover_group, same_voxel_size, select_level
 from .placement import (
     ArrayMeta,
+    AxesOrder,
     _dims_from_docs,
+    axes_permutation,
+    check_axes_order,
     default_axes,
     light_levels,
     read_meta,
     read_meta_light,
+    spatial_axes,
+    spatial_order,
 )
 from .retry import Retry, read_with_retries, write_with_retries
 from .store import (
@@ -92,6 +97,7 @@ class WorldArray:
         strict_units: bool = True,
         mode: str = "r",
         store_fill: bool = False,
+        axes_order: AxesOrder = "stored",
         _ref: LevelRef | None = None,
         _node: Node | None = None,
     ):
@@ -112,6 +118,7 @@ class WorldArray:
         self.context = context if context is not None else shared_context(0)
         self.retries = retries if retries is not None else Retry()
         self._select = dict(select or {})
+        self._axes_order = check_axes_order(axes_order)
         self._opts = dict(
             level=level,
             voxel_size=voxel_size,
@@ -124,6 +131,7 @@ class WorldArray:
             strict_units=strict_units,
             mode=mode,
             store_fill=store_fill,
+            axes_order=self._axes_order,
         )
         self._anchor = tuple(float(a) for a in anchor) if anchor is not None else None
 
@@ -147,7 +155,21 @@ class WorldArray:
         self._meta = read_meta(
             node_for_level, self._store, scale_index=ref.scale_index, conflicts=metadata_conflicts
         )
+        stored_axes = self._meta.axes
         self._apply_select()
+        # the order the axes are presented in (Conventions 2), and the stored axis at each
+        # place of a chunk key's index: a selected axis keeps its stored place there
+        order = axes_permutation(self._meta.axes, self._axes_order)
+        if order != tuple(range(len(order))):
+            self._store = self._store[ts.d[order].transpose[:]]
+            self._meta = self._meta.permuted(order)
+        if node_for_level.format == "precomputed":  # a precomputed key names the spatial chunk
+            sp = spatial_axes(stored_axes)
+            self._key_order = tuple(
+                sp.index(i) for i in spatial_order(stored_axes, self._meta.axes)
+            )
+        else:
+            self._key_order = axes_permutation(stored_axes, self._meta.axes, fixed=self._select)
         if base_voxel_size is not None:
             self._meta = self._rescaled_to_base(base_voxel_size, base_units)
         space, time = _unit_targets(units)
@@ -198,7 +220,12 @@ class WorldArray:
                 warnings.warn(f"{self.path} is an array; level={level!r} is ignored", stacklevel=3)
             return LevelRef(node.path.rsplit("/", 1)[-1], node.path)  # the array itself, always
         self._pyramid = Pyramid(
-            self.path, context=self.context, units=self.units, select=self._select, _node=node
+            self.path,
+            context=self.context,
+            units=self.units,
+            select=self._select,
+            axes_order=self._axes_order,
+            _node=node,
         )
         if level is not None:
             return self._pyramid._ref(level)
@@ -227,7 +254,13 @@ class WorldArray:
         by the same per-axis factor, so stores whose metadata is in voxels of level 0 (as
         BigStitcher writes) or unitless (a BigDataViewer N5) can be placed correctly."""
         base = tuple(float(v) for v in base)
-        native = Pyramid(self.path, context=self.context, units=None, select=self._select)
+        native = Pyramid(
+            self.path,
+            context=self.context,
+            units=None,
+            select=self._select,
+            axes_order=self._axes_order,
+        )
         level0 = native.levels[0].meta if len(native) > 1 else self._meta
         spatial = self._meta.spatial
         if len(base) != len(spatial):
@@ -394,7 +427,11 @@ class WorldArray:
     def levels_pyramid(self) -> Pyramid:
         if self._pyramid is None:
             self._pyramid = Pyramid(
-                self._where, context=self.context, units=self.units, select=self._select
+                self._where,
+                context=self.context,
+                units=self.units,
+                select=self._select,
+                axes_order=self._axes_order,
             )
         return self._pyramid
 
@@ -507,19 +544,37 @@ class WorldArray:
             params["origin"] = tuple(int(o) for o in scale.get("voxel_offset", [0, 0, 0]))[::-1]
         return params
 
+    def _stored_index(self, index: Sequence[int]) -> tuple[int, ...]:
+        """A key index in the presented order, in the store's."""
+        index, order = tuple(index), self._key_order
+        if len(index) != len(order):
+            return index  # the key function says what is wrong
+        stored = [0] * len(order)
+        for place, axis in enumerate(order):
+            stored[axis] = index[place]
+        return tuple(stored)
+
+    def _presented_index(self, index: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        """A key index in the store's order, in the presented one."""
+        if index is None or len(index) != len(self._key_order):
+            return index
+        return tuple(index[axis] for axis in self._key_order)
+
     def chunk_key(self, index: Sequence[int]) -> str:
         """The storage key, relative to the array, of the write unit at ``index`` on the
-        storage grid (Behaviour 15). A precomputed array's key names the spatial chunk only."""
-        return _write.chunk_key(index, **self._key_params())
+        storage grid, in the order the axes are presented (Behaviour 15). A precomputed
+        array's key names the spatial chunk only."""
+        return _write.chunk_key(self._stored_index(index), **self._key_params())
 
     def parse_chunk_key(self, key: str) -> tuple[int, ...] | None:
         """``chunk_key`` inverted; None for a key that is not a chunk."""
-        return _write.parse_chunk_key(key, **self._key_params())
+        return self._presented_index(_write.parse_chunk_key(key, **self._key_params()))
 
     def list_chunks(self) -> list[tuple[int, ...]]:
-        """The chunk indices that exist in storage (C order, the storage grid), by listing the
-        array's keys with ``parse_chunk_key``: zarr v2 and v3 (a sharded array lists its
-        shards), N5, and unsharded precomputed. Works on any kvstore, URLs included."""
+        """The chunk indices that exist in storage (the storage grid, in the order the axes
+        are presented), by listing the array's keys with ``parse_chunk_key``: zarr v2 and v3
+        (a sharded array lists its shards), N5, and unsharded precomputed. Works on any
+        kvstore, URLs included."""
         params = self._key_params()
         kv = ts.KvStore.open(self._store.kvstore.spec()).result()
         keys = [k.decode() if isinstance(k, bytes) else str(k) for k in kv.list().result()]
@@ -529,7 +584,7 @@ class WorldArray:
                 k.rsplit("/", 1)[-1] if params["format"] == "precomputed" else k, **params
             )
             if idx is not None:
-                found.add(idx)
+                found.add(self._presented_index(idx))
         return sorted(found)
 
     # --- writing (Behaviour 13) ----------------------------------------------------
@@ -1013,6 +1068,7 @@ class Pyramid:
         units: Units = "nanometer",
         select: dict[str, int] | None = None,
         mode: str = "r",
+        axes_order: AxesOrder = "stored",
         _node: Node | None = None,
         **kwargs,
     ):
@@ -1023,7 +1079,8 @@ class Pyramid:
         self.units = units
         self._select = select or {}
         self._mode = mode
-        self._kwargs = {**kwargs, "mode": mode}
+        self._axes_order = check_axes_order(axes_order)
+        self._kwargs = {**kwargs, "mode": mode, "axes_order": self._axes_order}
         self._node = _node if _node is not None else detect(path)
         self._group, self._refs = discover_group(self._node)  # the node listing the levels
         if not self._refs:
@@ -1079,7 +1136,11 @@ class Pyramid:
             space, _ = _unit_targets(self.units)
             # the group the levels were discovered from, whichever path opened the pyramid
             group = self._group
-            light = light_levels(group, self.names, space) if group is not None else None
+            light = (
+                light_levels(group, self.names, space, self._axes_order)
+                if group is not None
+                else None
+            )
             if light is None:
                 light = [
                     (lvl.level_name, lvl.source_voxel_size, lvl.translation) for lvl in self.levels
@@ -1090,12 +1151,15 @@ class Pyramid:
     def level_meta(self, level: str | int) -> ArrayMeta:
         """One level's ``ArrayMeta`` in native units from its documents alone, with no
         tensorstore opened (shape, dtype, chunks and placement; a sharded array's inner
-        chunk)."""
+        chunk), every axis in the order the pyramid presents them, a selected one in its
+        stored place."""
         ref = self._ref(level)
         conflicts = self._kwargs.get("metadata_conflicts", "error")
         if ref.scale_index is not None:
-            return read_meta_light(self._node, scale_index=ref.scale_index, conflicts=conflicts)
-        return read_meta_light(detect(ref.path), conflicts=conflicts)
+            meta = read_meta_light(self._node, scale_index=ref.scale_index, conflicts=conflicts)
+        else:
+            meta = read_meta_light(detect(ref.path), conflicts=conflicts)
+        return meta.permuted(axes_permutation(meta.axes, self._axes_order, fixed=self._select))
 
     def metas(self) -> list[ArrayMeta]:
         """``level_meta`` for every level, in order."""
@@ -1141,6 +1205,12 @@ class Pyramid:
         base_node = detect(base_ref.path)
         base = read_meta_light(base_node, conflicts=self._kwargs.get("metadata_conflicts", "error"))
         ndim, spatial = base.ndim, base.spatial
+        # the arguments are in the order the pyramid presents the axes; the array is the group's
+        order = axes_permutation(base.axes, self._axes_order, fixed=self._select)
+        factors, origin, voxel_size, translation, shape, chunks, shards = (
+            _in_stored_order(v, order, spatial)
+            for v in (factors, origin, voxel_size, translation, shape, chunks, shards)
+        )
         if voxel_size is None or translation is None:
             if factors is None:
                 raise ValueError("pass factors (and origin), or voxel_size and translation")
@@ -1184,7 +1254,7 @@ class Pyramid:
         )
         self._group, self._refs = discover_group(detect(group.path))
         self._light, self._levels = None, {}
-        return vol
+        return vol if self._axes_order == "stored" else vol.reopen(axes_order=self._axes_order)
 
     def _select_ref(self, voxel_size, mode: Mode = "floor") -> LevelRef:
         name, _ = select_level(self.voxel_sizes(), voxel_size, mode)
@@ -1337,6 +1407,27 @@ def create(
     )
 
 
+def _in_stored_order(values, order: tuple[int, ...], spatial: tuple[int, ...]):
+    """Per-axis ``values`` given in a presented order (``order[k]`` is the stored axis at
+    place ``k``), in the store's: one per axis, or one per spatial axis. A scalar, None or a
+    list of another length passes through."""
+    if values is None or np.isscalar(values):
+        return values
+    values = tuple(values)
+    if len(values) == len(order):
+        stored = [None] * len(order)
+        for place, axis in enumerate(order):
+            stored[axis] = values[place]
+        return tuple(stored)
+    presented = [axis for axis in order if axis in spatial]
+    if len(values) == len(presented):
+        stored = [None] * len(spatial)
+        for place, axis in enumerate(presented):
+            stored[spatial.index(axis)] = values[place]
+        return tuple(stored)
+    return values
+
+
 def _reopen(path: str, opts: dict, recipe=None) -> WorldArray:
     return WorldArray(path, context=from_recipe(recipe), **opts)
 
@@ -1357,13 +1448,14 @@ def metadata(
     units: Units = None,
     open: bool = True,
     retries: Retry | None = None,
+    axes_order: AxesOrder = "stored",
 ) -> ArrayMeta:
     """The ``ArrayMeta`` of an array (or of ``level`` under a group), in native units unless
-    ``units`` says otherwise. ``open=False`` reads it from the documents alone, with no
-    tensorstore opened. ``retries`` times out and retries each document read and the open
-    (Behaviour 6)."""
+    ``units`` says otherwise, its axes in ``axes_order`` (Conventions 2). ``open=False``
+    reads it from the documents alone, with no tensorstore opened. ``retries`` times out and
+    retries each document read and the open (Behaviour 6)."""
     if open:
-        vol = WorldArray(path, level=level, units=units, retries=retries)
+        vol = WorldArray(path, level=level, units=units, retries=retries, axes_order=axes_order)
         return vol.meta if units is None else vol.grid
     node = detect(path)
     if level == "first":
@@ -1391,6 +1483,7 @@ def metadata(
         meta = read_meta_light(detect(ref.path))
     else:
         meta = read_meta_light(node)
+    meta = meta.permuted(axes_permutation(meta.axes, axes_order))
     if units is None:
         return meta
     space, time = _unit_targets(units)
