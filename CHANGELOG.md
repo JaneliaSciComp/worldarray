@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 (2026-11-03)
+
+Axes in another order, on request. No placement change, no unit table change, and no
+default changes: without `axes_order`, every array opens as it did in 0.9.
+
+- `open`, `open_pyramid` and `metadata` take `axes_order`: `"stored"` (the default, for
+  good), `"zyx"` (the axes named z, y and x last, in that order, the others first in
+  stored order) or a sequence naming each axis once. An OME-Zarr written x, y, z
+  (TensorSwitch's) then reads as z, y, x, and a channel-last array channel first. The
+  names move with the data, and shape, chunks, shards, units, voxel size and
+  translation with them, in `.ts`, `meta`, `grid`, reads, writes, `blocks`, a pyramid's
+  placements and `level_meta`, level choice by voxel size, `base_voxel_size`, `reopen`
+  and a pickle. `open_tensorstore` stays in the store's order.
+- On such a handle, `chunk_key`, `parse_chunk_key` and `list_chunks` take and give
+  indices in the presented order (a selected axis in its stored place); the keys are
+  the store's. `add_level` takes its per-axis arguments in the pyramid's order and
+  creates the array in the group's.
+
 ## 0.9.1 (2026-10-26)
 
 A fix for exit. No placement change, no unit table change, and no default changes.

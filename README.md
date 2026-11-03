@@ -57,6 +57,7 @@ vol = wa.open(path, units=None)
 vol.meta            # shape, dtype, chunk_shape, axes, units, voxel_size, translation, attrs, ...
 vol.ts              # the tensorstore itself, C order, origin 0
 vol.read_index((0, 0, 0), (64, 64, 64), padding=0)
+wa.open(path, axes_order="zyx")   # an x, y, z store (TensorSwitch's) presented z, y, x, names and all
 
 pyr = wa.open_pyramid(path)             # every level, opened on first use
 pyr.select((16, 16, 16), mode="floor")  # the level to read at 16 nm
@@ -133,7 +134,9 @@ Dialects that store the corner are moved half a voxel on reading:
 | precomputed `voxel_offset` | corner | `(voxel_offset + 1/2) * resolution` |
 | nothing | a plain array | voxels of 1, corner at the origin |
 
-Axes are the store's C order; N5 and precomputed are transposed to it. Unlisted or
+Axes are the store's C order; N5 and precomputed are transposed to it. `axes_order="zyx"`
+presents the axes named z, y and x last, in that order, for a reader that indexes axes by
+position; the store's order stays the default. Unlisted or
 conflicting attributes warn; a voxel size that disagrees with the OME scale raises, since
 that is how stale metadata is caught. Metadata the parser did not consume stays available
 raw. The full precedence per format, the half-voxel rules, and every read behaviour are

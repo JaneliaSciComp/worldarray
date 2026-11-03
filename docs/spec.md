@@ -131,6 +131,9 @@ vol = wa.open(
                          #   part of a box outside the data
     method="nearest",    # "nearest" | "linear": the resampling kernel; no dtype heuristic (Behaviour 5)
     select=None,         # {"c": 0, "t": 0}: pin non-spatial axes to one index; else they are kept whole
+    axes_order="stored", # "stored": the store's order (Convention 2) | "zyx": the axes named z, y and x last, in
+                         #   that order, the others first in stored order | a sequence naming each axis left after
+                         #   `select` once (0.10); every per-axis field and the data move with their names
     units="nanometer",   # what world coordinates are in on spatial axes; a dict per axis kind
                          #   ({"space": "micrometer", "time": "second"}); None keeps the store's own units
     context=None,        # a tensorstore.Context; default shared_context(0)
@@ -144,7 +147,7 @@ vol = wa.open(
     strict_units=True,     # False: an unknown unit ("pixel") is taken as the target unit, with a warning
 )
 
-vol.ts             # tensorstore.TensorStore: C-order axes, origin 0, selected axes dropped
+vol.ts             # tensorstore.TensorStore: the axes in `axes_order`, origin 0, selected axes dropped
 vol.meta           # ArrayMeta in the store's own units
 vol.grid           # ArrayMeta in the requested units, every axis
 vol.shape, vol.dtype, vol.axes, vol.spatial, vol.level_name, vol.levels, vol.remote
@@ -168,7 +171,7 @@ vol.index_box(box) -> (begin, end)  # the voxels a world box selects on this gri
 vol.chunks_covering(begin, end)     # chunk indices a voxel box touches
 vol.reopen(context=None, **overrides) -> WorldArray   # the same array on another context (a worker changing its concurrency)
 
-pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None)
+pyr = wa.open_pyramid(path, context=None, units="nanometer", select=None, axes_order="stored")
 pyr.names; pyr.levels; pyr.by_name("s1"); pyr.select(voxel_size, mode="floor")
 pyr.metas() ; pyr.level_meta("s1")   # ArrayMeta per level from the documents alone: shape, dtype, chunks (a sharded
                     #   array's inner chunk), fill and placement, with no tensorstore opened
@@ -177,11 +180,13 @@ pyr.voxel_sizes() ; pyr.translations()   #   where it lists the levels (OME-NGFF
                     #   choosing or placing a level opens nothing, whether the pyramid was opened by its
                     #   group path or by one of its level paths; else by opening each level
 
-wa.metadata(path, level=None, units=None, open=True, retries=None) -> ArrayMeta   # open=False: from the documents alone
+wa.metadata(path, level=None, units=None, open=True, retries=None, axes_order="stored") -> ArrayMeta
+                                                   # open=False: from the documents alone
 wa.detect(path, missing_ok=False, retries=None) -> Node | None   # format, kind (array|group), path, docs, scale_key; .attrs (raw user
                                                    #   attributes), .multiscales (OME 0.5's `ome` unwrapped)
 wa.open_tensorstore(path, level=None, context=None, retries=None) -> tensorstore.TensorStore   # reads no world metadata, so an
-                                                   #   array with odd placement attributes (a coordinate array) still opens
+                                                   #   array with odd placement attributes (a coordinate array) still opens;
+                                                   #   always the store's order (Convention 2)
 wa.corner_to_centre(corner, voxel_size, axes=None) ; wa.default_axes(ndim) ; wa.index_range(begin, end, voxel_size, translation)
 wa.units.TABLE      # the unit tables, public: {"length": {...metres per unit}, "time": {...seconds per unit}}
 wa.select_level(levels, voxel_size, mode) ; wa.Box ; wa.Retry(max_attempts=10, timeout=None, base_delay=1.0)
@@ -196,7 +201,7 @@ wa.list_chunk_keys(path, separator=".", ndim=None)   # chunk indices present und
                     #   metadata document needed, so a directory of chunk files with no .zarray lists too
 ```
 
-`ArrayMeta` is a frozen dataclass with one entry per axis, in the array's C order, and
+`ArrayMeta` is a frozen dataclass with one entry per axis, in the array's order (Convention 2), and
 deliberately the same field names as chunkmirage's `ArrayInfo`: `shape`, `dtype`,
 `chunk_shape` (tensorstore's read chunk), `axes` (as stored; `("t","c","z","y","x")[-ndim:]`
 when the store names none), `axes_named`, `units` (as stored, any string; `""` when none),
@@ -276,7 +281,8 @@ wa.ensure_group_entry(group_path, name, voxel_size, translation, axes, units="na
                           #   document and missing ancestors created, nothing written when the entry already says the same
                           #   (Behaviour 12). `create` and `add_level` call this
 wa.write.codecs_of(path_or_node) -> (codecs, shards)   # an array's codecs in its format's dialect and its shard shape, for
-                          #   a mirror created like it (cellmap-flow's sync)
+                          #   a mirror created like it (cellmap-flow's sync); the shards in the store's order, so a
+                          #   mirror of a handle opened with `axes_order` takes vol.meta.shard_shape (Grid.from_meta does)
 
 vol = wa.create(
     path,                 # ".../vol.zarr/s0": the last component is the level, its parent the multiscale group, made if absent
@@ -422,9 +428,21 @@ this document and that one differ, fix one of them.
 
 2. **Axis order is the store's C order; N5 and precomputed are transposed to it** on read,
    so `(z, y, x)` for a volume, `(c, z, y, x)` with channels, `(t, c, z, y, x)` for OME
-   0.5. Nothing is reordered beyond that transposition; `select` pins non-spatial axes. A
+   0.5. Nothing is reordered beyond that transposition unless asked. `axes_order="zyx"`
+   (0.10, on `open`, `open_pyramid` and `metadata`) presents the axes named z, y and x last,
+   in that order, and the others first in their stored order, so an OME-Zarr written x, y, z
+   (TensorSwitch's) reads as z, y, x and a channel-last array channel first; an array naming
+   none of z, y and x is unchanged. A sequence of names presents exactly that order and must
+   name each axis left after `select` once. The names move with the data, and shape, chunks,
+   shards, units, voxel size and translation with them, in `.ts`, `meta`, `grid`, every read
+   and write, the pyramid's placements and `level_meta` (where a selected axis, still there,
+   keeps its stored place) and a pickle; `open_tensorstore` stays in the store's order. The
+   default is the store's order for good, not only until 1.0: an x, y, z store read
+   faithfully is x, y, z with its names, which a reader placing axes by name needs
+   (Neuroglancer, chunkmirage, a mirror), and a reader indexing axes by position asks for its
+   order or checks the names (David, 2026-11-03). `select` pins non-spatial axes. A
    non-zero stored origin (precomputed `voxel_offset`) is moved to 0 in `.ts` and carried in
-   `translation`. \1 Sharded stores (zarr v3 `sharding_indexed`, sharded precomputed) read like any
+   `translation`. Sharded stores (zarr v3 `sharding_indexed`, sharded precomputed) read like any
    other through tensorstore; `chunk_shape` is the inner read chunk, not the shard. Unnamed axes are called `("t", "c", "z", "y", "x")[-ndim:]` (chunkmirage's
    default) with `axes_named` False, so a consumer can apply its own default instead.
 
@@ -910,6 +928,10 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     name is replaced; the group's other content is untouched (Behaviour 12). It writes no
     voxel data: downsampling is the caller's, per block, through `write_index`, labels by
     mode and images by mean as each repo decides. `exists` means what it means for `create`.
+    On a pyramid opened with `axes_order` (0.10), the per-axis arguments are in the order it
+    presents (`factors`, `origin`, `voxel_size` and `translation` on its spatial axes, `shape`,
+    `chunks` and `shards` as `level_meta` lists them), the array is created in the group's own
+    order, and the level comes back in the pyramid's.
 
 15. **Chunk keys.** `chunk_key(index)` is the key, relative to the array, of the write unit
     at `index`: zarr v2 indices joined by the array's `dimension_separator` (`0.1.2`); zarr
@@ -921,7 +943,11 @@ Behaviours 10 to 16 are 0.2; 17 to 19 are 0.3.
     (`zarr.json`, `.zarray`, `attributes.json`, `info`, a `c/` key of the wrong arity).
     `list_chunk_keys` and `list_chunks` use the same parser. The free functions take the
     format and the array's facts instead of an open array, for an array served from nowhere
-    (chunkmirage's frontends) or about to be created.
+    (chunkmirage's frontends) or about to be created. On a handle opened with `axes_order`
+    (0.10), `chunk_key`, `parse_chunk_key` and `list_chunks` take and give indices in the
+    order the handle presents, a selected axis in its stored place, as an N5 index is in C
+    order and its key x first; the key is the store's. The free functions stay in the
+    store's order.
 
 16. **Write units.** `write_shape` is the shard shape of a sharded zarr v3 array, else the
     chunk shape; `ArrayMeta.shard_shape` is None when unsharded; `chunk_shape` stays the
@@ -1098,7 +1124,16 @@ array under `exists="error"`. 0.9: `WORLDARRAY_THREADS` ahead of every other var
 blank as unset and a bad value refused; `file_io_floor` sizing file I/O under the budget,
 ignored with a thread count, and carried through a pickle; a handle pickled on the driver
 sized in a spawned worker by that worker's `WORLDARRAY_THREADS`. 0.9.1: a process whose
-finalization takes a while, exiting while the watchdog kicks flat out, exits cleanly.
+finalization takes a while, exiting while the watchdog kicks flat out, exits cleanly. 0.10:
+an x, y, z array and a c, x, y, z one opened with `axes_order="zyx"` reading as the
+transpose of the stored data with every per-axis field moved, a write through the
+reordered view landing in the stored array's order, its chunk keys unchanged and its
+indices presented; a sequence order, and a bad order refused; an N5 array and an
+unnamed one unchanged under "zyx"; a selected channel keeping its place in a key index;
+`metadata` with and without opening; a pyramid's placements and `level_meta` reordered, a
+level chosen by an anisotropic voxel size, `base_voxel_size` applied to the right axes, and
+`add_level` taking its factors in the presented order; the order carried through
+`reopen` and a pickle.
 Opt-in (`WORLDARRAY_STRESS=1`, about a minute,
 `tests/test_lost_wakeup.py`): worker processes aim tasks at the moment a one-thread pool's
 worker exits idle, so a plain context strands some for good (13 of about 7,000 on
