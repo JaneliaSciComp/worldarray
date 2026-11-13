@@ -521,7 +521,7 @@ def test_an_http_open_probes_its_keys_at_once(tmp_path):
 
 def _google_tls(tmp_path):
     """A test CA's certificate, and a TLS context serving a certificate it signed for
-    Google's token hosts."""
+    Google's token hosts, with the extensions macOS requires of a TLS server's."""
     (tmp_path / "test.cnf").write_text(
         textwrap.dedent("""
             [req]
@@ -531,6 +531,9 @@ def _google_tls(tmp_path):
             basicConstraints = critical, CA:TRUE
             keyUsage = critical, keyCertSign, cRLSign
             [leaf]
+            basicConstraints = critical, CA:FALSE
+            keyUsage = critical, digitalSignature, keyEncipherment
+            extendedKeyUsage = serverAuth
             subjectAltName = DNS:www.googleapis.com, DNS:oauth2.googleapis.com
         """)
     )
