@@ -536,11 +536,11 @@ def _google_tls(tmp_path):
     )
     for args in (
         "req -x509 -config test.cnf -extensions ca -newkey rsa:2048 -nodes -keyout ca.key"
-        " -out ca.pem -subj /CN=ca -days 1",
+        " -out ca.pem -subj /CN=ca -days 1 -sha256",
         "req -new -config test.cnf -newkey rsa:2048 -nodes -keyout leaf.key -out leaf.csr"
-        " -subj /CN=www.googleapis.com",
+        " -subj /CN=www.googleapis.com -sha256",
         "x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out leaf.pem -days 1"
-        " -extfile test.cnf -extensions leaf",
+        " -sha256 -extfile test.cnf -extensions leaf",
     ):
         subprocess.run(["openssl", *args.split()], cwd=tmp_path, check=True, capture_output=True)
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -611,6 +611,7 @@ def test_a_stale_google_login_falls_back_to_the_public_url(tmp_path):
         TENSORSTORE_CA_BUNDLE=str(ca),
         GOOGLE_APPLICATION_CREDENTIALS=str(login),
         TENSORSTORE_GCS_HTTP_URL=f"http://127.0.0.1:{files.server_address[1]}",
+        TENSORSTORE_CURL_VERBOSE="1",  # why a handshake with the proxy failed, if one does
     )
     read = (
         "import json, worldarray as wa; "
@@ -626,7 +627,8 @@ def test_a_stale_google_login_falls_back_to_the_public_url(tmp_path):
         files.shutdown()
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout) == pattern((4, 4)).tolist()
-    assert refreshes and set(refreshes) == {"/oauth2/v3/token"}  # the login was tried, and failed
+    # the login was tried, and refused
+    assert refreshes and set(refreshes) == {"/oauth2/v3/token"}, done.stderr[-4000:]
 
 
 def test_capped_contexts_size_file_io_apart_and_write_without_sync_or_locks():
