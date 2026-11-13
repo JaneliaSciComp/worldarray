@@ -539,11 +539,18 @@ this document and that one differ, fix one of them.
    changes it between opens reads the right host. An N5 `units` written once as a string
    is read as that unit on every axis; tensorstore is given only the array members of
    `attributes.json`, so attributes it would reject do not stop the open. The next way is tried only when the error
-   starts `PERMISSION_DENIED` or `UNAUTHENTICATED`; the way that worked is remembered per
+   starts `PERMISSION_DENIED` or `UNAUTHENTICATED`, or came from getting an access token,
+   which tensorstore marks with its `internal/oauth2/` code among the error's source
+   locations (0.10.1): Google refuses an expired gcloud login with HTTP 400 `invalid_grant`,
+   which starts neither (cellmap-flow, on David's Mac), and a token endpoint out of reach
+   leaves no token either, so the public URL is worth trying. When the last way fails too
+   after a refusal, its error carries the first refusal as its cause, so a stale login is
+   still in the traceback of a private bucket's 403. The way that worked is remembered per
    (driver, bucket) for the process. Format probing runs all probe keys under one way before
    moving to the next: a bucket with listing off answers 403 for a missing key, so a 403 on
    one probe key counts as "missing" when another probe key was read under the same way,
-   and only when every probe key is refused is the next way tried (see Open question 4).
+   and only when every probe key is refused is the next way tried (see Open question 4);
+   a failed login answers no key, so it moves on at once.
    Metadata reads retry for about five seconds in total (`max_retries 5, initial_delay
    0.2s, max_delay 2s`); data reads keep tensorstore's defaults plus `Retry`, and each
    document read and store open is also timed out under `Retry` (0.7, Behaviour 6).
@@ -1049,6 +1056,9 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
   any other error raises at once, the way that worked is tried first next time for that
   bucket, and a 403 on one probe key with another probe key readable does not trigger the
   fallback; detection ignores the directory suffix and finds a precomputed scale key.
+  0.10.1: a failed login counts as a refusal and is the cause of a later failure; end to
+  end, a `gs://` open whose token refresh is answered 400 `invalid_grant` (an https proxy
+  playing www.googleapis.com under a test CA) reads through the public URL.
 
 Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed through
 `s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; funlib keys on

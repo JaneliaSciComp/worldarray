@@ -158,9 +158,19 @@ class Refused(Exception):
     """A read was refused for want of credentials (not a missing key, not a network error)."""
 
 
+def login_failed(error: BaseException) -> bool:
+    """``error`` came from getting an access token, before any request reached the store: a
+    stale Google login (HTTP 400 ``invalid_grant``, which starts neither refusal code), a
+    rejected client, or a token endpoint out of reach. tensorstore names its oauth2 code
+    among the error's source locations."""
+    return "tensorstore/internal/oauth2/" in str(error)
+
+
 def is_refused(error: BaseException) -> bool:
-    return isinstance(error, Refused) or str(error).startswith(
-        ("PERMISSION_DENIED", "UNAUTHENTICATED")
+    return (
+        isinstance(error, Refused)
+        or str(error).startswith(("PERMISSION_DENIED", "UNAUTHENTICATED"))
+        or login_failed(error)
     )
 
 
@@ -171,19 +181,23 @@ _admitted_lock = threading.Lock()
 def with_access(specs: Sequence[dict], attempt: Callable[[dict], T]) -> T:
     """``attempt(spec)`` with each spec in turn, moving on only while access is refused; the
     way that worked is tried first next time, for its bucket. Any other error, and the last
-    refusal, is raised."""
+    refusal, is raised; after a refusal, with the first refusal as its cause, since that
+    can be the reason the read failed (a stale login passed over for a public URL that
+    refuses too)."""
     if len(specs) == 1:
         return attempt(specs[0])
     key = (specs[0]["driver"], specs[0].get("bucket", ""))
     with _admitted_lock:
         first = _admitted.get(key, 0)
     order = [first] + [i for i in range(len(specs)) if i != first]
+    refusal: BaseException | None = None
     for i in order[:-1]:
         try:
             result = attempt(specs[i])
         except Exception as e:
             if not is_refused(e):
                 raise
+            refusal = refusal or e
             logger.info(
                 "%s refused a read (%s); trying the next way in", key, str(e).splitlines()[0][:200]
             )
@@ -191,7 +205,12 @@ def with_access(specs: Sequence[dict], attempt: Callable[[dict], T]) -> T:
         with _admitted_lock:
             _admitted[key] = i
         return result
-    result = attempt(specs[order[-1]])
+    try:
+        result = attempt(specs[order[-1]])
+    except Exception as e:
+        if refusal is None or e.__cause__ is not None:
+            raise
+        raise e from refusal
     with _admitted_lock:
         _admitted[key] = order[-1]
     return result
@@ -264,7 +283,8 @@ def _read_keys(spec: dict, keys: Sequence[str]) -> dict[str, bytes | None | Base
     """``keys`` under one way in, their reads begun at once: one round trip, not one per key
     (an http open probes five). Each value is the document, None when it is missing, or the
     error its read raised; after an error other than a refusal the rest are cancelled and
-    left out, so a server that never answers costs one key's attempts, not five."""
+    left out, so a server that never answers costs one key's attempts, not five, and so
+    does a failed login, which every key would meet."""
     kv = _metadata_kv(spec)
     started = {key: kv.read(key) for key in keys}
     out: dict[str, bytes | None | BaseException] = {}
@@ -278,7 +298,7 @@ def _read_keys(spec: dict, keys: Sequence[str]) -> dict[str, bytes | None | Base
             result = _wait(start, spec, _where(spec, key), "read")
         except Exception as e:  # noqa: BLE001  the caller decides what a failed key means
             out[key] = e
-            if not is_refused(e):
+            if not is_refused(e) or login_failed(e):
                 for future in started.values():
                     future.cancel()
                 return out
@@ -325,14 +345,14 @@ class Location:
         """All of ``keys`` under one way in, read at once (``_read_keys``). A bucket with
         listing off answers a refusal for a missing key, so a refusal on one key counts as
         missing when another key was read under the same way; only when every key is refused
-        is the next way tried."""
+        is the next way tried, and at once after a failed login, which answers no key."""
 
         def attempt(spec: dict) -> dict[str, bytes | None]:
             found: dict[str, bytes | None] = {}
             refusals: dict[str, BaseException] = {}
             for key, value in _read_keys(spec, keys).items():
                 if isinstance(value, BaseException):
-                    if not is_refused(value):
+                    if not is_refused(value) or login_failed(value):
                         raise value
                     refusals[key] = value
                 else:

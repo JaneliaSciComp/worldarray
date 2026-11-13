@@ -5,9 +5,13 @@ from __future__ import annotations
 import functools
 import gc
 import http.server
+import json
 import logging
 import os
+import shutil
 import socket
+import socketserver
+import ssl
 import subprocess
 import sys
 import textwrap
@@ -102,6 +106,40 @@ def test_all_probe_keys_refused_falls_back(monkeypatch):
     monkeypatch.setattr(store, "_read_keys", _per_key(fake_read_key))
     found = store.Location("s3://bucket/vol.zarr/s0").read_many(store.PROBE_KEYS)
     assert found[".zarray"] == b"{}" and found["zarr.json"] is None
+
+
+_STALE_LOGIN = (  # tensorstore's error for gcloud's login after a reauth policy expired it
+    'Unknown [HTTP code 400] [http_response_body=\'{"error": "invalid_grant"}\'] '
+    "[source locations='tensorstore/internal/oauth2/oauth2_auth_provider.cc:83\n"
+    "tensorstore/internal/oauth2/auth_provider.cc:30']"
+)
+
+
+def test_a_failed_login_is_a_refusal_and_the_cause_of_a_later_one():
+    unreachable = (
+        "UNAVAILABLE: CURL error Could not resolve host [source locations='"
+        "tensorstore/internal/curl/curl_transport.cc:475\n"
+        "tensorstore/internal/oauth2/oauth2_auth_provider.cc:81']"
+    )
+    assert store.is_refused(ValueError(_STALE_LOGIN)) and store.is_refused(ValueError(unreachable))
+    assert not store.is_refused(ValueError("Unknown [HTTP code 400] [source locations='x.cc:1']"))
+    specs = [
+        {"driver": "gcs", "bucket": "b"},
+        {"driver": "http", "base_url": "https://storage.googleapis.com", "path": "/b/"},
+    ]
+
+    def attempt(spec, public=True):
+        if spec["driver"] == "gcs":
+            raise ValueError(_STALE_LOGIN)
+        if public:
+            return "ok"
+        raise ValueError("PERMISSION_DENIED: Forbidden [http_response_code='403']")
+
+    assert store.with_access(specs, attempt) == "ok"
+    store._admitted.clear()
+    with pytest.raises(ValueError, match="PERMISSION_DENIED") as raised:
+        store.with_access(specs, functools.partial(attempt, public=False))
+    assert "invalid_grant" in str(raised.value.__cause__)  # the stale login is in the traceback
 
 
 def test_detection_ignores_the_suffix_and_finds_precomputed_scale_keys(tmp_path):
@@ -479,6 +517,116 @@ def test_an_http_open_probes_its_keys_at_once(tmp_path):
         assert time.monotonic() - start < 1.0  # in turn: 1.5 s
     finally:
         server.shutdown()
+
+
+def _google_tls(tmp_path):
+    """A test CA's certificate, and a TLS context serving a certificate it signed for
+    Google's token hosts."""
+    (tmp_path / "test.cnf").write_text(
+        textwrap.dedent("""
+            [req]
+            distinguished_name = dn
+            [dn]
+            [ca]
+            basicConstraints = critical, CA:TRUE
+            keyUsage = critical, keyCertSign, cRLSign
+            [leaf]
+            subjectAltName = DNS:www.googleapis.com, DNS:oauth2.googleapis.com
+        """)
+    )
+    for args in (
+        "req -x509 -config test.cnf -extensions ca -newkey rsa:2048 -nodes -keyout ca.key"
+        " -out ca.pem -subj /CN=ca -days 1",
+        "req -new -config test.cnf -newkey rsa:2048 -nodes -keyout leaf.key -out leaf.csr"
+        " -subj /CN=www.googleapis.com",
+        "x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out leaf.pem -days 1"
+        " -extfile test.cnf -extensions leaf",
+    ):
+        subprocess.run(["openssl", *args.split()], cwd=tmp_path, check=True, capture_output=True)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(tmp_path / "leaf.pem", tmp_path / "leaf.key")
+    return tmp_path / "ca.pem", tls
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="the test CA is made with openssl")
+def test_a_stale_google_login_falls_back_to_the_public_url(tmp_path):
+    """Google answers the token refresh of an expired gcloud login 400 invalid_grant, which
+    starts neither refusal code (cellmap-flow, on David's Mac). An https proxy plays
+    www.googleapis.com, under a CA tensorstore is told to trust, and a local http server is
+    the bucket's public URL."""
+    public = tmp_path / "public"
+    write_zarr2(public / "bucket" / "vol.zarr" / "s0", pattern((4, 4)))
+    ca, tls = _google_tls(tmp_path)
+    refreshes = []
+
+    class Google(socketserver.StreamRequestHandler):
+        def handle(self):
+            target = self.rfile.readline().split()[1]
+            while self.rfile.readline() not in (b"\r\n", b""):
+                pass
+            if target != b"www.googleapis.com:443":
+                self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+                return
+            self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            with tls.wrap_socket(self.connection, server_side=True) as conn:
+                request = conn.makefile("rb")
+                headers = []
+                while (line := request.readline()) not in (b"\r\n", b""):
+                    headers.append(line.decode())
+                sizes = [h.split(":")[1] for h in headers if h.lower().startswith("content-length")]
+                request.read(int(sizes[0]) if sizes else 0)
+                refreshes.append(headers[0].split()[1])
+                body = b'{"error": "invalid_grant", "error_description": "reauth related error"}'
+                conn.sendall(
+                    b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n"
+                    b"Connection: close\r\nContent-Length: %d\r\n\r\n%s" % (len(body), body)
+                )
+
+    class Files(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+    proxy = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Google)
+    proxy.daemon_threads = True
+    files = http.server.ThreadingHTTPServer(
+        ("127.0.0.1", 0), functools.partial(Files, directory=str(public))
+    )
+    for server in (proxy, files):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    login = tmp_path / "adc.json"  # gcloud's application default credentials, for a user
+    login.write_text(
+        json.dumps(
+            {
+                "type": "authorized_user",
+                "client_id": "c",
+                "client_secret": "s",
+                "refresh_token": "r",
+            }
+        )
+    )
+    env = {k: v for k, v in os.environ.items() if "proxy" not in k.lower()}
+    env.update(
+        HTTPS_PROXY=f"http://127.0.0.1:{proxy.server_address[1]}",
+        NO_PROXY="127.0.0.1",
+        TENSORSTORE_CA_BUNDLE=str(ca),
+        GOOGLE_APPLICATION_CREDENTIALS=str(login),
+        TENSORSTORE_GCS_HTTP_URL=f"http://127.0.0.1:{files.server_address[1]}",
+    )
+    read = (
+        "import json, worldarray as wa; "
+        "vol = wa.open('gs://bucket/vol.zarr/s0', units=None); "
+        "print(json.dumps(vol.ts.read().result().tolist()))"
+    )
+    try:
+        done = subprocess.run(
+            [sys.executable, "-c", read], env=env, capture_output=True, text=True, timeout=120
+        )
+    finally:
+        proxy.shutdown()
+        files.shutdown()
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout) == pattern((4, 4)).tolist()
+    assert refreshes and set(refreshes) == {"/oauth2/v3/token"}  # the login was tried, and failed
 
 
 def test_capped_contexts_size_file_io_apart_and_write_without_sync_or_locks():

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.1 (unreleased)
+
+A fix for `gs://` with a stale Google login. No placement change, no unit table change,
+and no default changes.
+
+- A `gs://` open falls back to the bucket's public https URL when Google's default
+  credentials fail to refresh. An expired gcloud login (a Workspace reauth policy) is
+  refused with HTTP 400 `invalid_grant`, which tensorstore does not report as a refusal,
+  so the open raised instead of reading a public bucket. Any error from getting the
+  access token now counts as a refusal, and so does a token endpoint out of reach.
+- When every way in fails after a refusal, the error raised carries the first refusal
+  as its cause, so a stale login stays in the traceback of a private bucket's 403.
+
 ## 0.10.0 (2026-11-03)
 
 Axes in another order, on request. No placement change, no unit table change, and no
