@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.1 (unreleased)
+## 0.10.1 (2026-11-13)
 
 A fix for `gs://` with a stale Google login. No placement change, no unit table change,
 and no default changes.
