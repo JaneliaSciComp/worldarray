@@ -158,12 +158,22 @@ class Refused(Exception):
     """A read was refused for want of credentials (not a missing key, not a network error)."""
 
 
+# An OAuth 2.0 token endpoint's error codes (RFC 6749, 5.2), the string "error" member of the
+# body it answers; a store's own error bodies hold an object there. Quotes may come escaped.
+_TOKEN_ERROR = re.compile(
+    r'error\\*"\s*:\s*\\*"(?:invalid_grant|invalid_client|invalid_request|invalid_scope'
+    r'|unauthorized_client|unsupported_grant_type)\\*"'
+)
+
+
 def login_failed(error: BaseException) -> bool:
     """``error`` came from getting an access token, before any request reached the store: a
     stale Google login (HTTP 400 ``invalid_grant``, which starts neither refusal code), a
-    rejected client, or a token endpoint out of reach. tensorstore names its oauth2 code
-    among the error's source locations."""
-    return "tensorstore/internal/oauth2/" in str(error)
+    rejected client, or (up to tensorstore 0.1.85) a token endpoint out of reach. Up to
+    0.1.85 tensorstore names its oauth2 code among the error's source locations; 0.1.86
+    leaves source locations out, so the token endpoint's own error code is matched too."""
+    message = str(error)
+    return "tensorstore/internal/oauth2/" in message or bool(_TOKEN_ERROR.search(message))
 
 
 def is_refused(error: BaseException) -> bool:
