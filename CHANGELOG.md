@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.2 (2026-11-13)
+
+0.10.1's fix, on tensorstore 0.1.86. No placement change, no unit table change, and no
+default changes.
+
+- A `gs://` open with a stale Google login falls back to the public https URL on
+  tensorstore 0.1.86 too. 0.10.1 knew the failed login by the source locations in
+  tensorstore's error, which 0.1.86 leaves out, so with the newest tensorstore (what a
+  fresh install gets) the open still raised. The token endpoint's own error code
+  (`invalid_grant`, and the other OAuth 2.0 codes) is now matched as well. On 0.1.86 a
+  token endpoint out of reach is raised as any unreachable host is, not passed over.
+- CI also runs the tests on the newest release of every dependency, weekly and on every
+  pull request; 0.10.1 passed on the lock's tensorstore 0.1.78.
+
 ## 0.10.1 (2026-11-13)
 
 A fix for `gs://` with a stale Google login. No placement change, no unit table change,

@@ -116,6 +116,10 @@ _STALE_LOGIN = (  # tensorstore's error for gcloud's login after a reauth policy
 
 
 def test_a_failed_login_is_a_refusal_and_the_cause_of_a_later_one():
+    # tensorstore 0.1.86 leaves source locations out; the token endpoint's error code remains
+    login = r"Bad Request [HTTP code 400] [http_response_body='{\"error\": \"invalid_grant\"}']"
+    store_400 = r"Bad Request [HTTP code 400] [http_response_body='{\"error\": {\"code\": 400}}']"
+    assert store.is_refused(ValueError(login)) and not store.is_refused(ValueError(store_400))
     unreachable = (
         "UNAVAILABLE: CURL error Could not resolve host [source locations='"
         "tensorstore/internal/curl/curl_transport.cc:475\n"

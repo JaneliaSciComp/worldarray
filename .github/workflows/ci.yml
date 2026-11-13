@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"  # weekly, so a new dependency release is tried without a push
 jobs:
   test:
     strategy:
@@ -20,3 +22,17 @@ jobs:
       - run: uv run ruff format --check src tests
       - run: uv run pytest -q
       - run: uv run mkdocs build --strict
+  # what a fresh install gets: the newest release of every dependency, not the lock's
+  newest:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --group dev --upgrade
+      - run: uv pip list | grep -E "^(tensorstore|numpy) "
+      - run: uv run pytest -q

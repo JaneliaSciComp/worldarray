@@ -540,10 +540,13 @@ this document and that one differ, fix one of them.
    is read as that unit on every axis; tensorstore is given only the array members of
    `attributes.json`, so attributes it would reject do not stop the open. The next way is tried only when the error
    starts `PERMISSION_DENIED` or `UNAUTHENTICATED`, or came from getting an access token,
-   which tensorstore marks with its `internal/oauth2/` code among the error's source
-   locations (0.10.1): Google refuses an expired gcloud login with HTTP 400 `invalid_grant`,
+   which tensorstore up to 0.1.85 marks with its `internal/oauth2/` code among the error's
+   source locations (0.10.1), and which is otherwise known by the token endpoint's own error
+   code, an OAuth 2.0 one (RFC 6749 §5.2) as the body's string `error`, where a store's error
+   body holds an object (0.10.2: tensorstore 0.1.86 leaves source locations out): Google refuses an expired gcloud login with HTTP 400 `invalid_grant`,
    which starts neither (cellmap-flow, on David's Mac), and a token endpoint out of reach
-   leaves no token either, so the public URL is worth trying. When the last way fails too
+   leaves no token either, so the public URL is worth trying; from 0.1.86 an unreachable
+   token endpoint carries no such mark and is raised as any unreachable host is. When the last way fails too
    after a refusal, its error carries the first refusal as its cause, so a stale login is
    still in the traceback of a private bucket's 403. The way that worked is remembered per
    (driver, bucket) for the process. Format probing runs all probe keys under one way before
@@ -1058,7 +1061,10 @@ chunkmirage derives from raw attributes carries a `layered` note beside the pack
   fallback; detection ignores the directory suffix and finds a precomputed scale key.
   0.10.1: a failed login counts as a refusal and is the cause of a later failure; end to
   end, a `gs://` open whose token refresh is answered 400 `invalid_grant` (an https proxy
-  playing www.googleapis.com under a test CA) reads through the public URL.
+  playing www.googleapis.com under a test CA) reads through the public URL. 0.10.2: the
+  same on tensorstore 0.1.86's messages, and CI runs the suite on the newest release of
+  every dependency as well as the lock's, weekly and on every pull request: 0.10.1 passed
+  on the lock's tensorstore 0.1.78 and failed on 0.1.86, which a fresh install got.
 
 Reads: every statement in Behaviour 1, 2, 3 and 9; a document-less group probed through
 `s0`, integer and `"first"` levels, `detect(missing_ok=True)`, `index_box`; funlib keys on
